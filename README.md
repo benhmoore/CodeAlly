@@ -1,6 +1,6 @@
 # Code Ally
 
-![Code Ally Demo - Terminal interface showing interactive LLM pair programming](./assets/code-ally-demo.png)
+![Code Ally Demo - Terminal interface showing interactive interface](./assets/code-ally-demo.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)

@@ -930,6 +930,11 @@ class Agent:
                     tool_names = ", ".join(relevant_tools)
                     guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
                     self.messages.append({"role": "system", "content": guidance_message})
+                    
+                    # Log in verbose mode
+                    if self.ui.verbose:
+                        self.ui.console.print(f"[dim cyan][Verbose] Added follow-up contextual guidance for tools: {tool_names}[/]")
+                    
                     self.token_manager.update_token_count(self.messages)
 
             # Get a follow-up response from the LLM
@@ -953,13 +958,19 @@ class Agent:
             if last_user_message:
                 # Find and remove the contextual guidance system message
                 i = len(self.messages) - 1
+                removed = False
                 while i >= 0:
                     msg = self.messages[i]
                     if (msg.get("role") == "system" and 
                         msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
                         self.messages.pop(i)
+                        removed = True
                         break
                     i -= 1
+                
+                # Log in verbose mode
+                if removed and self.ui.verbose:
+                    self.ui.console.print("[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]")
                 
                 # Update token count after removing guidance
                 self.token_manager.update_token_count(self.messages)
@@ -1025,6 +1036,10 @@ class Agent:
                 tool_names = ", ".join(relevant_tools)
                 guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
                 self.messages.append({"role": "system", "content": guidance_message})
+                
+                # Log in verbose mode
+                if self.ui.verbose:
+                    self.ui.console.print(f"[dim cyan][Verbose] Added contextual guidance for tools: {tool_names}[/]")
             
             self.token_manager.update_token_count(self.messages)
 
@@ -1052,13 +1067,19 @@ class Agent:
             if relevant_tools:
                 # Find and remove the contextual guidance system message
                 i = len(self.messages) - 1
+                removed = False
                 while i >= 0:
                     msg = self.messages[i]
                     if (msg.get("role") == "system" and 
                         msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
                         self.messages.pop(i)
+                        removed = True
                         break
                     i -= 1
+                
+                # Log in verbose mode
+                if removed and self.ui.verbose:
+                    self.ui.console.print("[dim cyan][Verbose] Removed contextual tool guidance from conversation history[/]")
                 
                 # Update token count after removing guidance
                 self.token_manager.update_token_count(self.messages)

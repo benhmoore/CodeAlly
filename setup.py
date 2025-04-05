@@ -37,6 +37,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/example/code-ally",
+    license="MIT",
+    license_files=["LICENSE"],
     project_urls={
         "Bug Reports": "https://github.com/example/code-ally/issues",
         "Source": "https://github.com/example/code-ally",

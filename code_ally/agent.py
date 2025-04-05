@@ -187,10 +187,25 @@ class UIManager:
 
                 thinking_spinner = Spinner("dots2", text=thinking_text)
 
+                start_time = time.time()
                 with Live(
                     thinking_spinner, refresh_per_second=10, console=self.console
                 ) as live:
                     while not self.thinking_event.is_set():
+                        elapsed_seconds = int(time.time() - start_time)
+                        if token_percentage > 0:
+                            if token_percentage > 80:
+                                color = "red"
+                            elif token_percentage > 50:
+                                color = "yellow"
+                            else:
+                                color = "green"
+                            context_info = f"({token_percentage}% context used)"
+                            thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
+                        else:
+                            thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
+                        
+                        thinking_spinner = Spinner("dots2", text=thinking_text)
                         live.update(thinking_spinner)
                         time.sleep(0.1)
             else:
@@ -204,10 +219,13 @@ class UIManager:
                     highlight=False,
                 )
 
+                start_time = time.time()
                 with Live(
                     self.thinking_spinner, refresh_per_second=10, console=self.console
                 ) as live:
                     while not self.thinking_event.is_set():
+                        elapsed_seconds = int(time.time() - start_time)
+                        self.thinking_spinner = Spinner("dots2", text=f"[cyan]Thinking[/] [{elapsed_seconds}s]")
                         live.update(self.thinking_spinner)
                         time.sleep(0.1)
 

@@ -7,6 +7,10 @@ details are modularized under the 'tool_guidance' package.
 
 from typing import Dict, Optional, List
 from code_ally.tools import ToolRegistry
+from datetime import datetime
+import os
+import platform
+import sys
 from code_ally.prompts.tool_guidance import (
     TOOL_GUIDANCE,
 )
@@ -114,9 +118,37 @@ def get_main_system_prompt() -> str:
         ToolRegistry().get_tools_for_prompt()
     )  # Assumes ToolRegistry is implemented
 
-    # Combine core directives with the dynamic tool list
-    # Note: TOOL_GUIDANCE['default'] might be redundant if core directives cover defaults well.
-    # Consider if default guidance is still needed separately.
+    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    working_dir = ""
+
+    try:
+        working_dir = os.getcwd()
+    except Exception:
+        pass
+
+    # Get directory contents
+    directory_contents = ""
+    if working_dir:
+        try:
+            contents = os.listdir(working_dir)
+            directory_contents = "\n".join(contents)
+        except Exception:
+            directory_contents = "Unable to retrieve directory contents."
+
+    # Get additional contextual details
+    os_info = f"{platform.system()} {platform.release()}"
+    python_version = sys.version.split()[0]
+
+    context = f"""
+    **Contextual Information:**
+    - Current Date: {current_date}
+    - Working Directory: {working_dir}
+    - Directory Contents:
+    {directory_contents}
+    - Operating System: {os_info}
+    - Python Version: {python_version}
+    """
+    # Combine core directives with the dynamic tool list and context
     return f"""
 {CORE_DIRECTIVES}
 
@@ -124,7 +156,9 @@ def get_main_system_prompt() -> str:
 {tool_list}
 
 {TOOL_GUIDANCE['default']}
-"""  # Removed DEFAULT_GUIDANCE if covered by CORE_DIRECTIVES, otherwise keep it.
+
+{context}
+"""
 
 
 # Dictionary of specific system messages

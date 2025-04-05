@@ -23,7 +23,7 @@ from rich.table import Table
 
 from code_ally.config import load_config, save_config
 from code_ally.llm_client import ModelClient
-from code_ally.prompts import get_system_message
+from code_ally.prompts import get_system_message, get_contextual_guidance, detect_relevant_tools
 from code_ally.tools.base import BaseTool
 from code_ally.trust import TrustManager
 
@@ -914,6 +914,29 @@ class Agent:
             # Update token count
             self.token_manager.update_token_count(self.messages)
 
+            # Find the last user message to extract context
+            last_user_message = ""
+            for msg in reversed(self.messages):
+                if msg.get("role") == "user":
+                    last_user_message = msg.get("content", "")
+                    break
+            
+            # Add contextual tool guidance for follow-up if appropriate
+            if last_user_message:
+                tool_guidance = get_contextual_guidance(last_user_message)
+                relevant_tools = detect_relevant_tools(last_user_message)
+                
+                if tool_guidance and relevant_tools:
+                    tool_names = ", ".join(relevant_tools)
+                    guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
+                    self.messages.append({"role": "system", "content": guidance_message})
+                    
+                    # Log in verbose mode
+                    if self.ui.verbose:
+                        self.ui.console.print(f"[dim cyan][Verbose] Added follow-up contextual guidance for tools: {tool_names}[/]")
+                    
+                    self.token_manager.update_token_count(self.messages)
+
             # Get a follow-up response from the LLM
             animation_thread = self.ui.start_thinking_animation(
                 self.token_manager.get_token_percentage()
@@ -930,6 +953,27 @@ class Agent:
 
             # Process the follow-up response recursively
             self.process_llm_response(follow_up_response)
+            
+            # Clean up the contextual tool guidance message if it was added
+            if last_user_message:
+                # Find and remove the contextual guidance system message
+                i = len(self.messages) - 1
+                removed = False
+                while i >= 0:
+                    msg = self.messages[i]
+                    if (msg.get("role") == "system" and 
+                        msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
+                        self.messages.pop(i)
+                        removed = True
+                        break
+                    i -= 1
+                
+                # Log in verbose mode
+                if removed and self.ui.verbose:
+                    self.ui.console.print("[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]")
+                
+                # Update token count after removing guidance
+                self.token_manager.update_token_count(self.messages)
 
         else:
             # Regular text response
@@ -980,8 +1024,23 @@ class Agent:
                 if handled:
                     continue
 
+            # Get contextual tool guidance based on user input
+            tool_guidance = get_contextual_guidance(user_input)
+            relevant_tools = detect_relevant_tools(user_input)
+            
             # Add user message to history
             self.messages.append({"role": "user", "content": user_input})
+            
+            # Add contextual tool guidance if appropriate
+            if tool_guidance and relevant_tools:
+                tool_names = ", ".join(relevant_tools)
+                guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
+                self.messages.append({"role": "system", "content": guidance_message})
+                
+                # Log in verbose mode
+                if self.ui.verbose:
+                    self.ui.console.print(f"[dim cyan][Verbose] Added contextual guidance for tools: {tool_names}[/]")
+            
             self.token_manager.update_token_count(self.messages)
 
             # Start thinking animation
@@ -1002,3 +1061,25 @@ class Agent:
 
             # Process the response
             self.process_llm_response(response)
+            
+            # Clean up the contextual tool guidance message if it was added
+            # This prevents accumulation of guidance messages in the history
+            if relevant_tools:
+                # Find and remove the contextual guidance system message
+                i = len(self.messages) - 1
+                removed = False
+                while i >= 0:
+                    msg = self.messages[i]
+                    if (msg.get("role") == "system" and 
+                        msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
+                        self.messages.pop(i)
+                        removed = True
+                        break
+                    i -= 1
+                
+                # Log in verbose mode
+                if removed and self.ui.verbose:
+                    self.ui.console.print("[dim cyan][Verbose] Removed contextual tool guidance from conversation history[/]")
+                
+                # Update token count after removing guidance
+                self.token_manager.update_token_count(self.messages)

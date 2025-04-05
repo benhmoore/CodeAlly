@@ -414,12 +414,66 @@ When working with Git repositories, follow these specific guidelines:
    - Regularly pull upstream changes: `git pull --rebase origin main`
    - Verify remote operations with `git remote -v` before pushing
 
-EXAMPLE COMMANDS WITH EXPLANATIONS:
-- `git fetch --all` - Update all remote tracking branches without merging
-- `git switch -c new-branch` - Create and switch to new branch in one command
-- `git rebase -i HEAD~3` - Interactive rebase for squashing/rewording recent commits
-- `git stash push -m "message"` - Save changes with descriptive message
-- `git bisect start/good/bad` - Binary search to find which commit introduced a bug
+DETAILED EXAMPLES:
+
+Example 1: Committing changes to specific files
+```
+# First check status to identify changed files
+bash command="git status"
+
+# View the specific changes that will be committed
+bash command="git diff path/to/changed/file.js"
+
+# Stage only specific files for commit
+bash command="git add path/to/changed/file.js path/to/another/file.py"
+
+# Verify what's staged before committing
+bash command="git diff --staged"
+
+# Create a meaningful commit
+bash command="git commit -m 'fix(auth): resolve token validation when session expires'"
+
+# Verify the commit was successful
+bash command="git status"
+```
+
+Example 2: Branch management workflow
+```
+# First check current branch
+bash command="git branch"
+
+# Create and switch to a new feature branch
+bash command="git checkout -b feature/user-profile"
+
+# Make changes and commits to the feature branch
+bash command="git add user/profile.js"
+bash command="git commit -m 'feat(profile): add user avatar upload functionality'"
+
+# When ready to merge back to main
+bash command="git checkout main"
+bash command="git pull" # Ensure main is up to date
+bash command="git merge --no-ff feature/user-profile"
+bash command="git push origin main"
+```
+
+Example 3: Resolving a merge conflict
+```
+# When conflict occurs during merge
+bash command="git status" # Identify conflicted files
+
+# Edit the conflicted files to resolve conflicts
+file_read file_path="/path/to/conflicted/file.js"
+file_edit file_path="/path/to/conflicted/file.js" old_string="<<<<<<< HEAD\ncode from current branch\n=======\ncode from other branch\n>>>>>>> other-branch" new_string="resolved code that combines both changes"
+
+# Mark conflicts as resolved
+bash command="git add /path/to/conflicted/file.js"
+
+# Complete the merge
+bash command="git commit" # Use default merge commit message
+
+# Verify the merge was successful
+bash command="git status"
+```
 
 Use these guidelines to perform Git operations expertly and maintain a clean repository history.
 """,
@@ -470,12 +524,62 @@ When working with files and filesystem operations, follow these best practices:
    - Respect .gitignore patterns when creating files in git repositories
    - Always validate user-provided paths to prevent path traversal issues
 
-EXAMPLE FILE OPERATIONS WITH EXPLANATIONS:
-- Read configuration file: `file_read file_path="/app/config.json"` then examine structure
-- Create executable script: `file_write file_path="/app/scripts/backup.sh"` followed by `bash command="chmod +x /app/scripts/backup.sh"`
-- Edit specific section in code: First `file_read` to find context, then `file_edit` with unique surrounding lines
-- Check file existence: `glob pattern="/app/logs/*.log"` to find log files
-- Analyze file content: `grep pattern="ERROR" path="/app/logs/"` to find error messages
+DETAILED EXAMPLES:
+
+Example 1: Reading and parsing a config file
+```
+# First check if the file exists
+glob pattern="/app/config*.json"
+
+# Read the file contents
+file_read file_path="/app/config.json"
+
+# If it's a large file, read specific parts
+file_read file_path="/app/config.json" offset=100 limit=50
+
+# To find specific settings in the file
+grep pattern="API_KEY" path="/app/config.json"
+
+# After reading, you might need to apply changes based on content
+# (For example, if the file contains invalid JSON that needs fixing)
+file_edit file_path="/app/config.json" old_string="{\n  \"api_key\": \"\"\n  \"host\": \"example.com\"\n}" new_string="{\n  \"api_key\": \"\",\n  \"host\": \"example.com\"\n}"
+```
+
+Example 2: Creating a new Python script
+```
+# First check if the directory exists
+ls path="/app/scripts"
+
+# Create directory if it doesn't exist
+bash command="mkdir -p /app/scripts"
+
+# Create the Python script
+file_write file_path="/app/scripts/data_processor.py" content="#!/usr/bin/env python3\n\nimport json\nimport sys\n\ndef process_data(filename):\n    with open(filename, 'r') as f:\n        data = json.load(f)\n    \n    # Process the data\n    result = data['values']\n    return result\n\nif __name__ == '__main__':\n    if len(sys.argv) < 2:\n        print('Usage: data_processor.py <filename>')\n        sys.exit(1)\n    \n    result = process_data(sys.argv[1])\n    print(json.dumps(result, indent=2))"
+
+# Make it executable
+bash command="chmod +x /app/scripts/data_processor.py"
+
+# Verify the file was created
+ls path="/app/scripts"
+
+# Test the script with an example input
+bash command="python /app/scripts/data_processor.py /app/data/sample.json"
+```
+
+Example 3: Editing a specific function in a large codebase
+```
+# First locate the file containing the function
+grep pattern="def calculate_tax" include="*.py"
+
+# Read the file to understand the context
+file_read file_path="/app/finance/tax_calculator.py"
+
+# Make a precise edit with enough context to ensure uniqueness
+file_edit file_path="/app/finance/tax_calculator.py" old_string="def calculate_tax(amount, rate):\n    \"\"\"Calculate tax amount.\"\"\"\n    return amount * rate" new_string="def calculate_tax(amount, rate):\n    \"\"\"Calculate tax amount with validation.\"\"\"\n    if amount < 0 or rate < 0:\n        raise ValueError(\"Amount and rate must be positive\")\n    return amount * rate"
+
+# Test the changes
+bash command="python -m pytest /app/tests/test_tax_calculator.py"
+```
 
 Use these guidelines to perform safe, effective file operations that maintain system integrity.
 """,
@@ -527,12 +631,70 @@ When executing bash commands, follow these specific guidelines:
    - Avoid commands that run with elevated privileges unless necessary
    - Be cautious with wildcards in destructive commands (rm, chmod, etc.)
 
-EXAMPLE COMMANDS WITH EXPLANATIONS:
-- `find . -type f -name "*.log" -exec grep "ERROR" {} \\;` - Find and search log files
-- `curl -s https://api.example.com/data | jq '.items[] | select(.active==true)'` - Fetch and filter JSON
-- `tar czf archive.tar.gz --exclude='*.log' --exclude='node_modules' ./` - Create archive excluding certain files
-- `git log --author="$(git config user.name)" --since="1 week ago" --oneline` - Show your recent commits
-- `python -m pip install --user package` - Install Python package in user space
+DETAILED EXAMPLES:
+
+Example 1: Setting up a Python virtual environment and installing dependencies
+```
+# Check Python version first
+bash command="python --version"
+
+# Create a virtual environment
+bash command="python -m venv venv"
+
+# Activate the virtual environment (use the appropriate command for your shell)
+bash command="source venv/bin/activate"
+
+# Install dependencies from requirements file
+bash command="pip install -r requirements.txt"
+
+# Verify installation
+bash command="pip list"
+
+# Run a Python script in the virtual environment
+bash command="python src/main.py"
+```
+
+Example 2: Processing log files and extracting information
+```
+# Find log files from the past week
+bash command="find /var/log -type f -name '*.log' -mtime -7"
+
+# Count occurrences of ERROR in log files
+bash command="grep -c 'ERROR' /var/log/application.log"
+
+# Extract and sort unique error messages
+bash command="grep 'ERROR' /var/log/application.log | cut -d ':' -f 4 | sort | uniq -c | sort -nr"
+
+# Save the results to a report file
+bash command="grep 'ERROR' /var/log/application.log | cut -d ':' -f 4 | sort | uniq -c | sort -nr > error_report.txt"
+
+# Check the report
+bash command="head error_report.txt"
+```
+
+Example 3: Deploying a web application
+```
+# Build the application
+bash command="npm run build"
+
+# Make sure destination directory exists
+bash command="mkdir -p /var/www/myapp"
+
+# Copy the built files to the deployment directory
+bash command="cp -rp dist/* /var/www/myapp/"
+
+# Set proper permissions
+bash command="chmod -R 755 /var/www/myapp"
+
+# Restart the web server
+bash command="systemctl restart nginx"
+
+# Verify the deployment by checking the service status
+bash command="systemctl status nginx"
+
+# Test the website is accessible
+bash command="curl -I http://localhost"
+```
 
 Use these guidelines to construct effective, safe bash commands that produce reliable results.
 """,
@@ -585,12 +747,83 @@ When searching through code and files, follow these expert techniques:
    - When searching for specific code, include distinctive syntax or variable names
    - For multilingual codebases, search language by language
 
-EXAMPLE SEARCH PATTERNS WITH EXPLANATIONS:
-- `grep pattern="TODO|FIXME" include="*.{js,ts,py}"` - Find all code comments marking work to be done
-- `glob pattern="**/models/*.{js,ts,py}"` - Find all model definitions across the codebase
-- `grep pattern="connect\\(.*\\)" include="*.{js,jsx,ts,tsx}"` - Find Redux connect calls in React
-- `grep pattern="@api\\." include="*.py"` - Find FastAPI routes in Python
-- `glob pattern="**/{package.json,requirements.txt,go.mod,Cargo.toml}"` - Find dependency definition files
+DETAILED EXAMPLES:
+
+Example 1: Finding and analyzing a specific feature implementation
+```
+# First find potential entry points or main files
+glob pattern="**/main.py" 
+glob pattern="**/app.py"
+glob pattern="**/index.js"
+
+# Look for a feature-specific module or component
+glob pattern="**/*user*.{py,js,ts}"
+
+# Search for class or function definitions related to the feature
+grep pattern="class\\s+User" include="*.py"
+grep pattern="def\\s+create_user" include="*.py"
+grep pattern="function\\s+createUser" include="*.{js,ts}"
+
+# Find API endpoints related to the feature
+grep pattern="@app.route\\(['\"]/users?['\"]" include="*.py"
+grep pattern="router\\.(get|post|put|delete)\\(['\"]/users?['\"]" include="*.{js,ts}"
+
+# Trace usage throughout the codebase
+grep pattern="User\\(" include="*.py"
+grep pattern="createUser\\(" include="*.{js,ts}"
+
+# Find tests related to the feature
+glob pattern="**/test_*user*.py"
+glob pattern="**/*user*test.{js,ts}"
+```
+
+Example 2: Investigating a specific error or bug
+```
+# Search for error messages across the codebase
+grep pattern="Authentication failed" include="*.{py,js,ts,log}"
+
+# Look for exception handling related to the error
+grep pattern="try\\s*:\\s*.*\\s*except\\s+AuthError" include="*.py"
+grep pattern="try\\s*{.*}\\s*catch\\s*\\(AuthError" include="*.{js,ts}"
+
+# Find where the error might be thrown
+grep pattern="raise\\s+AuthError" include="*.py"
+grep pattern="throw\\s+new\\s+AuthError" include="*.{js,ts}"
+
+# Check configuration related to the feature
+glob pattern="**/auth*config*.{json,yaml,py,js,ts}"
+
+# Search for authentication-related functions or methods
+grep pattern="def\\s+authenticate" include="*.py"
+grep pattern="function\\s+authenticate" include="*.{js,ts}"
+```
+
+Example 3: Exploring an unfamiliar codebase
+```
+# Start with project structure to understand organization
+glob pattern="*/"
+
+# Find main entry points
+glob pattern="**/main.{py,js}"
+glob pattern="**/index.{js,ts}"
+glob pattern="**/app.{py,js,ts}"
+
+# Examine package definitions and dependencies
+glob pattern="**/package.json"
+glob pattern="**/requirements.txt"
+glob pattern="**/pyproject.toml"
+
+# Identify core modules or components
+grep pattern="import " include="**/main.py"
+grep pattern="import " include="**/index.js"
+grep pattern="from " include="**/app.py"
+
+# Find configuration and environment settings
+glob pattern="**/{config,conf,settings,env}*.{json,yaml,py,js,env}"
+
+# Look for documentation
+glob pattern="**/{README,CONTRIBUTING,ARCHITECTURE}*"
+```
 
 Use these techniques to efficiently search through codebases of any size and complexity.
 """,
@@ -640,11 +873,72 @@ When solving problems where no specific tool approach is obvious, follow these g
    - Run appropriate tests after making changes
    - Validate against the original requirements
 
-EXAMPLE PROBLEM-SOLVING WORKFLOWS:
-- Bug fixing: Search for error message → locate relevant files → understand code flow → identify issue → fix → test
-- Feature addition: Find similar features → understand patterns → design new feature → implement → test integration
-- Performance optimization: Profile execution → identify bottlenecks → research optimization strategies → implement → benchmark
-- Refactoring: Map current code structure → design improved architecture → make incremental changes → test each step
+DETAILED EXAMPLES:
+
+Example 1: Implementing a Bug Fix
+```
+# Step 1: Understand the error and reproduce it
+bash command="python -m app.main"  # Run the app to observe the error
+
+# Step 2: Search for relevant code
+grep pattern="IndexError" include="*.py"  # Find where this error might be handled
+grep pattern="get_user_by_id" include="*.py"  # Find the function mentioned in the error
+
+# Step 3: Examine the problematic code
+file_read file_path="/app/models/user.py"  # Read the file containing the issue
+
+# Step 4: Fix the issue
+file_edit file_path="/app/models/user.py" old_string="def get_user_by_id(user_id):\n    return users[user_id]" new_string="def get_user_by_id(user_id):\n    if user_id < 0 or user_id >= len(users):\n        return None\n    return users[user_id]"
+
+# Step 5: Test the fix
+bash command="python -m app.tests.test_user"  # Run unit tests
+bash command="python -m app.main"  # Test the full application
+```
+
+Example 2: Adding a New Feature
+```
+# Step 1: Understand the codebase structure
+glob pattern="**/*.py"  # Find all Python files
+ls path="/app"  # See main application directories
+
+# Step 2: Find similar features to use as templates
+grep pattern="class\\s+\\w+Controller" include="*.py"  # Find controller classes
+file_read file_path="/app/controllers/product_controller.py"  # Read a similar controller
+
+# Step 3: Create the new feature files
+file_write file_path="/app/controllers/order_controller.py" content="from app.models.order import Order\n\nclass OrderController:\n    def __init__(self):\n        self.orders = []\n    \n    def create_order(self, product_id, quantity, user_id):\n        order = Order(product_id, quantity, user_id)\n        self.orders.append(order)\n        return order\n    \n    def get_orders_by_user(self, user_id):\n        return [order for order in self.orders if order.user_id == user_id]"
+
+file_write file_path="/app/models/order.py" content="class Order:\n    def __init__(self, product_id, quantity, user_id):\n        self.product_id = product_id\n        self.quantity = quantity\n        self.user_id = user_id\n        self.status = 'pending'\n    \n    def complete(self):\n        self.status = 'completed'\n        return True"
+
+# Step 4: Update the main app to register the new feature
+file_read file_path="/app/main.py"  # Read the main app file to see how controllers are registered
+file_edit file_path="/app/main.py" old_string="from app.controllers.product_controller import ProductController\n\napp = Flask(__name__)\nproduct_controller = ProductController()" new_string="from app.controllers.product_controller import ProductController\nfrom app.controllers.order_controller import OrderController\n\napp = Flask(__name__)\nproduct_controller = ProductController()\norder_controller = OrderController()"
+
+# Step 5: Create tests for the new feature
+file_write file_path="/app/tests/test_order.py" content="import unittest\nfrom app.models.order import Order\nfrom app.controllers.order_controller import OrderController\n\nclass TestOrder(unittest.TestCase):\n    def test_create_order(self):\n        controller = OrderController()\n        order = controller.create_order(1, 5, 101)\n        self.assertEqual(order.product_id, 1)\n        self.assertEqual(order.quantity, 5)\n        self.assertEqual(order.status, 'pending')\n\n    def test_complete_order(self):\n        order = Order(1, 5, 101)\n        self.assertEqual(order.status, 'pending')\n        order.complete()\n        self.assertEqual(order.status, 'completed')\n\nif __name__ == '__main__':\n    unittest.main()"
+
+# Step 6: Run tests to verify the new feature
+bash command="python -m app.tests.test_order"
+```
+
+Example 3: Performance Optimization
+```
+# Step 1: Identify the slow component
+bash command="python -m cProfile -o profile.out app.main"  # Profile the application
+bash command="python -m pstats profile.out"  # Analyze the profile data
+
+# Step 2: Examine the problematic code
+grep pattern="process_large_dataset" include="*.py"  # Find the slow function
+file_read file_path="/app/services/data_processor.py"  # Read the implementation
+
+# Step 3: Optimize the code
+file_edit file_path="/app/services/data_processor.py" old_string="def process_large_dataset(data):\n    result = []\n    for item in data:\n        for element in item:\n            if element > 0:\n                result.append(transform(element))\n    return result" new_string="def process_large_dataset(data):\n    # Use list comprehension and avoid nested loops\n    return [transform(element) for item in data for element in item if element > 0]"
+
+# Step 4: Benchmark the optimized solution
+file_write file_path="/app/benchmarks/benchmark_processor.py" content="import time\nfrom app.services.data_processor import process_large_dataset\n\ndata = [[i*j for j in range(1000)] for i in range(100)]\n\nstart = time.time()\nresult = process_large_dataset(data)\nend = time.time()\n\nprint(f\"Processed {len(result)} items in {end - start:.4f} seconds\")"
+
+bash command="python -m app.benchmarks.benchmark_processor"  # Run the benchmark
+```
 
 When no clear tool path exists, use bash commands to explore the environment and develop a custom approach using the available tools.
 """

@@ -1,0 +1,3033 @@
+import inspect
+import json
+import logging
+import os
+import re
+import sys
+import threading
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.spinner import Spinner
+from rich.table import Table
+from rich.text import Text
+
+from code_ally.config import load_config, save_config
+from code_ally.llm_client import ModelClient
+from code_ally.tools.base import BaseTool
+
+# Configure logging
+logger = logging.getLogger(__name__)
+from code_ally.trust import TrustManager
+
+
+class Agent:
+    """The main agent class that manages the conversation and tool execution."""
+
+    def __init__(
+        self,
+        model_client: ModelClient,
+        tools: List[BaseTool],
+        system_prompt: Optional[str] = None,
+        verbose: bool = False,
+        check_context_msg: bool = True,
+    ):
+        """Initialize the agent.
+
+        Args:
+            model_client: The LLM client to use
+            tools: List of available tools
+            system_prompt: The system prompt to use (optional)
+            verbose: Whether to enable verbose mode (defaults to False)
+            check_context_msg: Whether to encourage LLM to check context when redundant
+                              tool calls are detected (defaults to True)
+        """
+        self.model_client = model_client
+        self.tools = {tool.name: tool for tool in tools}
+        self.trust_manager = TrustManager()
+        self.messages: List[Dict[str, Any]] = []
+        self.console = Console()
+        self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
+        self.thinking_event = threading.Event()
+        self.verbose = verbose
+        self.check_context_msg = check_context_msg
+
+        # Track tool calls to avoid redundancy
+        self.recent_tool_calls: List[Tuple[str, Dict[str, Any]]] = []
+        self.max_recent_calls = 5  # Remember last 5 calls to detect repetition
+
+        # Token tracking and auto-compaction
+        self.estimated_tokens = 0
+        self.token_buffer_ratio = (
+            0.95  # Compact when at 95% of context size (5% remaining)
+        )
+        self.tokens_per_message = 4  # Tokens for message formatting
+        self.tokens_per_name = 1  # Tokens for role names (user, assistant, system)
+
+        # Count characters per token (simple approximation)
+        # Most models use ~4 chars per token on average in English
+        self.chars_per_token = 4.0
+
+        # Store last compaction time to avoid too frequent compactions
+        self.last_compaction_time = 0
+        self.min_compaction_interval = 300  # Minimum seconds between auto-compactions
+
+        # Initialize token count
+        self._update_token_count()
+
+        # Add system prompt if provided
+        if system_prompt:
+            self.messages.append({"role": "system", "content": system_prompt})
+            self._update_token_count()
+
+    def start_thinking_animation(self):
+        """Start the thinking animation in a separate thread."""
+        self.thinking_event.clear()
+
+        def animate():
+            # Regular animation for non-verbose mode
+            if not self.verbose:
+                # Create a more informative thinking spinner with token usage
+                if self.estimated_tokens > 0 and self.model_client.context_size > 0:
+                    token_percentage = int(
+                        self.estimated_tokens / self.model_client.context_size * 100
+                    )
+                    if token_percentage > 80:
+                        color = "red"
+                    elif token_percentage > 50:
+                        color = "yellow"
+                    else:
+                        color = "green"
+                    thinking_text = f"[cyan]Thinking[/] [dim {color}]({token_percentage}% context used)[/]"
+                else:
+                    thinking_text = "[cyan]Thinking[/]"
+
+                thinking_spinner = Spinner("dots2", text=thinking_text)
+
+                with Live(
+                    thinking_spinner, refresh_per_second=10, console=self.console
+                ) as live:
+                    while not self.thinking_event.is_set():
+                        live.update(thinking_spinner)
+                        time.sleep(0.1)
+            else:
+                # In verbose mode, show a spinner with a message
+                # informing the user that model's thought process will be shown with the response
+
+                self.console.print(
+                    "[bold cyan]🤔 VERBOSE MODE: Waiting for model to respond[/]",
+                    highlight=False,
+                )
+                self.console.print(
+                    "[dim]Complete model reasoning will be shown with the response[/]",
+                    highlight=False,
+                )
+
+                with Live(
+                    self.thinking_spinner, refresh_per_second=10, console=self.console
+                ) as live:
+                    while not self.thinking_event.is_set():
+                        live.update(self.thinking_spinner)
+                        time.sleep(0.1)
+
+        # Start animation in a daemon thread so it doesn't block program exit
+        thread = threading.Thread(target=animate, daemon=True)
+        thread.start()
+        return thread
+
+    def stop_thinking_animation(self):
+        """Stop the thinking animation."""
+        self.thinking_event.set()
+
+    def get_function_definitions(self) -> List[Dict[str, Any]]:
+        """Create function definitions for the tools in the format expected by the LLM.
+
+        Returns:
+            List of function definitions
+        """
+        function_defs = []
+        for tool in self.tools.values():
+            # Get the execute method
+            execute_method = tool.execute
+
+            # Extract information from the method
+            sig = inspect.signature(execute_method)
+            docstring = inspect.getdoc(execute_method) or ""
+
+            # Build parameter schema
+            parameters = {"type": "object", "properties": {}, "required": []}
+
+            for param_name, param in sig.parameters.items():
+                if param_name == "self":
+                    continue
+
+                # Default type is string
+                param_type = "string"
+
+                # Try to determine type from annotation
+                if param.annotation != inspect.Parameter.empty:
+                    if param.annotation == str:
+                        param_type = "string"
+                    elif param.annotation == int:
+                        param_type = "integer"
+                    elif param.annotation == float:
+                        param_type = "number"
+                    elif param.annotation == bool:
+                        param_type = "boolean"
+                    elif (
+                        param.annotation == list
+                        or hasattr(param.annotation, "__origin__")
+                        and param.annotation.__origin__ == list
+                    ):
+                        param_type = "array"
+                    # Handle Optional types
+                    elif (
+                        hasattr(param.annotation, "__origin__")
+                        and param.annotation.__origin__ == Union
+                    ):
+                        args = param.annotation.__args__
+                        if type(None) in args:  # This is an Optional
+                            for arg in args:
+                                if arg != type(None):
+                                    if arg == str:
+                                        param_type = "string"
+                                    elif arg == int:
+                                        param_type = "integer"
+                                    elif arg == float:
+                                        param_type = "number"
+                                    elif arg == bool:
+                                        param_type = "boolean"
+                                    elif (
+                                        arg == list
+                                        or hasattr(arg, "__origin__")
+                                        and arg.__origin__ == list
+                                    ):
+                                        param_type = "array"
+
+                # Extract parameter description from docstring (if available)
+                param_desc = f"Parameter {param_name}"
+
+                # Add to properties
+                parameters["properties"][param_name] = {
+                    "type": param_type,
+                    "description": param_desc,
+                }
+
+                # If the parameter has no default value, it's required
+                if param.default == inspect.Parameter.empty:
+                    parameters["required"].append(param_name)
+
+            # Create the function definition
+            function_def = {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": parameters,
+                },
+            }
+
+            function_defs.append(function_def)
+
+        return function_defs
+
+    def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a tool with the given arguments after checking trust.
+
+        Args:
+            tool_name: The name of the tool to execute
+            arguments: The arguments to pass to the tool
+
+        Returns:
+            The result of the tool execution
+        """
+        # Track execution time
+        start_time = time.time()
+        # Check if the tool exists
+        if tool_name not in self.tools:
+            return {
+                "success": False,
+                "error": f"Unknown tool: {tool_name}",
+            }
+
+        tool = self.tools[tool_name]
+
+        # Check for redundant calls - with special handling for LS
+        current_call = (tool_name, tuple(sorted(arguments.items())))
+
+        # For LS tool, be even more strict - check if ANY LS call was made in this turn
+        if tool_name == "ls" and any(
+            call[0] == "ls" for call in self.recent_tool_calls
+        ):
+            # This is a redundant LS call - don't execute it again
+            self.console.print(
+                f"[bold yellow]⚠️ Redundant LS call detected - ignoring.[/]",
+                highlight=False,
+            )
+
+            # Get the most recent LS result to return instead
+            for prev_tool, prev_args in reversed(self.recent_tool_calls):
+                if prev_tool == "ls":
+                    # Find a path similar to what was requested
+                    req_path = arguments.get("path", ".")
+                    prev_path = dict(prev_args).get("path", ".")
+
+                    # Return the previous result for similar paths
+                    if req_path == prev_path or req_path == "." or prev_path == ".":
+                        # Clone the result of the previous call from messages
+                        for msg in reversed(self.messages):
+                            if (
+                                msg.get("role") == "function"
+                                and msg.get("name") == "ls"
+                            ):
+                                try:
+                                    prev_result = json.loads(msg.get("content", "{}"))
+                                    # Make sure it's a success
+                                    if prev_result.get("success", False):
+                                        return prev_result
+                                except json.JSONDecodeError:
+                                    pass
+
+            # If we can't find a previous call, return a dummy response with guidance if enabled
+            error_message = f"Redundant call to {tool_name}. Directory contents have already been shown."
+            if self.check_context_msg:
+                error_message += " Please check your context for the previous result before making duplicate tool calls."
+
+            return {
+                "success": False,
+                "error": error_message,
+            }
+
+        # General redundant call detection for other tools
+        elif any(call == current_call for call in self.recent_tool_calls):
+            # This is a redundant call - don't execute it again
+            if self.verbose:
+                self.console.print(
+                    f"[bold yellow]⚠️ Redundant tool call detected:[/] {tool_name}({', '.join([f'{k}={v}' for k, v in arguments.items()])})",
+                    highlight=False,
+                )
+            # Return error message with guidance if enabled
+            error_message = f"Redundant call to {tool_name} with the same arguments."
+            if self.check_context_msg:
+                error_message += (
+                    " Please check your context as this information was already provided. "
+                    "Try a different approach or use the data already available."
+                )
+
+            return {
+                "success": False,
+                "error": error_message,
+            }
+
+        # Add this call to the recent calls list
+        self.recent_tool_calls.append(current_call)
+        if len(self.recent_tool_calls) > self.max_recent_calls:
+            self.recent_tool_calls.pop(0)  # Remove oldest call
+
+        # Print tool execution information with improved formatting
+        tool_icon = {
+            "bash": "🔧",
+            "file_read": "📄",
+            "file_write": "✏️",
+            "file_edit": "📝",
+            "ls": "📂",
+            "glob": "🔍",
+            "grep": "🔎",
+            "math": "🧮",
+        }.get(tool_name, "⚙️")
+
+        self.console.print(
+            f"[bold yellow]{tool_icon} Action:[/] Using [cyan]{tool_name}[/] tool",
+            highlight=False,
+        )
+
+        # Print detailed arguments in verbose mode
+        if self.verbose:
+            from rich.panel import Panel
+
+            # Format arguments for better display
+            args_detail = []
+            for k, v in arguments.items():
+                if isinstance(v, str) and len(v) > 100:
+                    args_detail.append(f"{k} = '{v[:100]}...' ({len(v)} chars)")
+                else:
+                    args_detail.append(f"{k} = '{v}'")
+
+            args_str = "\n".join(args_detail)
+
+            # Show tool details in a nice panel
+            self.console.print(
+                Panel(
+                    f"[cyan]Tool:[/] [bold]{tool_name}[/]\n[cyan]Arguments:[/]\n{args_str}",
+                    title="Tool Execution Details",
+                    border_style="yellow",
+                ),
+                highlight=False,
+            )
+
+        # Check if the tool requires confirmation
+        if tool.requires_confirmation:
+            # Get the path from the arguments if available
+            path = None
+            if "path" in arguments:
+                path = arguments["path"]
+
+            # Special handling for bash tool
+            if tool_name == "bash" and "command" in arguments:
+                # For bash, use the arguments directly to show command in permission panel
+                path = arguments
+
+            # Check if the tool is already trusted for this path
+            if not self.trust_manager.is_trusted(tool_name, path):
+                # Format arguments for display in a readable way
+                args_display = []
+                for k, v in arguments.items():
+                    # Handle different argument types differently
+                    if k == "path":
+                        args_display.append(f"Path: {v}")
+                    elif k == "content" and isinstance(v, str):
+                        if len(v) > 50:
+                            args_display.append(
+                                f"Content: {v[:50]}... ({len(v)} chars)"
+                            )
+                        elif not v:
+                            args_display.append("Content: [empty file]")
+                        else:
+                            args_display.append(f"Content: {v}")
+                    else:
+                        args_display.append(f"{k}: {v}")
+
+                formatted_args = "\n  ".join(args_display)
+
+                # For bash, don't show command here as it will be shown in the permission panel
+                if tool_name != "bash":
+                    # Print confirmation prompt with more details
+                    self.console.print(
+                        f"[bold yellow]⚠️ Confirmation needed:[/] {tool_name} operation",
+                        highlight=False,
+                    )
+                    if formatted_args:
+                        self.console.print(
+                            f"  {formatted_args}",
+                            highlight=False,
+                        )
+                else:
+                    # Just show a simpler message for bash
+                    self.console.print(
+                        f"[bold yellow]⚠️ Confirmation needed for bash command[/]",
+                        highlight=False,
+                    )
+
+                # Prompt for permission
+                if not self.trust_manager.prompt_for_permission(tool_name, path):
+                    self.console.print(
+                        "[bold red]❌ Permission denied[/]", highlight=False
+                    )
+                    # Create a more detailed permission denied result
+                    return {
+                        "success": False,
+                        "error": f"Permission denied for {tool_name} on {path if path else 'this operation'}",
+                        "_error_detected": True,
+                        "_error_message": f"Permission denied for {tool_name}",
+                        "_tool_name": tool_name,
+                        "_arguments": arguments,
+                        "_permission_denied": True,  # Special flag for permission denial
+                    }
+
+        # Execute the tool
+        try:
+            result = tool.execute(**arguments)
+
+            # Print a summary of the result including execution time
+            execution_time = time.time() - start_time
+            if result.get("success", False):
+                if tool_name == "ls" and "display" in result:
+                    # For ls tool, print the actual directory contents directly
+                    self.console.print(
+                        f"[green]✓ Tool executed successfully[/] [dim]({execution_time:.2f}s)[/]",
+                        highlight=False,
+                    )
+                elif (
+                    "content" in result
+                    and isinstance(result["content"], str)
+                    and len(result["content"]) > 100
+                ):
+                    preview = result["content"][:100] + "..."
+                    self.console.print(
+                        f"[green]✓ Result: {len(result['content'])} characters read[/] [dim]({execution_time:.2f}s)[/]",
+                        highlight=False,
+                    )
+
+                    # In verbose mode, print more of the content
+                    if self.verbose and len(result["content"]) > 0:
+                        from rich.panel import Panel
+                        from rich.syntax import Syntax
+
+                        # Try to detect content type for syntax highlighting
+                        if (
+                            result["content"].startswith("import ")
+                            or result["content"].startswith("def ")
+                            or "class " in result["content"][:100]
+                        ):
+                            content_type = "python"
+                        elif result["content"].startswith("<!DOCTYPE") or result[
+                            "content"
+                        ].startswith("<html"):
+                            content_type = "html"
+                        elif result["content"].startswith("{") or result[
+                            "content"
+                        ].startswith("["):
+                            content_type = "json"
+                        else:
+                            content_type = "text"
+
+                        # Display more content with syntax highlighting in verbose mode
+                        display_content = result["content"][:500] + (
+                            "..." if len(result["content"]) > 500 else ""
+                        )
+                        syntax = Syntax(
+                            display_content,
+                            content_type,
+                            theme="monokai",
+                            word_wrap=True,
+                        )
+                        self.console.print(
+                            Panel(syntax, title="Content Preview", border_style="cyan")
+                        )
+                elif "message" in result:
+                    self.console.print(
+                        f"[green]✓ {result['message']}[/] [dim]({execution_time:.2f}s)[/]",
+                        highlight=False,
+                    )
+                else:
+                    self.console.print(
+                        f"[green]✓ Tool executed successfully[/] [dim]({execution_time:.2f}s)[/]",
+                        highlight=False,
+                    )
+
+                # In verbose mode, print the full result details
+                if self.verbose:
+                    from rich.panel import Panel
+                    from rich.table import Table
+
+                    # Create detailed result panel for verbose mode
+                    result_table = Table(
+                        show_header=True, header_style="bold cyan", expand=True
+                    )
+                    result_table.add_column("Key", style="cyan")
+                    result_table.add_column("Value")
+
+                    # Add result details to table
+                    for key, value in result.items():
+                        # Skip internal keys that start with _
+                        if key.startswith("_"):
+                            continue
+
+                        # Format different value types appropriately
+                        if isinstance(value, list):
+                            if len(value) > 5:
+                                formatted_value = f"{', '.join(str(v) for v in value[:5])} ... ({len(value)} items)"
+                            else:
+                                formatted_value = f"{', '.join(str(v) for v in value)}"
+                            result_table.add_row(key, formatted_value)
+                        elif isinstance(value, dict):
+                            formatted_value = (
+                                f"{{{', '.join(f'{k}: {v}' for k, v in list(value.items())[:3])}}}"
+                                + ("..." if len(value) > 3 else "")
+                            )
+                            result_table.add_row(key, formatted_value)
+                        elif isinstance(value, str) and len(value) > 100:
+                            result_table.add_row(
+                                key, value[:100] + f"... ({len(value)} chars)"
+                            )
+                        else:
+                            result_table.add_row(key, str(value))
+
+                    # Show the detailed result panel
+                    self.console.print(
+                        Panel(
+                            result_table, title="Detailed Result", border_style="green"
+                        )
+                    )
+            else:
+                error_msg = result.get("error", "Unknown error")
+
+                # Create a more visually distinct error message
+                from rich.panel import Panel
+                from rich.text import Text
+
+                error_text = Text()
+                error_text.append("Error: ", style="bold red")
+                error_text.append(f"{error_msg}")
+
+                self.console.print(
+                    Panel(
+                        error_text,
+                        title=f"[bold red]✗ {tool_name} Failed[/]",
+                        border_style="red",
+                        expand=False,
+                    ),
+                    highlight=False,
+                )
+
+                # Add error info to the result for the LLM to see
+                result["_error_detected"] = True
+                result["_error_message"] = error_msg
+                result["_tool_name"] = tool_name
+                result["_arguments"] = arguments
+
+                # Add a clear message to the console for the user about tool failure
+                self.console.print(
+                    f"[bold yellow]⚠️ Tool execution failed. The assistant will try to address this issue.[/]",
+                    highlight=False,
+                )
+
+                # For LS tool failures with path errors, suggest using "." for current directory
+                if (
+                    tool_name == "ls"
+                    and "not found" in error_msg
+                    and "path" in arguments
+                ):
+                    self.console.print(
+                        f"[yellow]  Tip: Use '.' to list files in the current directory[/]",
+                        highlight=False,
+                    )
+
+                # For file write/edit errors with path issues, provide helpful message
+                if tool_name in ["file_write", "file_edit"] and (
+                    "No such file or directory" in error_msg
+                    or "Read-only file system" in error_msg
+                ):
+                    self.console.print(
+                        f"[yellow]  Tip: Specify a valid, writable file path in your current directory[/]",
+                        highlight=False,
+                    )
+
+            return result
+        except Exception as e:
+            error_message = str(e)
+            self.console.print(
+                f"[bold red]✗ Exception: {error_message}[/]", highlight=False
+            )
+            self.console.print(
+                f"[bold yellow]⚠️ Tool execution failed. The assistant will try a more creative approach.[/]",
+                highlight=False,
+            )
+
+            # For file operations, suggest alternate approaches
+            if tool_name in ["file_write", "file_edit"] and (
+                "No such file" in error_message
+                or "Read-only" in error_message
+                or "Permission denied" in error_message
+            ):
+                self.console.print(
+                    f"[yellow]  Tip: Try using bash to get the current directory with 'pwd' before writing files[/]",
+                    highlight=False,
+                )
+
+            return {
+                "success": False,
+                "error": f"Error executing {tool_name}: {error_message}",
+                "_error_detected": True,
+                "_error_message": error_message,
+                "_tool_name": tool_name,
+                "_arguments": arguments,
+            }
+
+    def _estimate_tokens(self, message: Dict[str, Any]) -> int:
+        """Estimate the number of tokens in a message.
+
+        This uses a simple approximation based on character count.
+        For production use, a proper tokenizer should be used.
+
+        Args:
+            message: The message to estimate token count for
+
+        Returns:
+            Estimated token count
+        """
+        # Start with tokens for message format
+        token_count = self.tokens_per_message
+
+        # Add tokens for the role name
+        if "role" in message:
+            token_count += self.tokens_per_name
+
+        # Add tokens for content based on character count
+        if "content" in message and message["content"]:
+            content_chars = len(message["content"])
+            content_tokens = int(content_chars / self.chars_per_token)
+            token_count += content_tokens
+
+        # Add tokens for function calls if present
+        if "tool_calls" in message and message["tool_calls"]:
+            for tool_call in message["tool_calls"]:
+                # Add tokens for function name
+                if "function" in tool_call:
+                    func_name = tool_call["function"].get("name", "")
+                    token_count += len(func_name) // self.chars_per_token
+
+                    # Add tokens for arguments
+                    args = tool_call["function"].get("arguments", "")
+                    if isinstance(args, str):
+                        token_count += len(args) // self.chars_per_token
+                    elif isinstance(args, dict):
+                        # Approximate token count for JSON dict
+                        args_str = json.dumps(args)
+                        token_count += len(args_str) // self.chars_per_token
+
+        # Add tokens for function responses
+        if "name" in message and message.get("role") == "function":
+            # Add tokens for function name
+            token_count += len(message["name"]) // self.chars_per_token
+
+        return max(1, token_count)  # Ensure at least 1 token
+
+    def _update_token_count(self) -> int:
+        """Update the estimated token count for the entire conversation.
+
+        Returns:
+            The total estimated token count
+        """
+        self.estimated_tokens = sum(
+            self._estimate_tokens(message) for message in self.messages
+        )
+        return self.estimated_tokens
+
+    def _should_compact_conversation(self) -> bool:
+        """Check if the conversation should be compacted.
+
+        Returns:
+            True if the conversation should be compacted, False otherwise
+        """
+        # Skip if we've recently compacted
+        current_time = time.time()
+        if current_time - self.last_compaction_time < self.min_compaction_interval:
+            return False
+
+        # Don't compact if we have very few messages
+        if len(self.messages) < 10:  # Need enough history to make compaction worthwhile
+            return False
+
+        # Check if we're approaching the context size limit
+        context_size = self.model_client.context_size
+        threshold = int(context_size * self.token_buffer_ratio)
+
+        return self.estimated_tokens > threshold
+
+    def process_llm_response(
+        self, response: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Process the LLM's response, executing any tool calls.
+
+        Args:
+            response: The LLM's response
+
+        Returns:
+            The result of any tool execution, or None if no tool was called
+        """
+        # Check if the response contains a tool call
+        tool_call = None
+
+        # Standard OpenAI format
+        if "tool_calls" in response and response["tool_calls"]:
+            tool_call = response["tool_calls"][0]  # Take the first tool call
+        # Legacy OpenAI format
+        elif "function_call" in response:
+            tool_call = {
+                "function": response["function_call"],
+            }
+        # Check for tool calls directly in content (improper format used by some models)
+        elif "content" in response and response["content"]:
+            # Try to detect tools that are described in the content but not properly executed
+            # Pattern 1: Proper JSON-like tool description
+            tool_pattern = (
+                r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*\{([^}]+)\}\s*\}'
+            )
+            # Pattern 2: Python-like dictionary representation
+            tool_pattern2 = r"'name':\s*'([^']+)'.*?'arguments':\s*{([^}]+)}"
+            # Pattern 3: Text description of a tool
+            tool_pattern3 = r"use the ([a-z_]+) tool to (.*?)(?:\.|$)"
+
+            # Try to find any matching tool calls
+            tools_in_content = (
+                re.findall(tool_pattern, response["content"], re.DOTALL)
+                or re.findall(tool_pattern2, response["content"], re.DOTALL)
+                or []
+            )
+
+            # Check for text descriptions of tools if no JSON-like description found
+            if not tools_in_content:
+                text_tools = re.findall(
+                    tool_pattern3, response["content"].lower(), re.DOTALL
+                )
+                if text_tools:
+                    for tool_name, description in text_tools:
+                        # Check if the tool exists in our registry
+                        if tool_name in self.tools:
+                            # For ls, just use the default behavior
+                            if tool_name == "ls":
+                                tools_in_content = [(tool_name, '"path": "."')]
+                                break
+                            # For glob, extract a pattern if mentioned
+                            elif tool_name == "glob":
+                                pattern_match = re.search(
+                                    r"pattern.*?([*][^\"',\s]+)", description
+                                )
+                                pattern = (
+                                    "*.py"
+                                    if not pattern_match
+                                    else pattern_match.group(1)
+                                )
+                                tools_in_content = [
+                                    (tool_name, f'"pattern": "{pattern}"')
+                                ]
+                                break
+
+            if tools_in_content:
+                # Found a tool call in content with improper formatting
+                tool_name = tools_in_content[0][0].strip()
+                args_text = tools_in_content[0][1].strip()
+
+                # Parse the arguments from the text
+                args_dict = {}
+
+                # Try to extract key-value pairs from arguments text
+                arg_pattern = r'"([^"]+)"\s*:\s*"?([^",}]+)"?'
+                arg_matches = re.findall(arg_pattern, args_text)
+
+                for key, value in arg_matches:
+                    args_dict[key.strip()] = value.strip()
+
+                # For common issues with ls flags being passed incorrectly
+                if tool_name == "ls" and "kwargs" in args_dict:
+                    # Models often try to pass flags in "kwargs" instead of proper parameters
+                    if args_dict["kwargs"].strip() == "-1":
+                        # This is an attempt to list 1 file per line, adjust to proper form
+                        args_dict = {"path": "."}
+
+                # Create a properly formatted tool call
+                tool_call = {"function": {"name": tool_name, "arguments": args_dict}}
+
+                # Show a warning about improper tool formatting
+                self.console.print(
+                    f"[yellow]⚠️ Detected improper tool call format for {tool_name}. Converting to proper format.[/]",
+                    highlight=False,
+                )
+
+                # Add a system message to help the model learn the correct format for next time
+                # This is especially helpful for Gemma and other models that might need extra guidance
+                self.messages.append(
+                    {
+                        "role": "system",
+                        "content": f"""
+                    IMPORTANT: To use tools correctly, you must use the proper OpenAI-compatible function calling format.
+                    
+                    ❌ INCORRECT way (what you did):
+                    ```
+                    {{
+                      "name": "{tool_name}",
+                      "arguments": {{ "key": "value" }}
+                    }}
+                    ```
+                    
+                    ✅ CORRECT way (do this next time):
+                    Call the function directly in your response without explaining the call:
+                    
+                    To use the {tool_name} tool:
+                    1. Do not include code blocks with JSON formatting in your response
+                    2. Do not explain what the tool does before using it
+                    3. Do not narrate "I will now use tool X"
+                    4. Just use the tool directly
+                    """,
+                    }
+                )
+
+        if tool_call:
+            # Extract the tool name and arguments
+            tool_name = tool_call["function"]["name"]
+            try:
+                # Check if arguments is already a dict or needs to be parsed from JSON
+                if isinstance(tool_call["function"]["arguments"], dict):
+                    arguments = tool_call["function"]["arguments"]
+                else:
+                    arguments = json.loads(tool_call["function"]["arguments"])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Handle malformed arguments
+                self.console.print(
+                    "[bold red]Error: Malformed arguments in tool call[/]",
+                    highlight=False,
+                )
+                arguments = {}
+
+            # Special handling for LS tool to prevent showing fake directory listings
+            if tool_name == "ls":
+                path = arguments.get("path", ".")
+
+                # Execute the tool
+                result = self.execute_tool(tool_name, arguments)
+
+                # If successful, add the actual directory contents to the response
+                if result.get("success", False):
+                    # Show the actual contents
+                    if "display" in result:
+                        self.console.print(result["display"], highlight=False)
+
+                    # Don't add the original assistant message with the tool call
+                    # Instead, create a better sequence of messages
+
+                    # Add the result, but prevent making up files
+                    files_str = ", ".join(result.get("files", [])) or "No files"
+                    dirs_str = (
+                        ", ".join(result.get("directories", [])) or "No directories"
+                    )
+
+                    # Create a conversation-style message from the assistant that will be shown to the model
+                    display_content = result.get(
+                        "display",
+                        f"The directory {os.path.abspath(path)} contains:\nFiles: {files_str}\nDirectories: {dirs_str}",
+                    )
+
+                    # Add the assistant response as if it was already sent to the user
+                    actual_response = {
+                        "role": "assistant",
+                        "content": f"Here are the contents of the directory {os.path.abspath(path)}:\n\n```\n{display_content}\n```",
+                    }
+                    self.messages.append(actual_response)
+                    self._update_token_count()  # Update token count after adding message
+
+                    # Add multiple strong system messages warning against asking for output again or calling ls again
+                    self.messages.append(
+                        {
+                            "role": "system",
+                            "content": "IMPORTANT: The directory listing output has already been displayed to the user above. DO NOT ask the user what files they see or ask for the output. The user can clearly see the file listing in your previous message. If the user asks another question, address that instead.",
+                        }
+                    )
+                    self._update_token_count()  # Update token count after adding message
+
+                    # Add another message specifically about not calling ls again
+                    self.messages.append(
+                        {
+                            "role": "system",
+                            "content": "IMPORTANT: DO NOT call the ls tool again in this conversation turn. You have already listed the directory contents and the output is shown above. Calling ls again would be redundant and unnecessary.",
+                        }
+                    )
+                    self._update_token_count()  # Update token count after adding message
+
+                    # Also add function response for compatibility
+                    self.messages.append(
+                        {
+                            "role": "function",
+                            "name": tool_name,
+                            "content": json.dumps(result),
+                        }
+                    )
+                    self._update_token_count()  # Update token count after adding message
+                else:
+                    # Still add function response if failed
+                    self.messages.append(response)
+                    self._update_token_count()  # Update token count after adding message
+
+                    self.messages.append(
+                        {
+                            "role": "function",
+                            "name": tool_name,
+                            "content": json.dumps(result),
+                        }
+                    )
+                    self._update_token_count()  # Update token count after adding message
+
+                return result
+            else:
+                # For other tools, execute normally
+                result = self.execute_tool(tool_name, arguments)
+
+                # Add a modified system message based on success/failure
+                if result.get("_permission_denied", False):
+                    # Special handling for permission denied
+                    permission_denied_hint = {
+                        "role": "system",
+                        "content": f"CRITICAL: The {tool_name} action was NOT performed because the user explicitly DENIED PERMISSION. You MUST acknowledge this to the user clearly. Tell the user that you could not perform the action because they denied permission. Do NOT claim you performed the action or show fabricated results. DO NOT try to execute the same tool again without explicit user confirmation.",
+                    }
+                    self.messages.append(permission_denied_hint)
+                    self._update_token_count()  # Update token count after adding message
+                elif result.get("success", True):
+                    # Add a hint that the action was already completed
+                    action_hint_msg = f"The {tool_name} action has already been completed successfully. Do not ask for confirmation or ask if the user wants to proceed."
+
+                    # Special handling for bash execution
+                    if tool_name == "bash":
+                        is_interactive = result.get("interactive", False)
+
+                        if is_interactive:
+                            action_hint_msg += f" IMPORTANT: The command you ran is INTERACTIVE and waiting for user input. The output before the input prompt is: {result.get('output', '')}. Tell the user that the script is waiting for their input and they should run it directly in their terminal."
+                        else:
+                            action_hint_msg += f" IMPORTANT: Do not claim the command has been run unless you actually used the bash tool. Here is the exact output from running the command: {result.get('output', '')}. ONLY show this exact output to the user. DO NOT fabricate or imagine different output."
+                    else:
+                        action_hint_msg += " Just acknowledge the action was completed and ask if they want to do anything else."
+
+                    action_hint = {
+                        "role": "system",
+                        "content": action_hint_msg,
+                    }
+                    self.messages.append(action_hint)
+                    self._update_token_count()  # Update token count after adding message
+                else:
+                    # Add a hint that there was an error that needs addressing
+                    error_msg = result.get("_error_message", "unknown error")
+                    tool_args = json.dumps(result.get("_arguments", {}))
+
+                    # Create targeted error handling advice based on the tool and error
+                    extra_advice = ""
+                    if tool_name in ["file_write", "file_edit"] and (
+                        "No such file or directory" in error_msg
+                        or "Read-only file system" in error_msg
+                    ):
+                        extra_advice = """
+                        IMPORTANT: For this file operation error, follow these steps:
+                        1. First use the bash tool to run 'pwd' to determine the current directory
+                        2. Use a relative path based on the current directory (e.g., "./filename.py")
+                        3. Or try a temporary directory path like '/tmp/filename.py'
+                        4. NEVER guess absolute paths again - use information from the environment
+                        """
+
+                    error_hint = {
+                        "role": "system",
+                        "content": f"CRITICAL: The {tool_name} action FAILED with error: {error_msg}. Arguments used: {tool_args}\n\n"
+                        + "You MUST acknowledge this error to the user, explain what went wrong in simple terms, and IMMEDIATELY try a different approach. "
+                        + "DO NOT act as if the action succeeded!\n\n"
+                        + "Chain tools together creatively to solve the problem - for example, use bash to get current directory before writing files.\n\n"
+                        + extra_advice,
+                    }
+                    self.messages.append(error_hint)
+                    self._update_token_count()  # Update token count after adding message
+
+                # Add the assistant message with the tool call
+                self.messages.append(response)
+                self._update_token_count()  # Update token count after adding message
+
+                # Add the tool result as a function response
+                self.messages.append(
+                    {
+                        "role": "function",
+                        "name": tool_name,
+                        "content": json.dumps(result),
+                    }
+                )
+                self._update_token_count()  # Update token count after adding message
+
+                return result
+        else:
+            # Just a normal message, add it to the history
+            self.messages.append(response)
+            self._update_token_count()  # Update token count after adding message
+            return None
+
+    def handle_clear_command(self):
+        """Handle the /clear command to clear conversation history."""
+        # Keep only the system message if it exists
+        if self.messages and self.messages[0].get("role") == "system":
+            system_message = self.messages[0]
+            self.messages = [system_message]
+            # Update token count with just the system message
+            self.estimated_tokens = self._estimate_tokens(system_message)
+        else:
+            self.messages = []
+            # Reset token count
+            self.estimated_tokens = 0
+
+        # Reset last compaction time
+        self.last_compaction_time = 0
+
+        self.console.print(
+            "[bold yellow]🧹 Conversation history cleared. Context has been reset.[/]",
+            highlight=False,
+        )
+
+    def handle_compact_command(self, auto_triggered=False):
+        """Handle the /compact command to summarize and then clear context.
+
+        Args:
+            auto_triggered: Whether this was triggered automatically by the token limit (defaults to False)
+        """
+        if len(self.messages) <= 1:  # Only system message or empty
+            self.console.print(
+                "[bold yellow]⚠️ No conversation to compact.[/]", highlight=False
+            )
+            return
+
+        # Create a summary request
+        summary_request = {
+            "role": "user",
+            "content": "Please summarize our conversation so far in a concise way that preserves the most important context. Focus on decisions made, code discussed, and important facts established.",
+        }
+
+        # Add the summary request to messages
+        self.messages.append(summary_request)
+
+        # Get the summary from the LLM
+        if not auto_triggered:
+            self.console.print(
+                "[bold]⏳ Creating conversation summary...[/]", highlight=False
+            )
+
+        # Start thinking animation for summary generation
+        animation_thread = self.start_thinking_animation()
+
+        try:
+            summary_response = self.model_client.send(
+                self.messages, functions=self.get_function_definitions()
+            )
+        finally:
+            # Stop thinking animation
+            self.stop_thinking_animation()
+            animation_thread.join(timeout=1.0)
+
+            # Clear the spinner line
+            self.console.print("\r" + " " * 50 + "\r", end="", highlight=False)
+
+        # Keep only the system message if it exists, then add summary
+        if self.messages and self.messages[0].get("role") == "system":
+            system_message = self.messages[0]
+            self.messages = [system_message]
+        else:
+            self.messages = []
+
+        # Reset token count since we've cleared messages
+        self.estimated_tokens = 0
+
+        # Add a special "summary" message that combines the request and response
+        self.messages.append(
+            {
+                "role": "system",
+                "content": f"Previous conversation summary: {summary_response.get('content', 'No summary available.')}",
+            }
+        )
+        # Update token count after adding summary
+        self._update_token_count()
+
+        # Update the last compaction time to prevent too frequent auto-compactions
+        self.last_compaction_time = time.time()
+
+        # Get token statistics
+        old_tokens = self.estimated_tokens
+        old_percentage = (
+            int(old_tokens / self.model_client.context_size * 100)
+            if self.model_client.context_size > 0
+            else 0
+        )
+        new_tokens = (
+            self._estimate_tokens(self.messages[0])
+            + self._estimate_tokens(self.messages[1])
+            if len(self.messages) > 1
+            else self._estimate_tokens(self.messages[0])
+        )
+        new_percentage = (
+            int(new_tokens / self.model_client.context_size * 100)
+            if self.model_client.context_size > 0
+            else 0
+        )
+        tokens_saved = old_tokens - new_tokens
+
+        # Print the summary, with different messaging if auto-triggered
+        from rich.console import Group
+        from rich.text import Text
+
+        summary_text = Text()
+        if auto_triggered:
+            summary_text.append(
+                "🗜️ Conversation automatically compacted", style="bold green"
+            )
+        else:
+            summary_text.append("🗜️ Conversation manually compacted", style="bold green")
+
+        # Create token statistics
+        stats_text = Text()
+        stats_text.append("\n\nToken Usage:\n", style="bold cyan")
+        stats_text.append(f"• Before: ", style="dim")
+        stats_text.append(
+            f"{old_tokens} tokens ({old_percentage}% of context)\n", style="yellow"
+        )
+        stats_text.append(f"• After: ", style="dim")
+        stats_text.append(
+            f"{new_tokens} tokens ({new_percentage}% of context)\n", style="green"
+        )
+        stats_text.append(f"• Saved: ", style="dim")
+        stats_text.append(
+            f"{tokens_saved} tokens ({int(tokens_saved/old_tokens*100)}% reduction)\n",
+            style="bold green",
+        )
+
+        md = Markdown(summary_response.get("content", "No summary available."))
+
+        self.console.print(
+            Panel(
+                Group(summary_text, stats_text, md),
+                title="[bold green]Conversation Summary[/]",
+                border_style="green",
+                expand=False,
+            )
+        )
+
+    def handle_config_command(self, args=None):
+        """Handle the /config command to view or modify configuration."""
+        config = load_config()
+
+        if not args:
+            # Show current configuration
+            table = Table(title="Current Configuration")
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+
+            for key, value in config.items():
+                table.add_row(key, str(value))
+
+            self.console.print(table)
+            self.console.print(
+                "\nUsage: /config [setting] [value] to change a setting\n"
+                "Example: /config temperature 0.8",
+                highlight=False,
+            )
+            return
+
+        # Parse arguments for setting configuration
+        parts = args.split(maxsplit=1)
+        if len(parts) != 2:
+            self.console.print(
+                "[bold red]❌ Error: Invalid format. Use /config [setting] [value][/]",
+                highlight=False,
+            )
+            return
+
+        setting, value = parts
+
+        # Validate setting
+        if setting not in config:
+            self.console.print(
+                f"[bold red]❌ Error: Unknown setting '{setting}'[/]", highlight=False
+            )
+            return
+
+        # Convert value to appropriate type
+        try:
+            if isinstance(config[setting], bool):
+                value = value.lower() in ("true", "yes", "y", "1")
+            elif isinstance(config[setting], int):
+                value = int(value)
+            elif isinstance(config[setting], float):
+                value = float(value)
+            # strings don't need conversion
+        except ValueError:
+            self.console.print(
+                f"[bold red]❌ Error: Invalid value for {setting}[/]", highlight=False
+            )
+            return
+
+        # Update config
+        config[setting] = value
+        save_config(config)
+
+        # Update model client settings if applicable
+        if setting in (
+            "model",
+            "endpoint",
+            "temperature",
+            "context_size",
+            "max_tokens",
+        ):
+            if setting == "model":
+                self.model_client.model_name = value
+            elif setting == "endpoint":
+                self.model_client.endpoint = value
+                self.model_client.api_url = f"{value}/api/chat"
+            elif setting == "temperature":
+                self.model_client.temperature = value
+            elif setting == "context_size":
+                self.model_client.context_size = value
+            elif setting == "max_tokens":
+                self.model_client.max_tokens = value
+
+        # Update trust manager settings if applicable
+        if setting == "auto_confirm":
+            self.trust_manager.set_auto_confirm(value)
+
+        self.console.print(
+            f"[bold green]✓ Configuration updated: {setting} = {value}[/]",
+            highlight=False,
+        )
+
+    def handle_debug_command(self):
+        """Handle the /debug command to display diagnostic information."""
+        # Create a system diagnostics panel
+        import os
+        import platform
+
+        # Get system info
+        import sys
+
+        from rich.console import Group
+        from rich.layout import Layout
+        from rich.panel import Panel
+        from rich.progress import BarColumn, Progress, TextColumn
+        from rich.table import Table
+
+        # Create layout for better visual organization
+        layout = Layout()
+        layout.split_column(Layout(name="upper"), Layout(name="lower"))
+        layout["upper"].split_row(
+            Layout(name="system", ratio=1), Layout(name="agent", ratio=2)
+        )
+
+        # Create system info table
+        system_table = Table(
+            title="System Information", show_header=True, header_style="bold cyan"
+        )
+        system_table.add_column("Property", style="cyan")
+        system_table.add_column("Value", style="green")
+
+        system_table.add_row("Working Directory", os.getcwd())
+        system_table.add_row("LLM Model", self.model_client.model_name)
+        system_table.add_row("Endpoint", self.model_client.endpoint)
+
+    def handle_dump_command(self, args=None):
+        """Handle the /dump command to save conversation history to a file.
+
+        Args:
+            args: Optional filename to save to (defaults to "conversation_dump.json")
+        """
+        filename = args if args else "conversation_dump.json"
+
+        try:
+            # Save in both JSON and human-readable formats
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(self.messages, f, indent=2, ensure_ascii=False)
+
+            # Also create a human-readable text version
+            text_filename = (
+                filename.rsplit(".", 1)[0] + ".txt"
+                if filename.endswith(".json")
+                else filename + ".txt"
+            )
+            with open(text_filename, "w", encoding="utf-8") as f:
+                for message in self.messages:
+                    role = message.get("role", "unknown")
+                    content = message.get("content", "")
+                    f.write(f"--- {role.upper()} ---\n{content}\n\n")
+
+            self.console.print(
+                f"[bold green]✓ Conversation saved to {filename} (JSON) and {text_filename} (text)[/]",
+                highlight=False,
+            )
+        except Exception as e:
+            self.console.print(
+                f"[bold red]❌ Error: Could not save conversation history: {str(e)}[/]",
+                highlight=False,
+            )
+
+        # Get system info
+        import sys
+
+        from rich.console import Group
+        from rich.layout import Layout
+        from rich.panel import Panel
+        from rich.progress import BarColumn, Progress, TextColumn
+        from rich.table import Table
+
+        # Create layout for better visual organization
+        layout = Layout()
+        layout.split_column(Layout(name="upper"), Layout(name="lower"))
+        layout["upper"].split_row(
+            Layout(name="system", ratio=1), Layout(name="agent", ratio=2)
+        )
+
+        # Create system info table
+        system_table = Table(
+            title="System Information", show_header=True, header_style="bold cyan"
+        )
+        system_table.add_column("Property", style="cyan")
+        system_table.add_column("Value", style="green")
+
+        system_table.add_row("Working Directory", os.getcwd())
+        system_table.add_row("LLM Model", self.model_client.model_name)
+        system_table.add_row("Endpoint", self.model_client.endpoint)
+
+        # Create agent state table
+        state_table = Table(
+            title="Agent State", show_header=True, header_style="bold cyan"
+        )
+        state_table.add_column("Property", style="cyan")
+        state_table.add_column("Value", style="green")
+
+        # Get token usage percentage
+        context_size = self.model_client.context_size
+        token_percentage = (
+            int(self.estimated_tokens / context_size * 100) if context_size > 0 else 0
+        )
+        compaction_threshold = int(self.token_buffer_ratio * 100)
+
+        # Determine color based on usage
+        if token_percentage > 80:
+            token_color = "red"
+        elif token_percentage > 50:
+            token_color = "yellow"
+        else:
+            token_color = "green"
+
+        # Add token metrics to the table
+        state_table.add_row("Messages in Context", str(len(self.messages)))
+        state_table.add_row(
+            "Estimated Tokens",
+            f"{self.estimated_tokens} / {context_size}",
+        )
+
+        # Create a visual progress bar for context usage
+        progress = Progress(
+            TextColumn("[bold cyan]Context Usage:[/]"),
+            BarColumn(bar_width=40, style=token_color, complete_style=token_color),
+            TextColumn(f"[{token_color}]{token_percentage}%[/]"),
+            expand=True,
+        )
+        progress.add_task("", total=100, completed=token_percentage)
+
+        # Add rows with time information and settings
+        state_table.add_row("Auto-Compaction Threshold", f"{compaction_threshold}%")
+
+        # Determine if compaction is needed and show time since last compaction
+        time_since_compaction = int(time.time() - self.last_compaction_time)
+        compact_eligible = self._should_compact_conversation()
+        compact_status = f"Yes - Approaching threshold" if compact_eligible else "No"
+        compact_time = (
+            f"{time_since_compaction}s ago"
+            if time_since_compaction < 3600
+            else f"{time_since_compaction // 3600}h {(time_since_compaction % 3600) // 60}m ago"
+        )
+
+        state_table.add_row(
+            "Auto-Compact Eligible", f"{compact_status} (Last: {compact_time})"
+        )
+
+        # Add other agent state info
+        state_table.add_row("Available Tools", str(len(self.tools)))
+        state_table.add_row(
+            "Verbose Mode", "✅ Enabled" if self.verbose else "❌ Disabled"
+        )
+        state_table.add_row(
+            "Auto-confirm",
+            "✅ Enabled" if self.trust_manager.auto_confirm else "❌ Disabled",
+        )
+
+        # Create tools table
+        tools_table = Table(
+            title="Available Tools", show_header=True, header_style="bold cyan"
+        )
+        tools_table.add_column("Tool", style="cyan")
+        tools_table.add_column("Requires Confirmation", style="yellow")
+
+        for name, tool in self.tools.items():
+            tools_table.add_row(
+                name, "✅ Yes" if tool.requires_confirmation else "❌ No"
+            )
+
+        # Assign components to layout
+        layout["system"].update(Panel(system_table, border_style="cyan", expand=True))
+        layout["agent"].update(
+            Panel(
+                Group(state_table, progress),
+                title="[bold cyan]Agent State[/]",
+                border_style="cyan",
+                expand=True,
+            )
+        )
+        layout["lower"].update(
+            Panel(
+                Group(
+                    tools_table,
+                    "If you encounter errors, copy the full error message and run the /debug command again for detailed information and recommendations.",
+                ),
+                title="[bold yellow]Tools & Troubleshooting[/]",
+                border_style="yellow",
+                expand=True,
+            )
+        )
+
+        # Print the diagnostics layout
+        self.console.print(layout)
+
+    def handle_help_command(self):
+        """Handle the /help command to display available commands."""
+        # Create a panel to hold all help information
+        from rich.columns import Columns
+        from rich.panel import Panel
+
+        # Core commands table
+        help_table = Table(
+            title="Core Commands", show_header=True, header_style="bold cyan", box=None
+        )
+        help_table.add_column("Command", style="cyan")
+        help_table.add_column("Description", style="green")
+
+        help_table.add_row("/clear", "Clear conversation history and free up context")
+        help_table.add_row(
+            "/compact",
+            "Summarize conversation and reset context while preserving key information",
+        )
+        help_table.add_row("/config", "View current configuration")
+        help_table.add_row(
+            "/config [setting] [value]", "Change a configuration setting"
+        )
+        help_table.add_row("/help", "Show this help message")
+        help_table.add_row("/debug", "Show system diagnostics and token usage")
+        help_table.add_row("/dump", "Save conversation history to JSON and text files")
+        help_table.add_row(
+            "/dump [filename]", "Save conversation to specified filename"
+        )
+        help_table.add_row("/exit or /quit", "Exit the application")
+
+        # File navigation commands table
+        file_table = Table(
+            title="File Navigation",
+            show_header=True,
+            header_style="bold cyan",
+            box=None,
+        )
+        file_table.add_column("Command", style="cyan")
+        file_table.add_column("Description", style="green")
+
+        file_table.add_row("/ls", "List files in the current directory")
+        file_table.add_row("/ls [path]", "List files in the specified directory")
+        file_table.add_row("/ls [pattern]", "List files matching pattern (e.g., *.py)")
+        file_table.add_row(
+            "/ls [path] [pattern]", "List files in path matching pattern"
+        )
+        file_table.add_row("ls", "Direct command to list files in current directory")
+        file_table.add_row("list", "Alternative direct command to list files")
+        file_table.add_row("dir", "Alternative direct command to list files")
+
+        # System information
+        context_threshold = int(self.token_buffer_ratio * 100)
+        system_info = Text()
+        system_info.append("\n📊 System Information\n", style="bold cyan")
+        system_info.append(f"• Auto-compaction threshold: ", style="dim")
+        system_info.append(f"{context_threshold}% context usage\n", style="green")
+
+        # Current context usage
+        if self.estimated_tokens > 0 and self.model_client.context_size > 0:
+            token_percentage = int(
+                self.estimated_tokens / self.model_client.context_size * 100
+            )
+            if token_percentage > 80:
+                color = "red"
+            elif token_percentage > 50:
+                color = "yellow"
+            else:
+                color = "green"
+            system_info.append(f"• Current context usage: ", style="dim")
+            system_info.append(
+                f"{token_percentage}% ({self.estimated_tokens}/{self.model_client.context_size} tokens)\n",
+                style=color,
+            )
+
+        system_info.append(f"• Model: ", style="dim")
+        system_info.append(f"{self.model_client.model_name}\n", style="green")
+
+        # Available tools section
+        tools_info = Text()
+        tools_info.append("\n🔧 Available Tools\n", style="bold cyan")
+
+        # Group tools by confirmation requirement
+        confirmation_tools = []
+        non_confirmation_tools = []
+
+        for name, tool in self.tools.items():
+            if tool.requires_confirmation:
+                confirmation_tools.append((name, tool.description))
+            else:
+                non_confirmation_tools.append((name, tool.description))
+
+        # Show non-confirmation tools first
+        for name, description in non_confirmation_tools:
+            tools_info.append(f"• {name}: ", style="cyan")
+            tools_info.append(f"{description}\n", style="green")
+
+        # Then show confirmation tools with a warning marker
+        if confirmation_tools:
+            tools_info.append("\n⚠️ Tools requiring confirmation:\n", style="yellow")
+            for name, description in confirmation_tools:
+                tools_info.append(f"• {name}: ", style="yellow")
+                tools_info.append(f"{description}\n", style="green")
+
+        # Combine all content into a panel with columns for compact display
+        columns = Columns([help_table, file_table])
+        self.console.print(
+            Panel(
+                Columns([columns, Text.from_markup("\n") + system_info + tools_info]),
+                title="[bold]Code Ally Help[/]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+
+    def run_conversation(self):
+        """Run the main conversation loop."""
+        # Import readline for history support
+        try:
+            import readline
+
+            history_enabled = True
+
+            # Set up history file
+            import os
+
+            history_file = os.path.expanduser("~/.code_ally_history")
+
+            # Load history if it exists
+            try:
+                readline.read_history_file(history_file)
+                # Limit history size to 1000 items
+                readline.set_history_length(1000)
+            except FileNotFoundError:
+                pass
+
+            # Set to save history on exit
+            import atexit
+
+            atexit.register(readline.write_history_file, history_file)
+
+            # Define command completion function for tab completion
+            def complete_command(text, state):
+                # Available commands to auto-complete
+                commands = [
+                    "/help",
+                    "/clear",
+                    "/compact",
+                    "/config",
+                    "/ls",
+                    "/exit",
+                    "/quit",
+                    "/debug",
+                    "/dump",
+                    *[f"{name}" for name in self.tools.keys()],
+                ]
+                # Match commands that start with the current text
+                matches = [cmd for cmd in commands if cmd.startswith(text)]
+                try:
+                    return matches[state]
+                except IndexError:
+                    return None
+
+            # Set the completer function
+            readline.set_completer(complete_command)
+
+            # Enable tab completion
+            readline.parse_and_bind("tab: complete")
+
+            logger.info("Command history and tab completion enabled using readline")
+        except (ImportError, ModuleNotFoundError):
+            history_enabled = False
+            logger.warning("Readline module not available, command history disabled")
+
+        # Create a welcome panel with app information
+        from rich.columns import Columns
+        from rich.panel import Panel
+        from rich.text import Text
+
+        # Main welcome message
+        welcome_text = Text("Welcome to Code Ally!", style="bold green")
+        welcome_text.append("\n\n")
+        welcome_text.append("Your LLM-powered pair programming assistant")
+        welcome_text.append("\n\n")
+        welcome_text.append("Type ", style="dim")
+        welcome_text.append("/help", style="cyan")
+        welcome_text.append(" for available commands or ", style="dim")
+        welcome_text.append("/exit", style="cyan")
+        welcome_text.append(" to quit", style="dim")
+
+        # System information
+        system_info = Text()
+        system_info.append("System Info:\n", style="bold yellow")
+        system_info.append(f"• Model: ", style="dim")
+        system_info.append(f"{self.model_client.model_name}\n", style="green")
+
+        # Context monitoring info
+        if self.model_client.context_size > 0:
+            system_info.append(f"• Context size: ", style="dim")
+            system_info.append(
+                f"{self.model_client.context_size} tokens\n", style="green"
+            )
+            threshold = int(self.token_buffer_ratio * 100)
+            system_info.append(f"• Auto-compaction: ", style="dim")
+            system_info.append(f"at {threshold}% context usage\n", style="green")
+
+        # Navigation hints
+        usage_hints = Text()
+        usage_hints.append("Usage Hints:\n", style="bold yellow")
+        if history_enabled:
+            usage_hints.append("• History: ", style="dim")
+            usage_hints.append("↑/↓ arrows for previous commands\n", style="green")
+            usage_hints.append("• Completion: ", style="dim")
+            usage_hints.append("TAB to auto-complete commands\n", style="green")
+        usage_hints.append("• Commands: ", style="dim")
+        usage_hints.append("/ls, /clear, /config, /debug\n", style="cyan")
+
+        # Available tools section (shortened for welcome screen)
+        tools_count = len(self.tools)
+        confirm_tools = sum(
+            1 for tool in self.tools.values() if tool.requires_confirmation
+        )
+        usage_hints.append(f"• Tools: ", style="dim")
+        usage_hints.append(
+            f"{tools_count} available ({confirm_tools} require confirmation)\n",
+            style="green",
+        )
+
+        # Create columns for welcome panel
+        welcome_panel = Panel(
+            Columns([welcome_text, Columns([system_info, usage_hints])]),
+            title="[bold blue]🤖 Code Ally[/]",
+            border_style="blue",
+            expand=False,
+        )
+
+        self.console.print(welcome_panel, highlight=False)
+        self.console.print("", highlight=False)
+
+        while True:
+            # Get user input and show context usage
+            try:
+                # Calculate and display context usage as a progress indicator
+                if self.messages and self.model_client.context_size > 0:
+                    used_percentage = int(
+                        self.estimated_tokens / self.model_client.context_size * 100
+                    )
+                    remaining_percentage = 100 - used_percentage
+
+                    # Create a visual progress bar
+                    bar_width = 15  # Characters for the progress bar
+                    filled_chars = int(bar_width * used_percentage / 100)
+                    empty_chars = bar_width - filled_chars
+
+                    # Color code based on usage
+                    if used_percentage > 80:
+                        color = "red"
+                    elif used_percentage > 50:
+                        color = "yellow"
+                    else:
+                        color = "green"
+
+                    # Build the progress bar
+                    progress_bar = f"[{color}]{'█' * filled_chars}[/][dim]{'░' * empty_chars}[/] [{color}]{used_percentage}%[/]"
+                    context_status = f"Context: {progress_bar} "
+
+                    self.console.print(
+                        f"[dim]{context_status}[/]", end="", highlight=False
+                    )
+
+                # Print input prompt on the same line with an emoji
+                prompt_text = "[bold blue]You 🧑‍💻[/] "
+                self.console.print(prompt_text, end="", highlight=False)
+
+                # When using readline, ensure we display the prompt correctly
+                if history_enabled:
+                    # Original implementation used sys.ps1 which doesn't work reliably
+                    # Instead, we'll manually handle displaying the prompt when using history
+
+                    # Create a custom input function that shows the prompt properly with history
+                    def my_input():
+                        # Custom readline display function to show the prompt
+                        old_hook = readline.set_pre_input_hook(
+                            lambda: self.console.print(
+                                prompt_text, end="", highlight=False
+                            )
+                        )
+                        try:
+                            return input().strip()
+                        finally:
+                            # Restore the original hook
+                            readline.set_pre_input_hook(old_hook)
+
+                    user_input = my_input()
+                else:
+                    user_input = input().strip()
+
+                # Add to history if enabled and input is not empty
+                if history_enabled and user_input and not user_input.isspace():
+                    # Store only the actual input in history (not the prompt text)
+                    readline.add_history(user_input)
+
+                # Clear the recent tool calls at the start of each user turn
+                # This ensures we only prevent redundancy within a single conversation turn
+                self.recent_tool_calls = []
+            except EOFError:
+                break
+
+            # Exit command now requires slash like other commands
+            # Handled in the slash commands section below
+
+            # Check for direct ls requests - common case that should be handled directly without LLM
+            # Parse direct listing commands with potential file pattern support:
+            # "ls", "list", "dir", "ls *.py", etc.
+            ls_pattern_regex = re.match(
+                r"^(ls|list|dir)(?:\s+(.+))?$", user_input.lower()
+            )
+            normal_ls_request = user_input.lower() in [
+                "what files are in this directory",
+                "what files are in the current directory",
+            ]
+
+            if ls_pattern_regex or normal_ls_request:
+                self.console.print("[bold green]Assistant:[/] ", highlight=False)
+                tool = self.tools.get("ls")
+                if tool:
+                    # Get path and pattern if they exist
+                    path = "."
+                    file_pattern = None
+
+                    if ls_pattern_regex:
+                        args = ls_pattern_regex.group(2)
+                        if args:
+                            if "*" in args or "?" in args:
+                                # It's a pattern
+                                file_pattern = args
+                            else:
+                                # It's a path
+                                path = args
+
+                    # For LS, check if the tool requires confirmation (it shouldn't)
+                    if tool.requires_confirmation:
+                        # Get confirmation before executing
+                        confirmation_msg = f"List contents of directory: {path}"
+                        if file_pattern:
+                            confirmation_msg += f" (filtered by: {file_pattern})"
+                        self.console.print(
+                            f"[bold yellow]⚠️ Confirmation needed:[/] {confirmation_msg}?",
+                            highlight=False,
+                        )
+                        if not self.trust_manager.prompt_for_permission(
+                            tool.name, path
+                        ):
+                            self.console.print(
+                                "[bold red]❌ Permission denied[/]", highlight=False
+                            )
+                            continue
+
+                    # Execute the tool and display ACTUAL directory contents
+                    result = tool.execute(path=path, file_pattern=file_pattern)
+                    if result.get("success", False) and "display" in result:
+                        self.console.print(result["display"], highlight=False)
+                    else:
+                        self.console.print(
+                            f"Error listing directory: {result.get('error', 'Unknown error')}",
+                            highlight=False,
+                        )
+
+                    # Construct a proper conversation history that forces the LLM to acknowledge the output
+                    # First add the user request
+                    self.messages.append({"role": "user", "content": user_input})
+
+                    # Now add an explicit user acknowledgment of seeing the output
+                    # This makes the LLM think the output was already shown in the conversation
+                    files_str = ", ".join(result.get("files", [])) or "No files"
+                    dirs_str = (
+                        ", ".join(result.get("directories", [])) or "No directories"
+                    )
+
+                    # Create a conversation-style message from the assistant that will be shown to the model
+                    display_content = result.get(
+                        "display",
+                        f"The current directory contains:\nFiles: {files_str}\nDirectories: {dirs_str}",
+                    )
+
+                    # Add the assistant response as if it was already sent to the user
+                    self.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": f"Here are the contents of the current directory:\n\n```\n{display_content}\n```",
+                        }
+                    )
+
+                    # Add multiple strong system messages warning against asking for output again or calling ls again
+                    self.messages.append(
+                        {
+                            "role": "system",
+                            "content": "IMPORTANT: The directory listing output has already been displayed to the user above. DO NOT ask the user what files they see or ask for the output. The user can clearly see the file listing in your previous message. If the user asks another question, address that instead.",
+                        }
+                    )
+
+                    # Add another message specifically about not calling ls again
+                    self.messages.append(
+                        {
+                            "role": "system",
+                            "content": "IMPORTANT: DO NOT call the ls tool again in this conversation turn. You have already listed the directory contents and the output is shown above. Calling ls again would be redundant and unnecessary.",
+                        }
+                    )
+
+                    self.console.print()  # Add newline for readability
+                    continue
+
+            # Check for slash commands
+            if user_input.startswith("/"):
+                command_match = re.match(r"^/(\w+)(?:\s+(.+))?$", user_input)
+                if command_match:
+                    command, args = command_match.groups()
+
+                    if command == "clear":
+                        self.handle_clear_command()
+                        continue
+                    elif command == "compact":
+                        self.handle_compact_command()
+                        continue
+                    elif command == "config":
+                        self.handle_config_command(args)
+                        continue
+                    elif command == "help":
+                        self.handle_help_command()
+                        continue
+                    elif command == "debug":
+                        self.handle_debug_command()
+                        continue
+                    elif command == "dump":
+                        self.handle_dump_command(args)
+                        continue
+                    elif command == "exit" or command == "quit":
+                        self.console.print("\nGoodbye!", highlight=False)
+                        return
+                    elif command == "ls" or command == "dir":
+                        # Direct listing command with support for file pattern
+                        # Syntax: /ls path pattern  or  /ls pattern
+                        if args:
+                            # Check if args has space - it might have both path and pattern
+                            parts = args.split(maxsplit=1)
+                            if len(parts) > 1:
+                                path = parts[0]
+                                file_pattern = parts[1]
+                            else:
+                                # Could be just path or just pattern (like "*.py")
+                                if "*" in parts[0] or "?" in parts[0]:
+                                    # It's a pattern
+                                    path = "."
+                                    file_pattern = parts[0]
+                                else:
+                                    # It's a path
+                                    path = parts[0]
+                                    file_pattern = None
+                        else:
+                            path = "."
+                            file_pattern = None
+
+                        tool = self.tools.get("ls")
+                        if tool:
+                            # Get confirmation if needed BEFORE executing the tool
+                            if tool.requires_confirmation:
+                                confirmation_msg = f"List contents of directory: {path}"
+                                if file_pattern:
+                                    confirmation_msg += (
+                                        f" (filtered by: {file_pattern})"
+                                    )
+                                self.console.print(
+                                    f"[bold yellow]⚠️ Confirmation needed:[/] {confirmation_msg}?",
+                                    highlight=False,
+                                )
+                                if not self.trust_manager.prompt_for_permission(
+                                    tool.name, path
+                                ):
+                                    self.console.print(
+                                        "[bold red]❌ Permission denied[/]",
+                                        highlight=False,
+                                    )
+                                    continue
+
+                            result = tool.execute(path=path, file_pattern=file_pattern)
+                            if result.get("success", False) and "display" in result:
+                                self.console.print(result["display"], highlight=False)
+                            else:
+                                self.console.print(
+                                    f"Error listing directory: {result.get('error', 'Unknown error')}",
+                                    highlight=False,
+                                )
+
+                            # Construct a proper conversation history that forces the LLM to acknowledge the output
+                            # First add the user request
+                            full_command = f"/ls {path}" if args else "/ls"
+                            self.messages.append(
+                                {"role": "user", "content": full_command}
+                            )
+
+                            # Get the files and directories for display
+                            files_str = ", ".join(result.get("files", [])) or "No files"
+                            dirs_str = (
+                                ", ".join(result.get("directories", []))
+                                or "No directories"
+                            )
+
+                            # Create a conversation-style message from the assistant that will be shown to the model
+                            display_content = result.get(
+                                "display",
+                                f"The directory {os.path.abspath(path)} contains:\nFiles: {files_str}\nDirectories: {dirs_str}",
+                            )
+
+                            # Add the assistant response as if it was already sent to the user
+                            self.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": f"Here are the contents of the directory {os.path.abspath(path)}:\n\n```\n{display_content}\n```",
+                                }
+                            )
+
+                            # Add multiple strong system messages warning against asking for output again or calling ls again
+                            self.messages.append(
+                                {
+                                    "role": "system",
+                                    "content": "IMPORTANT: The directory listing output has already been displayed to the user above. DO NOT ask the user what files they see or ask for the output. The user can clearly see the file listing in your previous message. If the user asks another question, address that instead.",
+                                }
+                            )
+
+                            # Add another message specifically about not calling ls again
+                            self.messages.append(
+                                {
+                                    "role": "system",
+                                    "content": "IMPORTANT: DO NOT call the ls tool again in this conversation turn. You have already listed the directory contents and the output is shown above. Calling ls again would be redundant and unnecessary.",
+                                }
+                            )
+                        else:
+                            self.console.print(
+                                "[bold red]❌ LS tool not available[/]", highlight=False
+                            )
+                        continue
+                    else:
+                        self.console.print(
+                            f"[bold red]❌ Unknown command: /{command}[/] Type /help for available commands.",
+                            highlight=False,
+                        )
+                        continue
+
+            # Add user message to history and update token count
+            self.messages.append({"role": "user", "content": user_input})
+            self._update_token_count()
+
+            # Check if we need to compact before sending to model
+            if self._should_compact_conversation():
+                context_percentage_used = int(
+                    self.estimated_tokens / self.model_client.context_size * 100
+                )
+                self.console.print(
+                    f"[bold yellow]🗜️ Auto-compacting conversation ({self.estimated_tokens} tokens, {context_percentage_used}% of context)[/]",
+                    highlight=False,
+                )
+                # Perform compaction
+                self.handle_compact_command(auto_triggered=True)
+
+                # Display the new context usage after compaction
+                new_percentage_used = int(
+                    self.estimated_tokens / self.model_client.context_size * 100
+                )
+                new_percentage_remaining = 100 - new_percentage_used
+                self.console.print(
+                    f"[bold green]✓ Context reduced from {context_percentage_used}% to {new_percentage_used}% used ({new_percentage_remaining}% remaining)[/]",
+                    highlight=False,
+                )
+
+            # Print on a fresh line with no indentation
+            print("\r", end="")
+            self.console.print("[bold green]Ally 🤖[/] ", end="", highlight=False)
+
+            # Start thinking animation
+            animation_thread = self.start_thinking_animation()
+
+            try:
+                # Get LLM response, with reasoning included in verbose mode
+                response = self.model_client.send(
+                    self.messages,
+                    functions=self.get_function_definitions(),
+                    include_reasoning=self.verbose,
+                )
+
+                # Detect hallucinations and enforce tool usage where appropriate
+                if "content" in response and response["content"]:
+                    # Define a function to detect and correct hallucinations
+                    def detect_hallucination():
+                        """Detect hallucinations and return (is_hallucination, command, tool_name, correction_message)"""
+                        content = response["content"].lower()
+
+                        # Track which tools were recently used
+                        used_tools = [call[0] for call in self.recent_tool_calls]
+
+                        # CASE 1: Safe responses that should never be flagged
+                        # -------------------------------------------------------
+                        # Skip hallucination detection for certain cases to avoid false positives
+
+                        # 1. File counting with tools - the model used appropriate tools
+                        if any(tool in ["glob", "grep", "ls"] for tool in used_tools):
+                            # Check for responses that just report file counts
+                            if re.search(
+                                r"there (?:are|is) \d+ (?:files?|python files?|directories?|py files?)",
+                                content,
+                            ):
+                                return False, None, None, None
+
+                        # CASE 2: Bash command hallucinations
+                        # -------------------------------------------------------
+                        # Combined pattern to detect bash command output
+                        bash_patterns = [
+                            # Command with explicit output section
+                            r"```(?:bash|shell|sh)?\s*([^`]+?)\s*```\s*(?:Output|Result):\s*```[^`]*([^`]+)",
+                            # Command followed by output without explicit marking
+                            r"```(?:bash|shell|sh)?\s*([^`]+?)\s*```\s*\n\s*([^\n`]+)",
+                            # Common case where model presents command output with no code block
+                            r"\$ ([^\n]+)\n([^\n]+)",
+                            # Command with informal presentation
+                            r"(?:let me run|let's run|running|executing|I'll use).*?[`\"']([^`\"'\n]+)[`\"'].*?(?:result|output|gives).*?[:\n]([^\n]+)",
+                        ]
+
+                        # Check all patterns
+                        for pattern in bash_patterns:
+                            matches = re.findall(
+                                pattern, response["content"], re.DOTALL | re.IGNORECASE
+                            )
+                            if matches and "bash" not in used_tools:
+                                command = matches[0][0].strip()
+                                return (
+                                    True,
+                                    command,
+                                    "bash",
+                                    f"""
+                                CRITICAL ERROR: You're showing command output without using the bash tool.
+                                
+                                CORRECTION REQUIRED:
+                                1. Use the bash tool to execute: `{command}`
+                                2. Never fabricate command output
+                                3. Only show actual results from tool execution
+                                
+                                Use this format to run the command:
+                                {{
+                                  "name": "bash",
+                                  "arguments": {{ "command": "{command}" }}
+                                }}
+                                """,
+                                )
+
+                        # CASE 3: User explicitly requested bash
+                        # -------------------------------------------------------
+                        bash_requested = any(
+                            re.search(pattern, user_input.lower())
+                            for pattern in [
+                                r"use\s+bash",
+                                r"run\s+.*command",
+                                r"execute\s+.*in\s+terminal",
+                                r"using\s+(?:the\s+)?(?:terminal|command\s+line|shell)",
+                            ]
+                        )
+
+                        if (
+                            bash_requested
+                            and "bash" not in used_tools
+                            and not any(
+                                tool in ["glob", "grep", "ls"] for tool in used_tools
+                            )
+                        ):
+                            # User asked for bash but model didn't use it
+                            return (
+                                True,
+                                "ls -la",
+                                "bash",
+                                """
+                            CRITICAL ERROR: The user requested using bash but you didn't use the bash tool.
+                            
+                            CORRECTION REQUIRED:
+                            1. Use the bash tool to execute the requested command
+                            2. If unsure what command to run, use `ls -la` to show directory contents
+                            
+                            Use this format:
+                            {
+                              "name": "bash",
+                              "arguments": { "command": "ls -la" }
+                            }
+                            """,
+                            )
+
+                        # No hallucination detected
+                        return False, None, None, None
+
+                    # Run the detection
+                    is_hallucination, command, tool_name, correction_message = (
+                        detect_hallucination()
+                    )
+
+                    # Handle hallucination if detected
+                    if is_hallucination:
+                        # Show the correction notice
+                        self.console.print(
+                            Panel(
+                                Markdown(response["content"]),
+                                title="[bold red]⚠️ Detecting errors in assistant response. Forcing correction...[/]",
+                                border_style="red",
+                            ),
+                            highlight=False,
+                        )
+
+                        # Add system message with correction
+                        self.messages.append(
+                            {"role": "system", "content": correction_message}
+                        )
+
+                        # Get corrected response
+                        response = self.model_client.send(
+                            self.messages,
+                            functions=self.get_function_definitions(),
+                            include_reasoning=self.verbose,
+                        )
+            finally:
+                # Stop thinking animation
+                self.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+
+                # Clear the spinner line and ensure cursor is at beginning of line
+                self.console.print("\033[2K\r", end="", highlight=False)
+
+            # Process the response
+            tool_result = self.process_llm_response(response)
+
+            # Check for multi-part questions that were only partially answered
+            # General patterns that indicate a multi-part question
+            multi_part_patterns = [
+                r"(?:and|also|then|next|additionally|moreover|furthermore|plus)\s+(?:what|how|which|who|where|when|why|is|are|can|could|would|tell|show|list|find)",  # "X and what/how Y"
+                r"\?.*(?:and|also|then|next|additionally|as well as|plus|too)\s+",  # "X? And Y"
+                r"(?:first|1st|firstly).*(?:second|2nd|secondly)",  # "First X, second Y"
+                r"\d+\)\s*.*\s+\d+\)\s*",  # "1) X 2) Y"
+                r"(?:both|all|each)\s+(?:of|these)",  # "Both of these questions"
+                r"two\s+(?:questions|parts|tasks)",  # "I have two questions"
+                r"(?:part|question)\s+(?:one|1|a|i).*(?:part|question)\s+(?:two|2|b|ii)",  # "Question one... question two"
+            ]
+
+            # Tool-specific patterns to detect multiple questions of the same type
+            # Math-specific patterns
+            math_patterns = [
+                r"(\d+\s*[\+\-\*\/\^]\s*\d+\s*)\?.*(\d+\s*[\+\-\*\/\^]\s*\d+)",  # "5+5? 10*2"
+                r"what\'s\s+(\d+\s*[\+\-\*\/\^]\s*\d+)[^\?]*(?:and|or|also)\s+(\d+\s*[\+\-\*\/\^]\s*\d+)",  # "what's 5+5 and 10*2"
+            ]
+
+            # File/code patterns
+            file_patterns = [
+                r"(?:create|make|write)\s+(?:a|the)\s+(?:file|script|program)[^?]*(?:and|also|then)\s+(?:create|make|write|run)",  # "Create a file... and then create/run..."
+                r"(?:create|make|write)\s+(?:two|2|both)\s+(?:files|scripts|programs)",  # "Create two files"
+            ]
+
+            # Check if we've processed at least one tool call but the input suggests a multi-part question
+            is_multi_part_question = False
+            question_type = "general"
+
+            # Check for math multi-part questions
+            if (
+                tool_result
+                and self.recent_tool_calls
+                and len(self.recent_tool_calls) > 0
+                and "math" in str(self.recent_tool_calls[0])
+                and (
+                    any(
+                        re.search(pattern, user_input.lower())
+                        for pattern in math_patterns
+                    )
+                    or any(
+                        re.search(pattern, user_input.lower())
+                        for pattern in multi_part_patterns
+                    )
+                )
+            ):
+                is_multi_part_question = True
+                question_type = "math"
+
+            # Check for file operation multi-part questions
+            elif (
+                tool_result
+                and self.recent_tool_calls
+                and any(
+                    x in str(self.recent_tool_calls)
+                    for x in ["file_write", "file_edit"]
+                )
+                and (
+                    any(
+                        re.search(pattern, user_input.lower())
+                        for pattern in file_patterns
+                    )
+                    or any(
+                        re.search(pattern, user_input.lower())
+                        for pattern in multi_part_patterns
+                    )
+                )
+            ):
+                is_multi_part_question = True
+                question_type = "file_operation"
+
+            # Check for general multi-part questions
+            elif (
+                tool_result
+                and self.recent_tool_calls
+                and len(self.recent_tool_calls) > 0
+                and any(
+                    re.search(pattern, user_input.lower())
+                    for pattern in multi_part_patterns
+                )
+            ):
+                is_multi_part_question = True
+                question_type = "general"
+
+            if is_multi_part_question:
+                # Display the detection message
+                self.console.print(
+                    f"[bold yellow]⚠️ Detected multi-part {question_type} question. Processing remaining parts...[/]",
+                    highlight=False,
+                )
+
+                # Always show the incomplete response to the user for transparency
+                if "content" in response and response["content"]:
+                    # Create a formatted version of the incomplete response
+                    clean_content = re.sub(r"\n{3,}", "\n\n", response["content"])
+                    clean_content = re.sub(
+                        r"^ +", "", clean_content, flags=re.MULTILINE
+                    )
+
+                    # Show the problematic response with clear labeling
+                    self.console.print(
+                        Panel(
+                            Markdown(clean_content),
+                            title="[bold yellow]Incomplete Response[/]",
+                            border_style="yellow",
+                        ),
+                        highlight=False,
+                    )
+
+                # Create a tailored message based on the type of question
+                if question_type == "math":
+                    reminder_content = """
+                    CRITICAL ERROR: You did not fully answer the user's multi-part math question!
+                    
+                    The user asked MULTIPLE math questions, but you only answered part of them.
+                    
+                    You MUST:
+                    1. Recognize when a prompt contains multiple questions
+                    2. Use the math tool for each calculation in sequence
+                    3. Present all results clearly and separately: "First calculation: X, Second calculation: Y"
+                    
+                    DO NOT default to bash or other tools for the remaining parts. Continue with math tool.
+                    """
+                elif question_type == "file_operation":
+                    reminder_content = """
+                    CRITICAL ERROR: You did not fully complete the user's multi-part file task!
+                    
+                    The user asked for MULTIPLE file operations, but you only completed part of them.
+                    
+                    You MUST:
+                    1. Recognize when a prompt contains multiple file operations
+                    2. Complete EACH operation in sequence (create each file, edit each file, etc.)
+                    3. Present all results clearly: "I've created file X. I've also created file Y."
+                    
+                    PROCEED IMMEDIATELY with the remaining file operations.
+                    """
+                else:
+                    reminder_content = """
+                    CRITICAL ERROR: You did not fully answer the user's multi-part question!
+                    
+                    The user asked MULTIPLE questions or made MULTIPLE requests, but you only addressed part of them.
+                    
+                    You MUST:
+                    1. Recognize when a prompt contains multiple questions or requests
+                    2. Address EACH part in sequence using appropriate tools for each
+                    3. Present all results clearly and separately: "1) First answer... 2) Second answer..."
+                    4. Never consider a multi-part task complete until ALL parts are addressed
+                    
+                    PROCEED IMMEDIATELY with answering the remaining parts of the question.
+                    """
+
+                # Add a system message to force processing all parts
+                multi_part_reminder = {
+                    "role": "system",
+                    "content": reminder_content,
+                }
+                self.messages.append(multi_part_reminder)
+
+                # Get a new response with the correction
+                try:
+                    # Get corrected LLM response
+                    self.console.print(
+                        "[bold cyan]Attempting to address all parts of the question...[/]",
+                        highlight=False,
+                    )
+
+                    # Start thinking animation for the corrected response
+                    animation_thread = self.start_thinking_animation()
+
+                    try:
+                        corrected_response = self.model_client.send(
+                            self.messages, functions=self.get_function_definitions()
+                        )
+                    finally:
+                        # Stop thinking animation
+                        self.stop_thinking_animation()
+                        animation_thread.join(timeout=1.0)
+
+                        # Clear the spinner line
+                        self.console.print(
+                            "\r" + " " * 50 + "\r", end="", highlight=False
+                        )
+
+                    # Process the corrected response
+                    tool_result = self.process_llm_response(corrected_response)
+
+                    # Let the user know we've addressed the multi-part question
+                    self.console.print(
+                        "[bold green]✓ All parts of the question have been addressed[/]",
+                        highlight=False,
+                    )
+                except Exception as e:
+                    # Create a more sophisticated error analysis
+                    error_str = str(e)
+                    error_type = type(e).__name__
+
+                    # Create an error diagnosis panel
+                    error_panel = Panel(
+                        f"[bold red]{error_type}:[/] {error_str}",
+                        title="[bold red]Error Details[/]",
+                        border_style="red",
+                    )
+
+                    # Show a step-by-step analysis of the error
+                    self.console.print(
+                        "[bold red]⚠️ Error while processing multi-part question[/]",
+                        highlight=False,
+                    )
+                    self.console.print(error_panel, highlight=False)
+
+                    # Try to provide more context and potential solutions
+                    if "cannot access local variable" in error_str:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be a variable scope issue.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - The error indicates a local variable is being used before it's defined",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Ensure all variables are properly defined",
+                            highlight=False,
+                        )
+                    elif "IndexError" in error_type:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be an index out of range error.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - The system tried to access an element that doesn't exist",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Check array bounds before accessing elements",
+                            highlight=False,
+                        )
+                    else:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be an error in processing multi-part questions.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Try breaking your question into separate requests",
+                            highlight=False,
+                        )
+
+            # Check if this was a partial completion (e.g., only ran pwd without doing anything else)
+            # Only true for tasks involving script/file creation and when user message indicates creation intention
+            creation_words = ["create", "write", "script", "generate", "make", "build"]
+            if (
+                not is_multi_part_question  # Skip this check if we already handled multi-part questions
+                and tool_result
+                and any(word in user_input.lower() for word in creation_words)
+                and len(self.recent_tool_calls) <= 1
+                and any(  # Only one tool call so far
+                    "bash" in str(call) and "pwd" in str(call)
+                    for call in self.recent_tool_calls
+                )
+                and not any(
+                    "file_write" in str(call) or "file_edit" in str(call)
+                    for call in self.recent_tool_calls
+                )
+            ):
+                # Add a system message to force task completion
+                completion_reminder = {
+                    "role": "system",
+                    "content": """
+                    CRITICAL ERROR: You are NOT DONE with this task! You've only run the pwd command but haven't actually created any files yet.
+                    
+                    You MUST COMPLETE THE ENTIRE TASK that was requested. The user asked you to create a file or script, but you've only determined the current directory.
+                    
+                    NEXT STEPS YOU MUST PERFORM:
+                    1. You've already determined the directory with pwd (good)
+                    2. NOW YOU MUST use file_write to create the requested file or script in that directory
+                    3. After creating the file, verify it was created and run it if needed
+                    
+                    DO NOT just stop after showing the current directory! Complete the full task by creating the requested file/script.
+                    """,
+                }
+                self.messages.append(completion_reminder)
+
+                # Show the problematic response to the user for transparency
+                if "content" in response and response["content"]:
+                    # Create a formatted version of the incomplete response
+                    clean_content = re.sub(r"\n{3,}", "\n\n", response["content"])
+                    clean_content = re.sub(
+                        r"^ +", "", clean_content, flags=re.MULTILINE
+                    )
+
+                    # Show the problematic response with clear labeling
+                    self.console.print(
+                        "[bold red]⚠️ DETECTED INCOMPLETE TASK - Ally only ran pwd and stopped.[/]",
+                        highlight=False,
+                    )
+                    self.console.print(
+                        Panel(
+                            Markdown(clean_content),
+                            title="[bold yellow]Incomplete Response[/]",
+                            border_style="yellow",
+                        ),
+                        highlight=False,
+                    )
+                    self.console.print(
+                        "[bold cyan]Attempting to complete the full task...[/]",
+                        highlight=False,
+                    )
+
+                # Get a new response with the correction
+                try:
+                    # Start thinking animation for the corrected response
+                    animation_thread = self.start_thinking_animation()
+
+                    try:
+                        # Get corrected LLM response
+                        corrected_response = self.model_client.send(
+                            self.messages, functions=self.get_function_definitions()
+                        )
+                    finally:
+                        # Stop thinking animation
+                        self.stop_thinking_animation()
+                        animation_thread.join(timeout=1.0)
+
+                        # Clear the spinner line
+                        self.console.print(
+                            "\r" + " " * 50 + "\r", end="", highlight=False
+                        )
+
+                    # Process the corrected response
+                    tool_result = self.process_llm_response(corrected_response)
+
+                    # Let the user know we've completed the task
+                    self.console.print(
+                        "[bold green]✓ Task has been fully completed[/]",
+                        highlight=False,
+                    )
+                except Exception as e:
+                    # Create a more sophisticated error analysis
+                    error_str = str(e)
+                    error_type = type(e).__name__
+
+                    # Create an error diagnosis panel
+                    error_panel = Panel(
+                        f"[bold red]{error_type}:[/] {error_str}",
+                        title="[bold red]Error Details[/]",
+                        border_style="red",
+                    )
+
+                    # Show a step-by-step analysis of the error
+                    self.console.print(
+                        "[bold red]⚠️ Error while trying to force task completion[/]",
+                        highlight=False,
+                    )
+                    self.console.print(error_panel, highlight=False)
+
+                    # Try to provide more context and potential solutions
+                    if "cannot access local variable" in error_str:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be a variable scope issue.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - The error indicates a local variable is being used before it's defined",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - This typically happens with imports inside functions or conditionals",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Move imports to the top of the file",
+                            highlight=False,
+                        )
+                    elif (
+                        "ImportError" in error_type
+                        or "ModuleNotFoundError" in error_type
+                    ):
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be a missing module.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - The error indicates a Python module couldn't be imported",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Install the missing package or check import paths",
+                            highlight=False,
+                        )
+                    elif "AttributeError" in error_type:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be an object attribute issue.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "  - The error indicates an object doesn't have the requested attribute/method",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Check object type and available methods",
+                            highlight=False,
+                        )
+                    else:
+                        self.console.print(
+                            "[bold cyan]Analysis:[/] This appears to be an unexpected error.",
+                            highlight=False,
+                        )
+                        self.console.print(
+                            "[bold green]Recommendation:[/] Check the traceback for more details",
+                            highlight=False,
+                        )
+
+            # Handle multi-step tool calls
+            while tool_result:
+                # Start thinking animation for next response
+                animation_thread = self.start_thinking_animation()
+
+                try:
+                    # Get another LLM response after the tool execution
+                    response = self.model_client.send(
+                        self.messages,
+                        functions=self.get_function_definitions(),
+                        include_reasoning=self.verbose,
+                    )
+                finally:
+                    # Stop thinking animation
+                    self.stop_thinking_animation()
+                    animation_thread.join(timeout=1.0)
+
+                    # Clear the spinner line and ensure cursor is at beginning of line
+                    self.console.print("\033[2K\r", end="", highlight=False)
+
+                # Process this response, which might be another tool call or the final answer
+                tool_result = self.process_llm_response(response)
+
+            # Print the assistant's message with markdown formatting
+            if "content" in response and response["content"]:
+                # Clean up the content - replace any tripple newlines with double newlines
+                original_content = response["content"]
+                clean_content = re.sub(r"\n{3,}", "\n\n", original_content)
+                # Fix indentation issues by ensuring consistent spaces
+                clean_content = re.sub(r"^ +", "", clean_content, flags=re.MULTILINE)
+
+                # In verbose mode, extract thinking and final response
+                if self.verbose and "THINKING:" in clean_content:
+                    # Split the content at the end of thinking
+                    thinking_parts = re.split(
+                        r"(?i)THINKING:(.+?)(?=\n\n|$)", clean_content, 1, re.DOTALL
+                    )
+                    if len(thinking_parts) > 1:
+                        # Extract the thinking part and the remaining content
+                        thinking = thinking_parts[1].strip()
+                        remaining = (
+                            thinking_parts[2].strip() if len(thinking_parts) > 2 else ""
+                        )
+
+                        # Display the thinking in a panel
+                        # Panel and Markdown already imported at the top of the file
+
+                        self.console.print(
+                            Panel(
+                                Markdown(thinking),
+                                title="[bold cyan]Model Reasoning Process[/]",
+                                border_style="cyan",
+                            ),
+                            highlight=False,
+                        )
+
+                        # Replace the content with just the answer part
+                        clean_content = remaining
+
+                # Check for issues in the response content
+                issues_detected = False
+                error_messages = []
+
+                # Skip error checking for simple greetings/acknowledgments
+                user_messages = [
+                    msg["content"] for msg in self.messages if msg.get("role") == "user"
+                ]
+                last_user_msg = user_messages[-1].lower() if user_messages else ""
+
+                # List of simple greetings that should not trigger error detection
+                simple_greetings = [
+                    "hi",
+                    "hello",
+                    "hey",
+                    "greetings",
+                    "howdy",
+                    "hola",
+                    "good morning",
+                    "good afternoon",
+                    "good evening",
+                ]
+                is_simple_greeting = (
+                    any(greeting in last_user_msg for greeting in simple_greetings)
+                    and len(last_user_msg.split()) <= 5
+                )
+
+                # If this is a simple greeting exchange, skip the error detection
+                # Check if this is NOT a simple greeting (to avoid false positives)
+                is_error_check_needed = not (
+                    is_simple_greeting
+                    and len(clean_content) < 200
+                    and not any(
+                        "file" in str(call) or "bash" in str(call)
+                        for call in self.recent_tool_calls
+                    )
+                )
+
+                if is_error_check_needed:
+                    # Only run error detection if this is NOT a simple greeting exchange
+
+                    # Check for incomplete task execution
+                    if (
+                        "directory" in clean_content.lower()
+                        or "current path" in clean_content.lower()
+                        or "working directory" in clean_content.lower()
+                    ) and not any(
+                        "file_write" in str(call) or "file_edit" in str(call)
+                        for call in self.recent_tool_calls
+                    ):
+                        # This might be an incomplete task execution where it only ran pwd
+                        creating_task_words = ["create", "write", "script", "generate"]
+                        user_messages = [
+                            msg["content"]
+                            for msg in self.messages
+                            if msg.get("role") == "user"
+                        ]
+                        if user_messages and any(
+                            word in user_messages[-1].lower()
+                            for word in creating_task_words
+                        ):
+                            issues_detected = True
+                            error_messages.append(
+                                "CRITICAL ERROR: You're stopping halfway through the task! You've only checked the directory but haven't created the requested file/script. You MUST CONTINUE and complete the entire task by creating the file."
+                            )
+
+                    # Check if the model created a file but didn't run it for scripting tasks
+                    if (
+                        any(
+                            "file_write" in str(call) or "file_edit" in str(call)
+                            for call in self.recent_tool_calls
+                        )
+                        and (
+                            any(
+                                (
+                                    ".py" in str(call[1])
+                                    or "script" in str(call[1])
+                                    or "hello" in str(call[1])
+                                )
+                                for call in self.recent_tool_calls
+                                if len(call) > 1
+                            )
+                        )
+                        and not any(
+                            "bash" in str(call)
+                            and (
+                                "python" in str(call)
+                                or "chmod" in str(call)
+                                or "./" in str(call)
+                            )
+                            for call in self.recent_tool_calls
+                        )
+                    ):
+                        # This might be a case where it created a script but didn't run it
+                        issues_detected = True
+
+                        # Get the script filename if possible
+                        script_name = None
+                        for call in self.recent_tool_calls:
+                            if (
+                                "file_write" in str(call) or "file_edit" in str(call)
+                            ) and len(call) > 1:
+                                args = call[1]
+                                if isinstance(args, tuple):
+                                    for arg in args:
+                                        if (
+                                            isinstance(arg, tuple)
+                                            and len(arg) > 1
+                                            and arg[0] == "file_path"
+                                            and ".py" in str(arg[1])
+                                        ):
+                                            script_name = arg[1]
+                                            break
+
+                        if script_name:
+                            error_messages.append(
+                                f"CRITICAL ERROR: You created the Python script '{script_name}' but did not run it! After creating a script, you MUST run it with the bash tool. You MUST now use: bash command='python {script_name}' to show the ACTUAL output."
+                            )
+                        else:
+                            error_messages.append(
+                                "CRITICAL ERROR: You created a Python script but did not run it! After creating a script, you MUST run it with the bash tool to show the output. Use the bash tool to run the script with: bash command='python script_name.py'"
+                            )
+
+                    # 1. Check if claiming to run command without bash or after permission denied
+                    bash_permission_denied = any(
+                        "bash" in str(call) and "_permission_denied" in str(call)
+                        for call in self.recent_tool_calls
+                    )
+                    if bash_permission_denied and any(
+                        phrase in clean_content.lower()
+                        for phrase in ["run", "ran", "execute", "output", "result"]
+                    ):
+                        issues_detected = True
+                        error_messages.append(
+                            "CRITICAL ERROR: You claimed to have run a command even though the user DENIED PERMISSION! You MUST acknowledge that you could NOT perform the action because permission was denied. NEVER pretend you performed an action when permission was explicitly denied."
+                        )
+                    elif any(
+                        phrase in clean_content.lower()
+                        for phrase in [
+                            "run the script",
+                            "ran the script",
+                            "execute",
+                            "python ",
+                            "$ ",
+                            "```bash",
+                            "```sh",
+                            "output",
+                            "result of running",
+                            "i ran",
+                            "next, i ran",
+                            "when prompted",
+                            "the output",
+                            "created a python script",
+                            "the script prints",
+                            "command=",  # Detect when showing command syntax but not using bash tool
+                            "bash command=",  # Detect when showing command syntax but not using bash tool
+                            'echo "output',  # Detect attempts to echo output without using bash
+                            "$(bash",  # Detect attempts at command substitution which isn't supported
+                            "print(5 + 5)",  # Detect showing script code content that calculates
+                        ]
+                    ) and "bash" not in str(self.recent_tool_calls):
+                        issues_detected = True
+                        error_messages.append(
+                            "CRITICAL ERROR: You claimed to run a command but did NOT actually use the bash tool! You MUST use the bash tool to execute any commands. DO NOT write bash commands in your text response - you need to use the actual bash tool to execute them."
+                        )
+
+                    # 2. Check if making up file names without finding them first
+                    file_pattern = re.compile(
+                        r"(script\.py|app\.py|main\.py|calculate\.py|index\.py|test\.py|example\.py)",
+                        re.IGNORECASE,
+                    )
+                    if file_pattern.search(clean_content) and not any(
+                        "glob" in str(call) or "ls" in str(call)
+                        for call in self.recent_tool_calls
+                    ):
+                        issues_detected = True
+                        error_messages.append(
+                            "ERROR: You mentioned a specific file name without first using glob or ls to find files. You MUST use glob or ls to discover files before referencing them. NEVER make up file names."
+                        )
+
+                    # 3. Check if mentions "Output:" or any output-related phrases without actually having run a command
+                    output_related_phrases = [
+                        "Output:",
+                        "The output is:",
+                        "outputs:",
+                        "displays:",
+                        "prints:",
+                        "running this gives",
+                        "run it and get",
+                        "result is",
+                        "result:",
+                        "you should see",
+                        "will display",
+                        "will output",
+                        "will print",
+                        "running the script shows",
+                        "running this script",
+                        "when run",
+                    ]
+                    if any(
+                        phrase in clean_content for phrase in output_related_phrases
+                    ) and "bash" not in str(self.recent_tool_calls):
+                        issues_detected = True
+                        error_messages.append(
+                            "CRITICAL ERROR: You're showing or describing command output without having run any command with the bash tool. NEVER fabricate command output. You MUST use the bash tool to execute commands and show ONLY the actual output."
+                        )
+
+                # If issues detected, force a correction
+                if issues_detected:
+                    # Add all error messages as separate system messages for emphasis
+                    for error_msg in error_messages:
+                        self.messages.append({"role": "system", "content": error_msg})
+
+                    # Add specific instructions for correction
+                    correction_instructions = """
+CRITICAL CORRECTION REQUIRED: Your previous response had serious issues. You MUST FOLLOW THESE INSTRUCTIONS EXACTLY:
+
+1. DO NOT just write bash commands in your response like "command='python script.py'" or "echo 'output'"
+2. INSTEAD, you MUST actually use the bash TOOL to execute commands
+3. To run a Python script, you MUST use the bash tool, not just write the command
+
+IMMEDIATE ACTIONS REQUIRED:
+1. If you need to run a script, use the bash tool directly:
+   - Use actual tool call: bash command='python script_name.py'
+   - Do NOT just write the command in text - actually execute it
+
+2. NEVER show commands like this in your response:
+   ❌ command="python script.py"
+   ❌ bash command="python script.py"
+   ❌ echo "Output: $(bash command=\"python script.py\")"
+   
+3. INSTEAD, actually USE the bash tool like this:
+   ✅ Use the bash tool with command='python script.py'
+   
+4. In general:
+   - NEVER pretend to run commands
+   - ALWAYS use the actual bash tool to execute commands
+   - ONLY show REAL output from actual tool executions
+"""
+
+                    self.messages.append(
+                        {"role": "system", "content": correction_instructions}
+                    )
+
+                    # Show the problematic response first, so the user sees what was wrong
+                    print("\r", end="")
+                    self.console.print(
+                        "[bold yellow]Original problematic response:[/]",
+                        highlight=False,
+                    )
+                    self.console.print("[bold green]Ally:[/] ", end="", highlight=False)
+                    original_md = Markdown(clean_content)
+                    orig_console = Console(
+                        highlight=False,
+                        width=self.console.width,
+                        file=self.console.file,
+                    )
+                    orig_console.print(original_md)
+
+                    # Force regeneration with the correction
+                    if "ran the script" in clean_content.lower() and "bash" not in str(
+                        self.recent_tool_calls
+                    ):
+                        self.console.print(
+                            "[bold red]⚠️ CRITICAL: Agent claimed to run script without using bash. Forcing proper execution...[/]",
+                            highlight=False,
+                        )
+                    else:
+                        self.console.print(
+                            "[bold yellow]⚠️ Detecting errors in assistant response. Forcing correction...[/]",
+                            highlight=False,
+                        )
+
+                    # Add a special strong instruction to force script execution when needed
+                    if (
+                        any(
+                            "file_write" in str(call) for call in self.recent_tool_calls
+                        )
+                        and any(
+                            (".py" in str(call) or "script" in str(call))
+                            for call in self.recent_tool_calls
+                            if len(call) > 1
+                        )
+                        and not any(
+                            "bash" in str(call) and "python" in str(call)
+                            for call in self.recent_tool_calls
+                        )
+                    ):
+
+                        # Extract the Python script filename
+                        script_filename = None
+                        for call in self.recent_tool_calls:
+                            if "file_write" in str(call) and len(call) > 1:
+                                # Try to extract the Python file path from the arguments
+                                args = call[1]
+                                if isinstance(args, tuple) and any(
+                                    item
+                                    for item in args
+                                    if isinstance(item, tuple)
+                                    and len(item) > 1
+                                    and item[0] == "file_path"
+                                ):
+                                    for arg in args:
+                                        if arg[0] == "file_path" and ".py" in str(
+                                            arg[1]
+                                        ):
+                                            script_filename = arg[1]
+
+                        # If we found a script filename, force execution with a strong imperative message
+                        if script_filename:
+                            forced_execution_msg = {
+                                "role": "system",
+                                "content": f"""CRITICAL INSTRUCTION: You MUST IMMEDIATELY run the Python script '{script_filename}' using the bash tool.
+                                
+DO NOT RESPOND TO THE USER YET. First, execute this exact bash command:
+bash command='python {script_filename}'
+
+ONLY after you've run the script and seen the actual output should you respond to the user.
+YOU MUST CALL THE BASH TOOL FIRST. This is a strict requirement.""",
+                            }
+                            self.messages.append(forced_execution_msg)
+                            self.console.print(
+                                f"[bold red]⚠️ CRITICAL: Found Python script {script_filename} that wasn't run. Forcing execution...[/]",
+                                highlight=False,
+                            )
+
+                    # Get another response with the correction
+                    response = self.model_client.send(
+                        self.messages, functions=self.get_function_definitions()
+                    )
+
+                    # Process any tool calls in the response (particularly bash execution)
+                    tool_result = self.process_llm_response(response)
+
+                    # Handle any additional tool calls from the corrected response
+                    while tool_result:
+                        # Get another response after the tool execution
+                        response = self.model_client.send(
+                            self.messages, functions=self.get_function_definitions()
+                        )
+                        tool_result = self.process_llm_response(response)
+
+                    # Clean the new response
+                    if "content" in response and response["content"]:
+                        clean_content = re.sub(r"\n{3,}", "\n\n", response["content"])
+                        clean_content = re.sub(
+                            r"^ +", "", clean_content, flags=re.MULTILINE
+                        )
+
+                # Add "Ally:" prefix to the response with highlight coloring on fresh line
+                print("\r", end="")
+                self.console.print("[bold green]Ally:[/] ", end="", highlight=False)
+
+                # Create and print markdown with no indentation
+                md = Markdown(clean_content)
+                # Create a new console without margins for this specific print
+                no_margin_console = Console(
+                    highlight=False, width=self.console.width, file=self.console.file
+                )
+                no_margin_console.print(md)
+            else:
+                # Print on a fresh line with no indentation
+                print("\r", end="")
+                self.console.print(
+                    "[bold green]Ally:[/] [italic](no text response)[/]",
+                    highlight=False,
+                )
+
+            # Add a newline for better readability
+            self.console.print()

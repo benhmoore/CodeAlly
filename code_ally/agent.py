@@ -48,6 +48,7 @@ class TokenManager:
         self.chars_per_token = 4.0  # Simple approximation (4 chars per token)
         self.last_compaction_time = 0
         self.min_compaction_interval = 300  # Seconds between auto-compactions
+        self.ui = None  # Will be set by the Agent class
 
     def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
@@ -93,7 +94,19 @@ class TokenManager:
         Args:
             messages: Current message list
         """
+        previous_tokens = self.estimated_tokens
         self.estimated_tokens = self.estimate_tokens(messages)
+        
+        # Log in verbose mode if there's a significant change
+        if self.ui and hasattr(self.ui, 'verbose') and self.ui.verbose:
+            if abs(self.estimated_tokens - previous_tokens) > 100:
+                token_percentage = self.get_token_percentage()
+                change = self.estimated_tokens - previous_tokens
+                change_sign = "+" if change > 0 else ""
+                self.ui.console.print(
+                    f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} ({token_percentage}% of context) "
+                    f"[{change_sign}{change} tokens][/]"
+                )
 
     def should_compact(self) -> bool:
         """Check if the conversation should be compacted.
@@ -321,6 +334,7 @@ class ToolManager:
         """
         self.tools = {tool.name: tool for tool in tools}
         self.trust_manager = trust_manager
+        self.ui = None  # Will be set by the Agent class
 
         # Track recent tool calls to avoid redundancy
         self.recent_tool_calls: List[Tuple[str, Dict[str, Any]]] = []
@@ -469,9 +483,17 @@ class ToolManager:
         """
         # Track execution time
         start_time = time.time()
+        
+        # Verbose logging - start
+        verbose_mode = hasattr(self, 'ui') and getattr(self, 'ui', None) and getattr(self.ui, 'verbose', False)
+        if verbose_mode:
+            args_str = ", ".join(f"{k}={repr(v)}" for k, v in arguments.items())
+            self.ui.console.print(f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]")
 
         # Check if the tool exists
         if tool_name not in self.tools:
+            if verbose_mode:
+                self.ui.console.print(f"[dim red][Verbose] Tool not found: {tool_name}[/]")
             return {
                 "success": False,
                 "error": f"Unknown tool: {tool_name}",
@@ -489,6 +511,9 @@ class ToolManager:
                 )
                 if check_context_msg:
                     error_msg += " Please check your context for the previous result."
+                
+                if verbose_mode:
+                    self.ui.console.print(f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]")
 
                 return {
                     "success": False,
@@ -500,6 +525,9 @@ class ToolManager:
 
         # Check permissions if tool requires confirmation
         if tool.requires_confirmation:
+            if verbose_mode:
+                self.ui.console.print(f"[dim blue][Verbose] Tool {tool_name} requires confirmation[/]")
+                
             # For bash tool, pass arguments.command as the path
             if tool_name == "bash" and "command" in arguments:
                 permission_path = arguments
@@ -513,6 +541,8 @@ class ToolManager:
 
             # Check if the user has given permission
             if not self.trust_manager.prompt_for_permission(tool_name, permission_path):
+                if verbose_mode:
+                    self.ui.console.print(f"[dim red][Verbose] Permission denied for {tool_name}[/]")
                 return {
                     "success": False,
                     "error": f"Permission denied for {tool_name}",
@@ -520,12 +550,24 @@ class ToolManager:
 
         # Execute the tool
         try:
+            if verbose_mode:
+                self.ui.console.print(f"[dim green][Verbose] Executing tool: {tool_name}[/]")
+                
             result = tool.execute(**arguments)
             execution_time = time.time() - start_time
+            
+            if verbose_mode:
+                self.ui.console.print(
+                    f"[dim green][Verbose] Tool {tool_name} executed in {execution_time:.2f}s "
+                    f"(success: {result.get('success', False)})[/]"
+                )
+                
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
             return result
         except Exception as exc:
             logger.exception("Error executing tool %s", tool_name)
+            if verbose_mode:
+                self.ui.console.print(f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]")
             return {
                 "success": False,
                 "error": f"Error executing {tool_name}: {str(exc)}",
@@ -725,6 +767,17 @@ class CommandHandler:
         Returns:
             Compacted message list
         """
+        # Log compaction start in verbose mode
+        if self.verbose:
+            message_count = len(messages)
+            tokens_before = self.token_manager.estimated_tokens
+            percent_used = self.token_manager.get_token_percentage()
+            self.ui.console.print(
+                f"[dim cyan][Verbose] Starting conversation compaction. "
+                f"Current state: {message_count} messages, {tokens_before} tokens "
+                f"({percent_used}% of context)[/]"
+            )
+            
         # Preserve system message
         system_message = None
         for msg in messages:
@@ -734,6 +787,10 @@ class CommandHandler:
 
         # If we have fewer than 4 messages, nothing to compact
         if len(messages) < 4:
+            if self.verbose:
+                self.ui.console.print(
+                    f"[dim yellow][Verbose] Not enough messages to compact (only {len(messages)} messages)[/]"
+                )
             return messages
 
         # Start with the system message if present
@@ -742,9 +799,11 @@ class CommandHandler:
             compacted.append(system_message)
 
         # Keep first user message for context
+        first_user_msg_found = False
         for msg in messages:
-            if msg.get("role") == "user":
+            if msg.get("role") == "user" and not first_user_msg_found:
                 compacted.append(msg)
+                first_user_msg_found = True
                 break
 
         # Add a summary marker
@@ -760,6 +819,21 @@ class CommandHandler:
 
         # Update the last compaction time
         self.token_manager.last_compaction_time = time.time()
+        
+        # Log compaction results in verbose mode
+        if self.verbose:
+            # Calculate the impact
+            messages_removed = len(messages) - len(compacted)
+            self.token_manager.update_token_count(compacted)
+            tokens_after = self.token_manager.estimated_tokens
+            tokens_saved = tokens_before - tokens_after
+            new_percent = self.token_manager.get_token_percentage()
+            
+            self.ui.console.print(
+                f"[dim green][Verbose] Compaction complete. Removed {messages_removed} messages, "
+                f"saved {tokens_saved} tokens. New usage: {tokens_after} tokens "
+                f"({new_percent}% of context)[/]"
+            )
 
         return compacted
 
@@ -845,8 +919,10 @@ class Agent:
         self.ui.set_verbose(verbose)
 
         self.token_manager = TokenManager(model_client.context_size)
+        self.token_manager.ui = self.ui  # Set UI reference in token manager
 
         self.tool_manager = ToolManager(tools, self.trust_manager)
+        self.tool_manager.ui = self.ui  # Set UI reference in tool manager
 
         self.command_handler = CommandHandler(
             self.ui, self.token_manager, self.trust_manager
@@ -941,12 +1017,38 @@ class Agent:
             animation_thread = self.ui.start_thinking_animation(
                 self.token_manager.get_token_percentage()
             )
+            
+            # Verbose logging before follow-up LLM request
+            if self.ui.verbose:
+                functions_count = len(self.tool_manager.get_function_definitions())
+                message_count = len(self.messages)
+                tokens = self.token_manager.estimated_tokens
+                self.ui.console.print(
+                    f"[dim blue][Verbose] Sending follow-up request to LLM with {message_count} messages, "
+                    f"{tokens} tokens, {functions_count} available functions[/]"
+                )
 
             follow_up_response = self.model_client.send(
                 self.messages,
                 functions=self.tool_manager.get_function_definitions(),
                 include_reasoning=self.ui.verbose,
             )
+            
+            # Verbose logging after follow-up LLM response
+            if self.ui.verbose:
+                has_tool_calls = "tool_calls" in follow_up_response and follow_up_response["tool_calls"]
+                tool_names = []
+                if has_tool_calls:
+                    for tool_call in follow_up_response["tool_calls"]:
+                        if "function" in tool_call and "name" in tool_call["function"]:
+                            tool_names.append(tool_call["function"]["name"])
+                
+                response_type = "tool calls" if has_tool_calls else "text response"
+                tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
+                
+                self.ui.console.print(
+                    f"[dim blue][Verbose] Received follow-up {response_type}{tools_info} from LLM[/]"
+                )
 
             self.ui.stop_thinking_animation()
             animation_thread.join(timeout=1.0)
@@ -1048,12 +1150,38 @@ class Agent:
                 self.token_manager.get_token_percentage()
             )
 
+            # Verbose logging before LLM request
+            if self.ui.verbose:
+                functions_count = len(self.tool_manager.get_function_definitions())
+                message_count = len(self.messages)
+                tokens = self.token_manager.estimated_tokens
+                self.ui.console.print(
+                    f"[dim blue][Verbose] Sending request to LLM with {message_count} messages, "
+                    f"{tokens} tokens, {functions_count} available functions[/]"
+                )
+            
             # Get response from LLM
             response = self.model_client.send(
                 self.messages,
                 functions=self.tool_manager.get_function_definitions(),
                 include_reasoning=self.ui.verbose,
             )
+            
+            # Verbose logging after LLM response
+            if self.ui.verbose:
+                has_tool_calls = "tool_calls" in response and response["tool_calls"]
+                tool_names = []
+                if has_tool_calls:
+                    for tool_call in response["tool_calls"]:
+                        if "function" in tool_call and "name" in tool_call["function"]:
+                            tool_names.append(tool_call["function"]["name"])
+                
+                response_type = "tool calls" if has_tool_calls else "text response"
+                tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
+                
+                self.ui.console.print(
+                    f"[dim blue][Verbose] Received {response_type}{tools_info} from LLM[/]"
+                )
 
             # Stop animation
             self.ui.stop_thinking_animation()

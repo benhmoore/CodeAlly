@@ -19,7 +19,7 @@ dev_requires = read_requirements("requirements-dev.txt")
 
 setup(
     name="code-ally",
-    version="0.3.0",
+    version="0.3.1",
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={
@@ -31,17 +31,17 @@ setup(
         ],
     },
     python_requires=">=3.8",
-    author="Code Ally Team",
-    author_email="info@example.com",
+    author="Ben H Moore",
+    author_email="ben@benhmoore.com",
     description="A local LLM-powered pair programming assistant",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/example/code-ally",
+    url="https://github.com/benhmoore/code-ally",
     license="MIT",
     license_files=["LICENSE"],
     project_urls={
-        "Bug Reports": "https://github.com/example/code-ally/issues",
-        "Source": "https://github.com/example/code-ally",
+        "Bug Reports": "https://github.com/benhmoore/code-ally/issues",
+        "Source": "https://github.com/benhmoore/code-ally",
     },
     classifiers=[
         "Development Status :: 3 - Alpha",

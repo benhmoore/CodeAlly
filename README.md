@@ -38,6 +38,19 @@ A local LLM-powered pair programming assistant using function calling capabiliti
 
 ## 🔧 Installation
 
+### From PyPI (Recommended)
+
+```bash
+# Create a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install from PyPI
+pip install code-ally
+
+# Install the required Ollama model
+ollama pull qwen2.5-coder:latest
+```
 
 ### Development Installation
 

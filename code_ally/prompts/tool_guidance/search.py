@@ -1,130 +1,47 @@
-"""Search tools guidance for contextual help."""
+"""Guidance for using search tools (glob, grep)."""
 
 SEARCH_GUIDANCE = """
-ENHANCED SEARCH TOOLS GUIDANCE:
+**SEARCH TOOLS GUIDANCE (glob, grep)**
 
-When searching through code and files, follow these expert techniques:
+**CORE STRATEGY:** Use `glob` to find files by name/pattern, and `grep` to find content within files. Often used together.
 
-1. PATTERN MATCHING STRATEGY:
-   - Start with broad patterns, then refine: first `config.*` then `config.*\\.json`
-   - Use glob patterns for file name searches: `glob pattern="**/*.py"`
-   - Use grep patterns for content searches: `grep pattern="function\\s+getName"`
-   - Combine glob and grep for targeted searches: first find files, then search within them
-   - Search incrementally, using results of one search to inform the next
+**WORKFLOWS & VERIFICATION:**
 
-2. EFFECTIVE GREP PATTERNS:
-   - For function definitions: `function\\s+([a-zA-Z_][a-zA-Z0-9_]*)`
-   - For method definitions: `def\\s+([a-zA-Z_][a-zA-Z0-9_]*)`
-   - For variable assignments: `const\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*=`
-   - For imports/requires: `(import|require).*['\"']([^'\"']+)['\"']`
-   - For class definitions: `class\\s+([a-zA-Z_][a-zA-Z0-9_]*)`
-   - For API routes/endpoints: `(app|router)\\.(get|post|put|delete)\\(['\"']([^'\"']+)['\"']`
+1.  **Finding Files (`glob`):**
+    * Use patterns like `*.py`, `**/*.js` (recursive), `**/test_*.py`.
+    * Use `ignore` for directories like `node_modules`, `__pycache__`, `.git`.
+    * Example: `glob pattern="src/**/*.ts" ignore="**/node_modules/**"`
+    * **Verification:** The results *are* the found paths. Use these paths in subsequent `file_read`, `grep`, or `bash` commands. Don't assume content based on filename alone.
 
-3. GLOB PATTERN TECHNIQUES:
-   - Find all source files: `**/*.{js,ts,py,go,java,rb}`
-   - Find configuration files: `**/{config,configuration}*.*`
-   - Find test files: `**/test{s,}/**/*.{js,py,ts}` or `**/*{_,-}test.{js,py,ts}`
-   - Find documentation: `**/{doc,docs,documentation}/**/*`
-   - Exclude patterns: Use the `ignore` parameter with patterns like `**/node_modules/**`
+2.  **Finding Content (`grep`):**
+    * Provide a clear `pattern` (regex recommended for precision).
+    * Specify `path` (e.g., a specific file from `glob`) or `include`/`exclude` patterns (like `glob`).
+    * Example: `grep pattern="class\\s+UserService" include="**/*.py"`
+    * **Verification:** The results show matching lines and files. **ALWAYS** follow up by using `file_read` on the reported files (or using `grep` with context `-C 5`) to understand the full context of the match. Don't act based only on the single matched line.
 
-4. SEARCH RESULT ANALYSIS:
-   - Scan results for patterns and relationships
-   - Look for interdependencies between files in search results
-   - Identify common patterns or conventions in the codebase
-   - Track search paths to understand directory structure
-   - Note any outliers or exceptions to patterns
+3.  **Combined Search (Common Pattern):**
+    * Step 1: Find relevant files (`glob`).
+        * `glob pattern="**/config*.json"` -> Returns `['path/to/config.json', 'path/to/db_config.json']`
+    * Step 2: Search within those specific files (`grep`).
+        * `grep pattern='"port":\\s*\\d+' path="path/to/config.json"`
+        * `grep pattern='"port":\\s*\\d+' path="path/to/db_config.json"`
+    * Step 3: Analyze context (`file_read`).
+        * `file_read path="path/to/config.json"` (if grep found a match and more context is needed).
 
-5. DISCOVERY WORKFLOWS:
-   - For unknown codebases: First find entry points (main.py, index.js, etc.)
-   - For feature searches: Look for UI components, then trace to handlers/controllers
-   - For bug investigation: Search for error messages, exceptions, or related functions
-   - For refactoring: Find all usages of a function/method/class before modifying it
-   - For dependency analysis: Search for import/require statements
+**EFFECTIVE PATTERNS:**
 
-6. SEARCH OPTIMIZATION:
-   - Limit search scope to relevant directories when possible
-   - Use negative patterns to exclude noise: `grep -v "test" or --exclude=pattern`
-   - For large codebases, search in stages (entry points → core modules → utilities)
-   - When searching for specific code, include distinctive syntax or variable names
-   - For multilingual codebases, search language by language
+* **Grep:**
+    * Function definitions: `def\\s+\\w+\\(`, `function\\s+\\w+\\(`
+    * Class definitions: `class\\s+\\w+`
+    * Imports: `^import\\s+`, `^from\\s+`
+    * API endpoints: `app\\.(get|post|put|delete)\\(['"]`
+    * Specific errors: `"NullPointerException"`, `IndexError`
+* **Glob:**
+    * All Python files recursively: `**/*.py`
+    * Configs in any subdir: `**/*config*.{yaml,json,toml}`
+    * Tests excluding fixtures: `**/test_*.py` ignore `**/fixtures/**`
 
-DETAILED EXAMPLES:
-
-Example 1: Finding and analyzing a specific feature implementation
-```
-# First find potential entry points or main files
-glob pattern="**/main.py" 
-glob pattern="**/app.py"
-glob pattern="**/index.js"
-
-# Look for a feature-specific module or component
-glob pattern="**/*user*.{py,js,ts}"
-
-# Search for class or function definitions related to the feature
-grep pattern="class\\s+User" include="*.py"
-grep pattern="def\\s+create_user" include="*.py"
-grep pattern="function\\s+createUser" include="*.{js,ts}"
-
-# Find API endpoints related to the feature
-grep pattern="@app.route\\(['\"']/users?['\"']" include="*.py"
-grep pattern="router\\.(get|post|put|delete)\\(['\"']/users?['\"']" include="*.{js,ts}"
-
-# Trace usage throughout the codebase
-grep pattern="User\\(" include="*.py"
-grep pattern="createUser\\(" include="*.{js,ts}"
-
-# Find tests related to the feature
-glob pattern="**/test_*user*.py"
-glob pattern="**/*user*test.{js,ts}"
-```
-
-Example 2: Investigating a specific error or bug
-```
-# Search for error messages across the codebase
-grep pattern="Authentication failed" include="*.{py,js,ts,log}"
-
-# Look for exception handling related to the error
-grep pattern="try\\s*:\\s*.*\\s*except\\s+AuthError" include="*.py"
-grep pattern="try\\s*{.*}\\s*catch\\s*\\(AuthError" include="*.{js,ts}"
-
-# Find where the error might be thrown
-grep pattern="raise\\s+AuthError" include="*.py"
-grep pattern="throw\\s+new\\s+AuthError" include="*.{js,ts}"
-
-# Check configuration related to the feature
-glob pattern="**/auth*config*.{json,yaml,py,js,ts}"
-
-# Search for authentication-related functions or methods
-grep pattern="def\\s+authenticate" include="*.py"
-grep pattern="function\\s+authenticate" include="*.{js,ts}"
-```
-
-Example 3: Exploring an unfamiliar codebase
-```
-# Start with project structure to understand organization
-glob pattern="*/"
-
-# Find main entry points
-glob pattern="**/main.{py,js}"
-glob pattern="**/index.{js,ts}"
-glob pattern="**/app.{py,js,ts}"
-
-# Examine package definitions and dependencies
-glob pattern="**/package.json"
-glob pattern="**/requirements.txt"
-glob pattern="**/pyproject.toml"
-
-# Identify core modules or components
-grep pattern="import " include="**/main.py"
-grep pattern="import " include="**/index.js"
-grep pattern="from " include="**/app.py"
-
-# Find configuration and environment settings
-glob pattern="**/{config,conf,settings,env}*.{json,yaml,py,js,env}"
-
-# Look for documentation
-glob pattern="**/{README,CONTRIBUTING,ARCHITECTURE}*"
-```
-
-Use these techniques to efficiently search through codebases of any size and complexity.
+**ANALYSIS:**
+* Use search results to understand project structure, locate definitions, find error sources, or identify areas for refactoring.
+* Always verify findings by examining the actual file content in context.
 """

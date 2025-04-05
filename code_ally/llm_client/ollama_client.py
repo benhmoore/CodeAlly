@@ -225,7 +225,7 @@ class OllamaClient(ModelClient):
             logger.debug(f"Sending request to Ollama: {self.api_url}")
 
             # Send the request
-            response = requests.post(self.api_url, json=payload, timeout=60)
+            response = requests.post(self.api_url, json=payload, timeout=240)
             response.raise_for_status()
             result = response.json()
 

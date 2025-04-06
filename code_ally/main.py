@@ -213,6 +213,12 @@ def parse_args() -> argparse.Namespace:
         default=config.get("auto_dump", True),
         help="Disable automatic conversation dump when exiting",
     )
+    security_group.add_argument(
+        "--contextual-help",
+        action=argparse.BooleanOptionalAction,
+        default=config.get("contextual_help", True),
+        help="Enable or disable contextual tool help prompts",
+    )
 
     # Debug and diagnostics
     debug_group = parser.add_argument_group("Debug and Diagnostics")
@@ -225,6 +231,11 @@ def parse_args() -> argparse.Namespace:
         "--verbose",
         action="store_true",
         help="Enable verbose mode with detailed logging",
+    )
+    debug_group.add_argument(
+        "--debug-tool-calls",
+        action="store_true",
+        help="Print raw tool calls for debugging",
     )
 
     return parser.parse_args()
@@ -266,6 +277,7 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
                 "auto_confirm": args.yes_to_all,
                 "check_context_msg": args.check_context_msg,
                 "auto_dump": args.auto_dump,
+                "contextual_help": args.contextual_help,
             }
         )
         save_config(new_config)
@@ -315,7 +327,17 @@ def main() -> None:
                 f"[green]✓ Ollama is running and model '{args.model}' is available[/]"
             )
 
-    # Create the LLM client
+    # Determine client type based on model name
+    client_type = None
+    if "qwen" in args.model.lower():
+        # For Qwen models, detect if we're using Ollama
+        if args.endpoint and "ollama" in args.endpoint.lower():
+            client_type = "ollama"
+        else:
+            # Default for Qwen models is to use Qwen-Agent style formatting
+            client_type = "qwen_agent"
+
+    # Create the LLM client with appropriate type
     model_client = OllamaClient(
         endpoint=args.endpoint,
         model_name=args.model,
@@ -333,12 +355,18 @@ def main() -> None:
     # Create the agent
     agent = Agent(
         model_client=model_client,
+        client_type=client_type,
         tools=tools,
         system_prompt=system_prompt,
         verbose=args.verbose,
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
+        contextual_help_enabled=args.contextual_help,
     )
+
+    # Set debug options
+    if args.debug_tool_calls:
+        logging.getLogger("code_ally.agent").setLevel(logging.DEBUG)
 
     # Set auto-confirm if specified
     if args.yes_to_all:

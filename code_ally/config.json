@@ -1,15 +1,18 @@
 {
   "model": "qwen2.5-coder:14b",
   "endpoint": "http://localhost:11434",
-  "context_size": 20000,
+  "context_size": 18000,
   "temperature": 0.7,
   "max_tokens": 5000,
   "bash_timeout": 30,
   "auto_confirm": false,
   "check_context_msg": true,
+  "parallel_tools": true,
+  "qwen_template": "qwen2.5_function_calling",
   "dump_dir": "ally",
-  "auto_dump": true,
+  "auto_dump": false,
   "theme": "default",
   "compact_threshold": 95,
-  "show_token_usage": true
+  "show_token_usage": true,
+  "contextual_help": false
 }

@@ -12,8 +12,6 @@ from .bash import BashTool
 from .edit import FileEditTool
 from .glob import GlobTool
 from .grep import GrepTool
-from .ls import LSTool
-from .math_tool import MathTool
 from .read import FileReadTool
 from .registry import ToolRegistry, register_tool
 from .write import FileWriteTool
@@ -31,8 +29,6 @@ __all__ = [
     "FileEditTool",
     "GlobTool",
     "GrepTool",
-    "LSTool",
-    "MathTool",
 ]
 
 # Create registry instance to ensure all tools are registered

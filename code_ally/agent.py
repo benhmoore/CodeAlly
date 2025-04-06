@@ -583,6 +583,7 @@ class ToolManager:
         arguments: Dict[str, Any],
         check_context_msg: bool = True,
         client_type: str = None,
+        batch_id: str = None,
     ) -> Dict[str, Any]:
         """Execute a tool with the given arguments after checking trust.
 
@@ -591,6 +592,7 @@ class ToolManager:
             arguments: The arguments to pass to the tool
             check_context_msg: Whether to add context check message for redundant calls
             client_type: The client type to use for formatting the result
+            batch_id: The batch ID for parallel tool calls
 
         Returns:
             The result of the tool execution
@@ -666,7 +668,11 @@ class ToolManager:
                         break
 
             # Check if the user has given permission
-            if not self.trust_manager.prompt_for_permission(tool_name, permission_path):
+            if not self.trust_manager.is_trusted(
+                tool_name, permission_path, batch_id
+            ) and not self.trust_manager.prompt_for_permission(
+                tool_name, permission_path
+            ):
                 if verbose_mode:
                     self.ui.console.print(
                         f"[dim red][Verbose] Permission denied for {tool_name}[/]"
@@ -1367,7 +1373,7 @@ class Agent:
                 logger.exception(f"Error normalizing tool call: {e}")
                 self.ui.print_error(f"Error normalizing tool call: {str(e)}")
 
-        # Check if any tools require permission
+        # Prepare operations that require permission
         protected_tools = []
         for _, tool_name, arguments in normalized_calls:
             if (
@@ -1402,6 +1408,9 @@ class Agent:
                 else:
                     permission_text += f"{i}. {tool_name} operation\n"
 
+            # Generate a batch ID for parallel tool calls
+            batch_id = f"parallel-{int(time.time())}"
+
             # Ask for a single permission
             if not self.trust_manager.prompt_for_parallel_operations(permission_text):
                 self.ui.print_warning("Permission denied for parallel operations")
@@ -1419,6 +1428,7 @@ class Agent:
                     arguments,
                     self.check_context_msg,
                     self.client_type,
+                    batch_id,
                 ): (call_id, tool_name)
                 for call_id, tool_name, arguments in normalized_calls
             }

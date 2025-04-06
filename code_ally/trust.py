@@ -12,7 +12,7 @@ import re
 import textwrap
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, List, Optional, Pattern, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Pattern, Set, Tuple, Union
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ class ToolPermission:
     tool_name: str
     scope: PermissionScope
     path: Optional[str] = None  # Relevant for DIRECTORY and FILE scopes
-    expires_at: Optional[float] = None  # Unix timestamp for expiration
+    operation_id: Optional[str] = None  # Unique identifier for batch operations
 
 
 def is_command_allowed(command: str) -> bool:
@@ -164,6 +164,9 @@ class TrustManager:
         # Auto-confirm flag (dangerous, but useful for scripting)
         self.auto_confirm = False
 
+        # Track approved batch operations
+        self.approved_operations: Dict[str, Set[str]] = {}
+
         logger.debug("TrustManager initialized")
 
     def set_auto_confirm(self, value: bool) -> None:
@@ -176,12 +179,18 @@ class TrustManager:
         self.auto_confirm = value
         logger.info(f"Auto-confirm changed from {previous} to {value}")
 
-    def is_trusted(self, tool_name: str, path: Optional[str] = None) -> bool:
+    def is_trusted(
+        self,
+        tool_name: str,
+        path: Optional[str] = None,
+        operation_id: Optional[str] = None,
+    ) -> bool:
         """Check if a tool is trusted for the given path.
 
         Args:
             tool_name: The name of the tool
             path: The path being accessed (if applicable)
+            operation_id: The unique identifier for batch operations
 
         Returns:
             Whether the tool is trusted for the path
@@ -225,8 +234,31 @@ class TrustManager:
                 logger.debug(f"Found parent directory match: {parent_path}")
                 return True
 
+        # Check if the operation is approved
+        if operation_id and operation_id in self.approved_operations:
+            tool_path_key = self._get_tool_path_key(tool_name, path)
+            if tool_path_key in self.approved_operations[operation_id]:
+                logger.debug(
+                    f"Operation {operation_id} is approved for {tool_name} at {path}"
+                )
+                return True
+
         logger.debug(f"No trust found for {tool_name} at path {path}")
         return False
+
+    def _get_tool_path_key(self, tool_name: str, path: Optional[Any] = None) -> str:
+        """Generate a unique key for a tool and path combination.
+
+        Args:
+            tool_name: The name of the tool
+            path: The path being accessed (if applicable)
+
+        Returns:
+            A unique key representing the tool and path combination
+        """
+        if path is None:
+            return tool_name
+        return f"{tool_name}:{os.path.abspath(path)}"
 
     def trust_tool(self, tool_name: str, path: Optional[str] = None) -> None:
         """Mark a tool as trusted for the given path.
@@ -413,10 +445,13 @@ class TrustManager:
             )
             return True
 
-    def prompt_for_parallel_operations(self, operations_text: str) -> bool:
+    def prompt_for_parallel_operations(
+        self, operations: List[Tuple[str, Any]], operations_text: str
+    ) -> bool:
         """Prompt the user for permission to perform multiple operations at once.
 
         Args:
+            operations: List of tuples containing tool names and paths
             operations_text: Description of all operations that need permission
 
         Returns:
@@ -424,7 +459,7 @@ class TrustManager:
         """
         # If auto-confirm is enabled, skip the prompt
         if self.auto_confirm:
-            logger.info(f"Auto-confirming multiple operations")
+            logger.info(f"Auto-confirming {len(operations)} parallel operations")
             return True
 
         # Create a visually distinct panel for the permission prompt
@@ -449,16 +484,26 @@ class TrustManager:
 
         # Read input with default to yes (just pressing enter)
         import sys
+        import time
 
         sys.stdout.write("> ")
         sys.stdout.flush()
         permission = input().lower()
 
         if permission == "" or permission == "y" or permission == "yes":
-            logger.info(f"User granted permission for parallel operations")
+            logger.info(
+                f"User granted permission for {len(operations)} parallel operations"
+            )
+            batch_id = f"batch-{int(time.time())}"
+            self.approved_operations[batch_id] = set()
+            for tool_name, path in operations:
+                tool_path_key = self._get_tool_path_key(tool_name, path)
+                self.approved_operations[batch_id].add(tool_path_key)
             return True
         else:
-            logger.info(f"User denied permission for parallel operations")
+            logger.info(
+                f"User denied permission for {len(operations)} parallel operations"
+            )
             return False
 
     def get_permission_description(self, tool_name: str) -> str:

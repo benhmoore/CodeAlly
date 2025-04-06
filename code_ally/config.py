@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "parallel_tools": True,
     "qwen_template": "qwen2.5_function_calling",
     "dump_dir": "ally",
-    "auto_dump": True,  # Whether to automatically dump conversations on exit
+    "auto_dump": False,  # Whether to automatically dump conversations on exit
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,

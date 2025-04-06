@@ -10,7 +10,7 @@
   "parallel_tools": true,
   "qwen_template": "qwen2.5_function_calling",
   "dump_dir": "ally",
-  "auto_dump": true,
+  "auto_dump": false,
   "theme": "default",
   "compact_threshold": 95,
   "show_token_usage": true

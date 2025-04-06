@@ -1367,6 +1367,46 @@ class Agent:
                 logger.exception(f"Error normalizing tool call: {e}")
                 self.ui.print_error(f"Error normalizing tool call: {str(e)}")
 
+        # Check if any tools require permission
+        protected_tools = []
+        for _, tool_name, arguments in normalized_calls:
+            if (
+                tool_name in self.tool_manager.tools
+                and self.tool_manager.tools[tool_name].requires_confirmation
+            ):
+                # For bash tool, pass arguments.command as the path
+                if tool_name == "bash" and "command" in arguments:
+                    permission_path = arguments
+                else:
+                    # Use the first string argument as the path, if any
+                    permission_path = None
+                    for arg_name, arg_value in arguments.items():
+                        if isinstance(arg_value, str) and arg_name in (
+                            "path",
+                            "file_path",
+                        ):
+                            permission_path = arg_value
+                            break
+
+                protected_tools.append((tool_name, permission_path))
+
+        # If there are protected tools, ask for permission once
+        if protected_tools:
+            # Format a single permission request for all tools
+            permission_text = "Permission required for the following operations:\n"
+            for i, (tool_name, permission_path) in enumerate(protected_tools, 1):
+                if tool_name == "bash":
+                    permission_text += f"{i}. Execute command: {permission_path.get('command', 'unknown')}\n"
+                elif permission_path:
+                    permission_text += f"{i}. {tool_name} on path: {permission_path}\n"
+                else:
+                    permission_text += f"{i}. {tool_name} operation\n"
+
+            # Ask for a single permission
+            if not self.trust_manager.prompt_for_parallel_operations(permission_text):
+                self.ui.print_warning("Permission denied for parallel operations")
+                return
+
         # Execute tool calls in parallel
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=min(len(normalized_calls), 5)

@@ -413,6 +413,54 @@ class TrustManager:
             )
             return True
 
+    def prompt_for_parallel_operations(self, operations_text: str) -> bool:
+        """Prompt the user for permission to perform multiple operations at once.
+
+        Args:
+            operations_text: Description of all operations that need permission
+
+        Returns:
+            Whether permission was granted
+        """
+        # If auto-confirm is enabled, skip the prompt
+        if self.auto_confirm:
+            logger.info(f"Auto-confirming multiple operations")
+            return True
+
+        # Create a visually distinct panel for the permission prompt
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.text import Text
+
+        console = Console()
+
+        panel_text = Text()
+        panel_text.append(
+            f"🔐 PARALLEL OPERATIONS - PERMISSION REQUIRED\n\n", style="bold yellow"
+        )
+        panel_text.append(f"{operations_text}\n\n", style="bold white")
+        panel_text.append("Press ", style="dim")
+        panel_text.append("ENTER", style="bold green")
+        panel_text.append(" for YES, ", style="dim")
+        panel_text.append("n", style="bold red")
+        panel_text.append(" for NO", style="dim")
+
+        console.print(Panel(panel_text, border_style="yellow", expand=False))
+
+        # Read input with default to yes (just pressing enter)
+        import sys
+
+        sys.stdout.write("> ")
+        sys.stdout.flush()
+        permission = input().lower()
+
+        if permission == "" or permission == "y" or permission == "yes":
+            logger.info(f"User granted permission for parallel operations")
+            return True
+        else:
+            logger.info(f"User denied permission for parallel operations")
+            return False
+
     def get_permission_description(self, tool_name: str) -> str:
         """Get a human-readable description of the permissions for a tool.
 

@@ -21,6 +21,7 @@ from code_ally.agent.token_manager import TokenManager
 from code_ally.agent.ui_manager import UIManager
 from code_ally.agent.tool_manager import ToolManager
 from code_ally.agent.command_handler import CommandHandler
+from code_ally.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class Agent:
         parallel_tools: bool = True,
         check_context_msg: bool = True,
         auto_dump: bool = True,
+        contextual_help_enabled: bool = True,
     ):
         """Initialize the agent.
 
@@ -88,6 +90,9 @@ class Agent:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
 
+        # Load contextual help configuration
+        self.contextual_help_enabled = contextual_help_enabled
+
     def process_llm_response(self, response: Dict[str, Any]) -> None:
         """Process the LLM's response and execute any tool calls if present.
 
@@ -131,7 +136,7 @@ class Agent:
                     last_user_message = msg.get("content", "")
                     break
 
-            if last_user_message:
+            if self.contextual_help_enabled and last_user_message:
                 tool_guidance = get_contextual_guidance(last_user_message)
                 relevant_tools = detect_relevant_tools(last_user_message)
 
@@ -334,7 +339,9 @@ class Agent:
                 else:
                     permission_text += f"{i}. {tname} operation\n"
 
-            if not self.trust_manager.prompt_for_parallel_operations(permission_text):
+            if not self.trust_manager.prompt_for_parallel_operations(
+                protected_tools, permission_text
+            ):
                 self.ui.print_warning("Permission denied for parallel operations")
                 return
 
@@ -485,7 +492,7 @@ class Agent:
 
             self.messages.append({"role": "user", "content": user_input})
 
-            if tool_guidance and relevant_tools:
+            if self.contextual_help_enabled and tool_guidance and relevant_tools:
                 tool_names = ", ".join(relevant_tools)
                 guidance_message = (
                     f"Based on the user's request, consider using these tools: {tool_names}. "
@@ -539,7 +546,7 @@ class Agent:
             self.process_llm_response(response)
 
             # Remove the contextual tool guidance (if it was added)
-            if relevant_tools:
+            if self.contextual_help_enabled and relevant_tools:
                 i = len(self.messages) - 1
                 removed = False
                 while i >= 0:

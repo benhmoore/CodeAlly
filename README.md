@@ -199,7 +199,6 @@ Code Ally also supports the following slash commands during a conversation:
 | `bash`       | Execute a shell command and return its output         |
 | `glob`       | Find files matching a glob pattern                    |
 | `grep`       | Search for a pattern in files                         |
-| `ls`         | List directory contents                               |
 
 ## 🔒 Security Considerations
 

@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,
+    "contextual_help": True,  # Enable/disable contextual tool guidance
 }
 
 # Config keys that should be type-checked
@@ -50,6 +51,7 @@ CONFIG_TYPES = {
     "theme": str,
     "compact_threshold": int,
     "show_token_usage": bool,
+    "contextual_help": bool,  # Type for contextual help option
 }
 
 

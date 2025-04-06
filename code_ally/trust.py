@@ -183,9 +183,9 @@ class TrustManager:
         self,
         tool_name: str,
         path: Optional[str] = None,
-        operation_id: Optional[str] = None,
+        operation_id: Optional[str] = None,  # This is the batch_id
     ) -> bool:
-        """Check if a tool is trusted for the given path.
+        """Check if a tool is trusted for the given path or operation ID.
 
         Args:
             tool_name: The name of the tool
@@ -193,57 +193,69 @@ class TrustManager:
             operation_id: The unique identifier for batch operations
 
         Returns:
-            Whether the tool is trusted for the path
+            Whether the tool is trusted for the path or operation
         """
         # Always trust in auto-confirm mode
         if self.auto_confirm:
             return True
 
-        logger.debug(f"Checking trust for {tool_name} at path: {path}")
+        logger.debug(
+            f"Checking trust for {tool_name} at path: {path} (Op ID: {operation_id})"
+        )  # Added Op ID to log
 
-        # Check if the tool is in the trusted dictionary
-        if tool_name not in self.trusted_tools:
-            logger.debug(f"Tool {tool_name} is not in the trusted_tools dictionary")
-            return False
-
-        # If no path provided, check if trusted for all paths (session scope)
-        if path is None:
-            is_trusted = "*" in self.trusted_tools[tool_name]
-            logger.debug(f"Tool {tool_name} trusted for all paths: {is_trusted}")
-            return is_trusted
-
-        # At this point, we have a path and the tool is in the trusted list
-        trusted_paths = self.trusted_tools[tool_name]
-
-        # Global trust (all paths)
-        if "*" in trusted_paths:
-            logger.debug(f"Tool {tool_name} has global trust")
-            return True
-
-        # Check for the specific path
-        normalized_path = os.path.abspath(path)
-        if normalized_path in trusted_paths:
-            logger.debug(f"Found exact path match for {normalized_path}")
-            return True
-
-        # Check for parent directories
-        path_parts = normalized_path.split(os.sep)
-        for i in range(len(path_parts)):
-            parent_path = os.sep.join(path_parts[: i + 1])
-            if parent_path and parent_path in trusted_paths:
-                logger.debug(f"Found parent directory match: {parent_path}")
-                return True
-
-        # Check if the operation is approved
+        # PRIORITY 1: Check if the specific operation was approved in a batch
         if operation_id and operation_id in self.approved_operations:
             tool_path_key = self._get_tool_path_key(tool_name, path)
             if tool_path_key in self.approved_operations[operation_id]:
                 logger.debug(
-                    f"Operation {operation_id} is approved for {tool_name} at {path}"
+                    f"Operation {operation_id} is approved for {tool_path_key}"
                 )
                 return True
 
-        logger.debug(f"No trust found for {tool_name} at path {path}")
+        # Check if the tool is in the globally trusted dictionary
+        if tool_name not in self.trusted_tools:
+            logger.debug(f"Tool {tool_name} is not generally trusted")
+            return False
+
+        # At this point, the tool *might* be generally trusted for some paths
+        trusted_paths = self.trusted_tools[tool_name]
+
+        # Global trust (all paths)?
+        if "*" in trusted_paths:
+            logger.debug(f"Tool {tool_name} has global trust")
+            return True
+
+        # If no path provided, and no global trust, then not trusted for session
+        if path is None:
+            logger.debug(f"Tool {tool_name} has no global trust and no path specified")
+            return False
+
+        # Check for the specific path trust
+        if isinstance(path, (str, bytes, os.PathLike)):
+            normalized_path = os.path.abspath(path)
+            if normalized_path in trusted_paths:
+                logger.debug(f"Found exact path match for {normalized_path}")
+                return True
+
+            # Check for parent directories
+            path_parts = normalized_path.split(os.sep)
+            current_check_path = ""
+            for part in path_parts:
+                if not part:  # Handles leading '/'
+                    current_check_path = os.sep
+                    continue
+                if current_check_path.endswith(os.sep):
+                    current_check_path += part
+                else:
+                    current_check_path = os.path.join(current_check_path, part)
+
+                if current_check_path and current_check_path in trusted_paths:
+                    logger.debug(f"Found parent directory match: {current_check_path}")
+                    return True
+        else:
+            logger.debug(f"Path for {tool_name} is not a string, skipping path checks.")
+
+        logger.debug(f"No specific trust found for {tool_name} at path {path}")
         return False
 
     def _get_tool_path_key(self, tool_name: str, path: Optional[Any] = None) -> str:
@@ -251,13 +263,16 @@ class TrustManager:
 
         Args:
             tool_name: The name of the tool
-            path: The path being accessed (if applicable)
+            path: The path being accessed (if applicable, could be dict for bash)
 
         Returns:
             A unique key representing the tool and path combination
         """
-        if path is None:
+        # If path is None or not a string (e.g., dict for bash command args),
+        # just use the tool name as the key component.
+        if path is None or not isinstance(path, (str, bytes, os.PathLike)):
             return tool_name
+        # Only call abspath if path is a valid path type
         return f"{tool_name}:{os.path.abspath(path)}"
 
     def trust_tool(self, tool_name: str, path: Optional[str] = None) -> None:

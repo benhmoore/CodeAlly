@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -23,7 +25,11 @@ from rich.table import Table
 
 from code_ally.config import load_config, save_config
 from code_ally.llm_client import ModelClient
-from code_ally.prompts import get_system_message, get_contextual_guidance, detect_relevant_tools
+from code_ally.prompts import (
+    get_system_message,
+    get_contextual_guidance,
+    detect_relevant_tools,
+)
 from code_ally.tools.base import BaseTool
 from code_ally.trust import TrustManager
 
@@ -96,9 +102,9 @@ class TokenManager:
         """
         previous_tokens = self.estimated_tokens
         self.estimated_tokens = self.estimate_tokens(messages)
-        
+
         # Log in verbose mode if there's a significant change
-        if self.ui and hasattr(self.ui, 'verbose') and self.ui.verbose:
+        if self.ui and hasattr(self.ui, "verbose") and self.ui.verbose:
             if abs(self.estimated_tokens - previous_tokens) > 100:
                 token_percentage = self.get_token_percentage()
                 change = self.estimated_tokens - previous_tokens
@@ -146,9 +152,27 @@ class UIManager:
         history_dir = os.path.expanduser("~/.code_ally")
         os.makedirs(history_dir, exist_ok=True)
 
-        # Initialize prompt session with command history
+        # Create custom key bindings
+        kb = KeyBindings()
+
+        @kb.add("c-c")
+        def _(event):
+            """Custom Ctrl+C handler.
+
+            Clear buffer if not empty, otherwise exit.
+            """
+            if event.app.current_buffer.text:
+                # If there's text, clear the buffer
+                event.app.current_buffer.text = ""
+            else:
+                # If empty, exit as normal by raising KeyboardInterrupt
+                event.app.exit(exception=KeyboardInterrupt())
+
+        # Initialize prompt session with command history and custom key bindings
         history_file = os.path.join(history_dir, "command_history")
-        self.prompt_session = PromptSession(history=FileHistory(history_file))
+        self.prompt_session = PromptSession(
+            history=FileHistory(history_file), key_bindings=kb
+        )
 
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -204,7 +228,7 @@ class UIManager:
                             thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
                         else:
                             thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
-                        
+
                         thinking_spinner = Spinner("dots2", text=thinking_text)
                         live.update(thinking_spinner)
                         time.sleep(0.1)
@@ -225,7 +249,9 @@ class UIManager:
                 ) as live:
                     while not self.thinking_event.is_set():
                         elapsed_seconds = int(time.time() - start_time)
-                        self.thinking_spinner = Spinner("dots2", text=f"[cyan]Thinking[/] [{elapsed_seconds}s]")
+                        self.thinking_spinner = Spinner(
+                            "dots2", text=f"[cyan]Thinking[/] [{elapsed_seconds}s]"
+                        )
                         live.update(self.thinking_spinner)
                         time.sleep(0.1)
 
@@ -501,17 +527,25 @@ class ToolManager:
         """
         # Track execution time
         start_time = time.time()
-        
+
         # Verbose logging - start
-        verbose_mode = hasattr(self, 'ui') and getattr(self, 'ui', None) and getattr(self.ui, 'verbose', False)
+        verbose_mode = (
+            hasattr(self, "ui")
+            and getattr(self, "ui", None)
+            and getattr(self.ui, "verbose", False)
+        )
         if verbose_mode:
             args_str = ", ".join(f"{k}={repr(v)}" for k, v in arguments.items())
-            self.ui.console.print(f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]")
+            self.ui.console.print(
+                f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]"
+            )
 
         # Check if the tool exists
         if tool_name not in self.tools:
             if verbose_mode:
-                self.ui.console.print(f"[dim red][Verbose] Tool not found: {tool_name}[/]")
+                self.ui.console.print(
+                    f"[dim red][Verbose] Tool not found: {tool_name}[/]"
+                )
             return {
                 "success": False,
                 "error": f"Unknown tool: {tool_name}",
@@ -529,9 +563,11 @@ class ToolManager:
                 )
                 if check_context_msg:
                     error_msg += " Please check your context for the previous result."
-                
+
                 if verbose_mode:
-                    self.ui.console.print(f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]")
+                    self.ui.console.print(
+                        f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]"
+                    )
 
                 return {
                     "success": False,
@@ -544,8 +580,10 @@ class ToolManager:
         # Check permissions if tool requires confirmation
         if tool.requires_confirmation:
             if verbose_mode:
-                self.ui.console.print(f"[dim blue][Verbose] Tool {tool_name} requires confirmation[/]")
-                
+                self.ui.console.print(
+                    f"[dim blue][Verbose] Tool {tool_name} requires confirmation[/]"
+                )
+
             # For bash tool, pass arguments.command as the path
             if tool_name == "bash" and "command" in arguments:
                 permission_path = arguments
@@ -560,7 +598,9 @@ class ToolManager:
             # Check if the user has given permission
             if not self.trust_manager.prompt_for_permission(tool_name, permission_path):
                 if verbose_mode:
-                    self.ui.console.print(f"[dim red][Verbose] Permission denied for {tool_name}[/]")
+                    self.ui.console.print(
+                        f"[dim red][Verbose] Permission denied for {tool_name}[/]"
+                    )
                 return {
                     "success": False,
                     "error": f"Permission denied for {tool_name}",
@@ -569,23 +609,27 @@ class ToolManager:
         # Execute the tool
         try:
             if verbose_mode:
-                self.ui.console.print(f"[dim green][Verbose] Executing tool: {tool_name}[/]")
-                
+                self.ui.console.print(
+                    f"[dim green][Verbose] Executing tool: {tool_name}[/]"
+                )
+
             result = tool.execute(**arguments)
             execution_time = time.time() - start_time
-            
+
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim green][Verbose] Tool {tool_name} executed in {execution_time:.2f}s "
                     f"(success: {result.get('success', False)})[/]"
                 )
-                
+
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
             return result
         except Exception as exc:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
-                self.ui.console.print(f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]")
+                self.ui.console.print(
+                    f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]"
+                )
             return {
                 "success": False,
                 "error": f"Error executing {tool_name}: {str(exc)}",
@@ -795,7 +839,7 @@ class CommandHandler:
                 f"Current state: {message_count} messages, {tokens_before} tokens "
                 f"({percent_used}% of context)[/]"
             )
-            
+
         # Preserve system message
         system_message = None
         for msg in messages:
@@ -837,7 +881,7 @@ class CommandHandler:
 
         # Update the last compaction time
         self.token_manager.last_compaction_time = time.time()
-        
+
         # Log compaction results in verbose mode
         if self.verbose:
             # Calculate the impact
@@ -846,7 +890,7 @@ class CommandHandler:
             tokens_after = self.token_manager.estimated_tokens
             tokens_saved = tokens_before - tokens_after
             new_percent = self.token_manager.get_token_percentage()
-            
+
             self.ui.console.print(
                 f"[dim green][Verbose] Compaction complete. Removed {messages_removed} messages, "
                 f"saved {tokens_saved} tokens. New usage: {tokens_after} tokens "
@@ -1014,28 +1058,32 @@ class Agent:
                 if msg.get("role") == "user":
                     last_user_message = msg.get("content", "")
                     break
-            
+
             # Add contextual tool guidance for follow-up if appropriate
             if last_user_message:
                 tool_guidance = get_contextual_guidance(last_user_message)
                 relevant_tools = detect_relevant_tools(last_user_message)
-                
+
                 if tool_guidance and relevant_tools:
                     tool_names = ", ".join(relevant_tools)
                     guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
-                    self.messages.append({"role": "system", "content": guidance_message})
-                    
+                    self.messages.append(
+                        {"role": "system", "content": guidance_message}
+                    )
+
                     # Log in verbose mode
                     if self.ui.verbose:
-                        self.ui.console.print(f"[dim cyan][Verbose] Added follow-up contextual guidance for tools: {tool_names}[/]")
-                    
+                        self.ui.console.print(
+                            f"[dim cyan][Verbose] Added follow-up contextual guidance for tools: {tool_names}[/]"
+                        )
+
                     self.token_manager.update_token_count(self.messages)
 
             # Get a follow-up response from the LLM
             animation_thread = self.ui.start_thinking_animation(
                 self.token_manager.get_token_percentage()
             )
-            
+
             # Verbose logging before follow-up LLM request
             if self.ui.verbose:
                 functions_count = len(self.tool_manager.get_function_definitions())
@@ -1051,19 +1099,22 @@ class Agent:
                 functions=self.tool_manager.get_function_definitions(),
                 include_reasoning=self.ui.verbose,
             )
-            
+
             # Verbose logging after follow-up LLM response
             if self.ui.verbose:
-                has_tool_calls = "tool_calls" in follow_up_response and follow_up_response["tool_calls"]
+                has_tool_calls = (
+                    "tool_calls" in follow_up_response
+                    and follow_up_response["tool_calls"]
+                )
                 tool_names = []
                 if has_tool_calls:
                     for tool_call in follow_up_response["tool_calls"]:
                         if "function" in tool_call and "name" in tool_call["function"]:
                             tool_names.append(tool_call["function"]["name"])
-                
+
                 response_type = "tool calls" if has_tool_calls else "text response"
                 tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
-                
+
                 self.ui.console.print(
                     f"[dim blue][Verbose] Received follow-up {response_type}{tools_info} from LLM[/]"
                 )
@@ -1073,7 +1124,7 @@ class Agent:
 
             # Process the follow-up response recursively
             self.process_llm_response(follow_up_response)
-            
+
             # Clean up the contextual tool guidance message if it was added
             if last_user_message:
                 # Find and remove the contextual guidance system message
@@ -1081,17 +1132,22 @@ class Agent:
                 removed = False
                 while i >= 0:
                     msg = self.messages[i]
-                    if (msg.get("role") == "system" and 
-                        msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
+                    if msg.get("role") == "system" and msg.get(
+                        "content", ""
+                    ).startswith(
+                        "Based on the user's request, consider using these tools:"
+                    ):
                         self.messages.pop(i)
                         removed = True
                         break
                     i -= 1
-                
+
                 # Log in verbose mode
                 if removed and self.ui.verbose:
-                    self.ui.console.print("[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]")
-                
+                    self.ui.console.print(
+                        "[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]"
+                    )
+
                 # Update token count after removing guidance
                 self.token_manager.update_token_count(self.messages)
 
@@ -1147,20 +1203,22 @@ class Agent:
             # Get contextual tool guidance based on user input
             tool_guidance = get_contextual_guidance(user_input)
             relevant_tools = detect_relevant_tools(user_input)
-            
+
             # Add user message to history
             self.messages.append({"role": "user", "content": user_input})
-            
+
             # Add contextual tool guidance if appropriate
             if tool_guidance and relevant_tools:
                 tool_names = ", ".join(relevant_tools)
                 guidance_message = f"Based on the user's request, consider using these tools: {tool_names}. Here is specific guidance for these tools:\n\n{tool_guidance}"
                 self.messages.append({"role": "system", "content": guidance_message})
-                
+
                 # Log in verbose mode
                 if self.ui.verbose:
-                    self.ui.console.print(f"[dim cyan][Verbose] Added contextual guidance for tools: {tool_names}[/]")
-            
+                    self.ui.console.print(
+                        f"[dim cyan][Verbose] Added contextual guidance for tools: {tool_names}[/]"
+                    )
+
             self.token_manager.update_token_count(self.messages)
 
             # Start thinking animation
@@ -1177,14 +1235,14 @@ class Agent:
                     f"[dim blue][Verbose] Sending request to LLM with {message_count} messages, "
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
-            
+
             # Get response from LLM
             response = self.model_client.send(
                 self.messages,
                 functions=self.tool_manager.get_function_definitions(),
                 include_reasoning=self.ui.verbose,
             )
-            
+
             # Verbose logging after LLM response
             if self.ui.verbose:
                 has_tool_calls = "tool_calls" in response and response["tool_calls"]
@@ -1193,10 +1251,10 @@ class Agent:
                     for tool_call in response["tool_calls"]:
                         if "function" in tool_call and "name" in tool_call["function"]:
                             tool_names.append(tool_call["function"]["name"])
-                
+
                 response_type = "tool calls" if has_tool_calls else "text response"
                 tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
-                
+
                 self.ui.console.print(
                     f"[dim blue][Verbose] Received {response_type}{tools_info} from LLM[/]"
                 )
@@ -1207,7 +1265,7 @@ class Agent:
 
             # Process the response
             self.process_llm_response(response)
-            
+
             # Clean up the contextual tool guidance message if it was added
             # This prevents accumulation of guidance messages in the history
             if relevant_tools:
@@ -1216,16 +1274,21 @@ class Agent:
                 removed = False
                 while i >= 0:
                     msg = self.messages[i]
-                    if (msg.get("role") == "system" and 
-                        msg.get("content", "").startswith("Based on the user's request, consider using these tools:")):
+                    if msg.get("role") == "system" and msg.get(
+                        "content", ""
+                    ).startswith(
+                        "Based on the user's request, consider using these tools:"
+                    ):
                         self.messages.pop(i)
                         removed = True
                         break
                     i -= 1
-                
+
                 # Log in verbose mode
                 if removed and self.ui.verbose:
-                    self.ui.console.print("[dim cyan][Verbose] Removed contextual tool guidance from conversation history[/]")
-                
+                    self.ui.console.print(
+                        "[dim cyan][Verbose] Removed contextual tool guidance from conversation history[/]"
+                    )
+
                 # Update token count after removing guidance
                 self.token_manager.update_token_count(self.messages)

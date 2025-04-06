@@ -1,4 +1,4 @@
-"""Agent implementation with refactored architecture.
+"""File: agent.py
 
 This module contains the Agent class and supporting components that handle
 the conversation flow, tool execution, and user interaction.

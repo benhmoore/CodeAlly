@@ -31,6 +31,10 @@ CORE_DIRECTIVES = """
      2. Append the target filename to that path (no placeholders like `~` or `$(pwd)`).
      3. Use `file_write` or `file_edit` with that exact path.
      4. Verify by reading or listing the file afterward.
+   - When reading files, leverage advanced options:
+     - For searching within files: `file_read path="/path/file.txt" search_pattern="keyword" context_lines=5`
+     - For reading specific sections: `file_read path="/path/file.txt" from_delimiter="# Section Start" to_delimiter="# Section End"`
+     - For extracting structured content: `file_read path="/path/file.txt" section_pattern="## [\\w\\s]+"`
 
 3. **Command Execution**
    - Use `bash command="..."` for all commands (including git), then display the exact output.

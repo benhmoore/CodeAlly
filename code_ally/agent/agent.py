@@ -9,7 +9,7 @@ import re
 import time
 import threading
 import concurrent.futures
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from code_ally.llm_client import ModelClient
 from code_ally.trust import TrustManager
@@ -172,7 +172,7 @@ class Agent:
 
     def _normalize_tool_call(
         self, tool_call: Dict[str, Any]
-    ) -> (str, str, Dict[str, Any]):
+    ) -> Tuple[str, str, Dict[str, Any]]:
         """Normalize a tool call dict to (call_id, tool_name, arguments)."""
         call_id = tool_call.get("id", f"auto-id-{int(time.time())}")
         function_call = tool_call.get("function", {})

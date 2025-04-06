@@ -1,5 +1,6 @@
 import os
-from typing import Any, Dict, List, Tuple
+import re
+from typing import Any, Dict, List, Tuple, Optional
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -8,10 +9,16 @@ from code_ally.tools.registry import register_tool
 @register_tool
 class FileReadTool(BaseTool):
     name = "file_read"
-    description = "Read the contents of a file with context-efficient options"
+    description = """Read the contents of a file with context-efficient options.
+    
+    Supports:
+    - Reading specific line ranges (start_line, max_lines)
+    - Searching for patterns with context (search_pattern, context_lines)
+    - Reading sections based on delimiters (from_delimiter, to_delimiter)
+    - Finding sections by headings or markers (section_pattern)
+    """
     requires_confirmation = False
 
-    # pylint: disable=arguments-differ,too-many-arguments,too-many-locals
     def execute(
         self,
         path: str,
@@ -19,10 +26,13 @@ class FileReadTool(BaseTool):
         max_lines: int = 0,
         search_pattern: str = "",
         context_lines: int = 3,
+        from_delimiter: str = "",
+        to_delimiter: str = "",
+        section_pattern: str = "",
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        Read the contents of a file with options to limit content and save context.
+        Read the contents of a file with options to target specific sections or search results.
 
         Args:
             path: The path to the file to read
@@ -30,6 +40,9 @@ class FileReadTool(BaseTool):
             max_lines: Maximum number of lines to read (0 for all, default: 0)
             search_pattern: Optional pattern to search within the file
             context_lines: Number of lines before/after matches to include (default: 3)
+            from_delimiter: Start reading from this delimiter pattern (e.g., "# Section 1")
+            to_delimiter: Stop reading at this delimiter pattern
+            section_pattern: Extract sections matching this pattern (e.g., "## [\\w\\s]+")
             **kwargs: Additional arguments (unused)
 
         Returns:
@@ -88,44 +101,47 @@ class FileReadTool(BaseTool):
                     "error": "",
                 }
 
-            # If neither search pattern nor line limits are provided,
-            # count the total lines for large files before reading everything
-            if not search_pattern and file_size > 1024 * 1024:  # 1 MB
-                line_count = self._count_lines(file_path)
-                if (
-                    line_count > 1000 and max_lines == 0
-                ):  # File is large and no limit specified
-                    max_lines = 500  # Default limit for large files
-            else:
-                line_count = None  # We'll count while reading
+            # If delimiters are provided, use those for reading
+            if from_delimiter or to_delimiter:
+                content, lines_read, total_lines = self._read_with_delimiters(
+                    file_path, from_delimiter, to_delimiter
+                )
+                is_partial = lines_read < total_lines
 
-            # Different reading strategies based on what's requested
-            if search_pattern:
+            # If section pattern is provided, extract matching sections
+            elif section_pattern:
+                content, sections_found, total_lines = self._read_sections(
+                    file_path, section_pattern
+                )
+                lines_read = sections_found if sections_found > 0 else 0
+                is_partial = True  # Section extraction is always partial
+
+            # If search pattern is provided, use search reading
+            elif search_pattern:
                 content, matches, total_lines = self._read_with_pattern(
                     file_path, search_pattern, context_lines, start_line, max_lines
                 )
-                line_count = total_lines if line_count is None else line_count
                 read_lines = len(matches) if matches else 0
-                is_partial = read_lines < line_count
+                is_partial = read_lines < total_lines
+
+            # Otherwise use standard line-based reading
             else:
                 content, lines_read, total_lines = self._read_with_limits(
                     file_path, start_line, max_lines
                 )
-                line_count = total_lines if line_count is None else line_count
-                read_lines = lines_read
-                is_partial = lines_read < line_count
+                is_partial = lines_read < total_lines
 
             return {
                 "success": True,
                 "content": content,
-                "line_count": line_count,
-                "read_lines": read_lines,
+                "line_count": total_lines,
+                "read_lines": lines_read if "lines_read" in locals() else 0,
                 "file_size": file_size,
                 "is_partial": is_partial,
                 "is_binary": False,
                 "error": "",
             }
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             return {
                 "success": False,
                 "content": "",
@@ -150,7 +166,7 @@ class FileReadTool(BaseTool):
             with open(file_path, "rb") as f:
                 chunk = f.read(1024)
                 return b"\0" in chunk  # Simple heuristic: contains null bytes
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return False
 
     def _count_lines(self, file_path: str) -> int:
@@ -193,7 +209,7 @@ class FileReadTool(BaseTool):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 if current_line >= start_line:
-                    if lines_read >= max_lines > 0:
+                    if max_lines > 0 and lines_read >= max_lines:
                         break
                     content.append(line.rstrip())
                     lines_read += 1
@@ -209,7 +225,114 @@ class FileReadTool(BaseTool):
 
         return result, lines_read, current_line
 
-    # pylint: disable=too-many-arguments,too-many-locals,too-many-branches
+    def _read_with_delimiters(
+        self, file_path: str, from_delimiter: str, to_delimiter: str
+    ) -> Tuple[str, int, int]:
+        """Read a file between specified delimiters.
+
+        Args:
+            file_path: Path to the file
+            from_delimiter: Start reading from this pattern
+            to_delimiter: Stop reading at this pattern
+
+        Returns:
+            Tuple of (content, lines_read, total_lines)
+        """
+        content = []
+        total_lines = 0
+        lines_read = 0
+        in_section = (
+            from_delimiter == ""
+        )  # If no start delimiter, start capturing immediately
+
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                total_lines += 1
+
+                # Check for start delimiter if we're not already in a section
+                if not in_section and from_delimiter and from_delimiter in line:
+                    in_section = True
+                    content.append(line.rstrip())
+                    lines_read += 1
+                    continue
+
+                # If we're in a section, capture the line
+                if in_section:
+                    # Check if we've reached the end delimiter
+                    if to_delimiter and to_delimiter in line:
+                        content.append(line.rstrip())
+                        lines_read += 1
+                        break
+
+                    content.append(line.rstrip())
+                    lines_read += 1
+
+        # If we didn't find any section
+        if not content:
+            return (
+                f"No content found between '{from_delimiter}' and '{to_delimiter}'",
+                0,
+                total_lines,
+            )
+
+        result = "\n".join(content)
+
+        # Add indicators for partial content
+        if lines_read < total_lines:
+            result += "\n[...] (more lines not shown)"
+
+        return result, lines_read, total_lines
+
+    def _read_sections(
+        self, file_path: str, section_pattern: str
+    ) -> Tuple[str, int, int]:
+        """Extract sections matching a pattern from a file.
+
+        Args:
+            file_path: Path to the file
+            section_pattern: Regex pattern that identifies section headers
+
+        Returns:
+            Tuple of (content, sections_found, total_lines)
+        """
+        try:
+            section_regex = re.compile(section_pattern)
+        except re.error:
+            return f"Invalid regex pattern: {section_pattern}", 0, 0
+
+        content = []
+        total_lines = 0
+        sections_found = 0
+        current_section = []
+        in_section = False
+
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                total_lines += 1
+
+                # Check if this line is a section header
+                if section_regex.search(line):
+                    # If we were already in a section, save it
+                    if in_section and current_section:
+                        content.extend(current_section)
+                        content.append("")  # Add a blank line between sections
+
+                    # Start a new section
+                    current_section = [line.rstrip()]
+                    in_section = True
+                    sections_found += 1
+                elif in_section:
+                    current_section.append(line.rstrip())
+
+        # Add the last section if we have one
+        if in_section and current_section:
+            content.extend(current_section)
+
+        if not content:
+            return f"No sections matching '{section_pattern}' found", 0, total_lines
+
+        return "\n".join(content), sections_found, total_lines
+
     def _read_with_pattern(
         self,
         file_path: str,
@@ -262,7 +385,7 @@ class FileReadTool(BaseTool):
                     match_count += 1
 
                 # Stop if we've reached max matches
-                if match_count >= max_lines > 0:
+                if max_lines > 0 and match_count >= max_lines:
                     break
 
         # No matches found

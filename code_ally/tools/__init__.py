@@ -29,6 +29,7 @@ __all__ = [
     "FileEditTool",
     "GlobTool",
     "GrepTool",
+    "CodeStructureAnalyzerTool",
 ]
 
 # Create registry instance to ensure all tools are registered

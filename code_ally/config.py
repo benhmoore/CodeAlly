@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG = {
     "model": "llama3",
     "endpoint": "http://localhost:11434",
-    "context_size": 32000,
+    "context_size": 8192,
     "temperature": 0.7,
     "max_tokens": 5000,
     "bash_timeout": 30,

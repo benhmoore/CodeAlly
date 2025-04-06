@@ -12,10 +12,6 @@ import concurrent.futures
 from typing import Any, Dict, List, Optional
 
 from code_ally.llm_client import ModelClient
-from code_ally.prompts import (
-    get_contextual_guidance,
-    detect_relevant_tools,
-)
 from code_ally.trust import TrustManager
 from code_ally.agent.token_manager import TokenManager
 from code_ally.agent.ui_manager import UIManager
@@ -39,7 +35,6 @@ class Agent:
         parallel_tools: bool = True,
         check_context_msg: bool = True,
         auto_dump: bool = True,
-        contextual_help_enabled: bool = True,
     ):
         """Initialize the agent.
 
@@ -90,9 +85,6 @@ class Agent:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
 
-        # Load contextual help configuration
-        self.contextual_help_enabled = contextual_help_enabled
-
     def process_llm_response(self, response: Dict[str, Any]) -> None:
         """Process the LLM's response and execute any tool calls if present.
 
@@ -128,34 +120,6 @@ class Agent:
                 self._process_parallel_tool_calls(tool_calls)
             else:
                 self._process_sequential_tool_calls(tool_calls)
-
-            # Possibly add contextual guidance for subsequent steps
-            last_user_message = ""
-            for msg in reversed(self.messages):
-                if msg.get("role") == "user":
-                    last_user_message = msg.get("content", "")
-                    break
-
-            if self.contextual_help_enabled and last_user_message:
-                tool_guidance = get_contextual_guidance(last_user_message)
-                relevant_tools = detect_relevant_tools(last_user_message)
-
-                if tool_guidance and relevant_tools:
-                    tool_names = ", ".join(relevant_tools)
-                    guidance_message = (
-                        f"Based on the user's request, consider using these tools: {tool_names}. "
-                        f"Here is specific guidance for these tools:\n\n{tool_guidance}"
-                    )
-                    self.messages.append(
-                        {"role": "system", "content": guidance_message}
-                    )
-
-                    if self.ui.verbose:
-                        self.ui.console.print(
-                            f"[dim cyan][Verbose] Added follow-up contextual guidance for tools: {tool_names}[/]"
-                        )
-
-                    self.token_manager.update_token_count(self.messages)
 
             # Get a follow-up response
             animation_thread = self.ui.start_thinking_animation(
@@ -199,9 +163,6 @@ class Agent:
 
             # Recursively process the follow-up
             self.process_llm_response(follow_up_response)
-
-            # Clean up the contextual guidance message
-            self._cleanup_contextual_guidance()
 
         else:
             # Normal text response
@@ -303,7 +264,7 @@ class Agent:
                     )
             except Exception as e:
                 logger.exception(f"Error normalizing tool call: {e}")
-                self.ui.print_error(f"Error normalizing tool call: {str(e)}")
+                self.ui.print_error(f"Error normalizing tool call: {e}")
 
         # Collect all protected tools that require permission
         protected_tools = []
@@ -384,7 +345,7 @@ class Agent:
                         f"Error processing parallel tool call {tool_name}: {e}"
                     )
                     self.ui.print_error(
-                        f"Error processing parallel tool call {tool_name}: {str(e)}"
+                        f"Error processing parallel tool call {tool_name}: {e}"
                     )
 
         self.token_manager.update_token_count(self.messages)
@@ -487,24 +448,9 @@ class Agent:
                 if handled:
                     continue
 
-            # Possibly add contextual tool guidance
-            tool_guidance = get_contextual_guidance(user_input)
-            relevant_tools = detect_relevant_tools(user_input)
-
-            self.messages.append({"role": "user", "content": user_input})
-
-            if self.contextual_help_enabled and tool_guidance and relevant_tools:
-                tool_names = ", ".join(relevant_tools)
-                guidance_message = (
-                    f"Based on the user's request, consider using these tools: {tool_names}. "
-                    f"Here is specific guidance for these tools:\n\n{tool_guidance}"
-                )
-                self.messages.append({"role": "system", "content": guidance_message})
-
-                if self.ui.verbose:
-                    self.ui.console.print(
-                        f"[dim cyan][Verbose] Added contextual guidance for tools: {tool_names}[/]"
-                    )
+            self.messages.append(
+                {"role": "user", "content": user_input}
+            )  # Keep this line
 
             self.token_manager.update_token_count(self.messages)
 
@@ -545,26 +491,3 @@ class Agent:
             animation_thread.join(timeout=1.0)
 
             self.process_llm_response(response)
-
-            # Remove the contextual tool guidance (if it was added)
-            if self.contextual_help_enabled and relevant_tools:
-                i = len(self.messages) - 1
-                removed = False
-                while i >= 0:
-                    msg = self.messages[i]
-                    if msg.get("role") == "system" and msg.get(
-                        "content", ""
-                    ).startswith(
-                        "Based on the user's request, consider using these tools:"
-                    ):
-                        self.messages.pop(i)
-                        removed = True
-                        break
-                    i -= 1
-
-                if removed and self.ui.verbose:
-                    self.ui.console.print(
-                        "[dim cyan][Verbose] Removed contextual tool guidance from conversation history[/]"
-                    )
-
-                self.token_manager.update_token_count(self.messages)

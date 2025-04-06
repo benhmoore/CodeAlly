@@ -213,12 +213,6 @@ def parse_args() -> argparse.Namespace:
         default=config.get("auto_dump", True),
         help="Disable automatic conversation dump when exiting",
     )
-    security_group.add_argument(
-        "--contextual-help",
-        action=argparse.BooleanOptionalAction,
-        default=config.get("contextual_help", True),
-        help="Enable or disable contextual tool help prompts",
-    )
 
     # Debug and diagnostics
     debug_group = parser.add_argument_group("Debug and Diagnostics")
@@ -277,7 +271,6 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
                 "auto_confirm": args.yes_to_all,
                 "check_context_msg": args.check_context_msg,
                 "auto_dump": args.auto_dump,
-                "contextual_help": args.contextual_help,
             }
         )
         save_config(new_config)
@@ -361,7 +354,6 @@ def main() -> None:
         verbose=args.verbose,
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
-        contextual_help_enabled=args.contextual_help,
     )
 
     # Set debug options

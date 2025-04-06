@@ -16,6 +16,7 @@ from code_ally.trust import TrustManager
 from code_ally.agent.token_manager import TokenManager
 from code_ally.agent.ui_manager import UIManager
 from code_ally.agent.tool_manager import ToolManager
+from code_ally.agent.task_planner import TaskPlanner
 from code_ally.agent.command_handler import CommandHandler
 from code_ally.config import load_config
 
@@ -66,6 +67,17 @@ class Agent:
         # Initialize Tool Manager
         self.tool_manager = ToolManager(tools, self.trust_manager)
         self.tool_manager.ui = self.ui
+
+        # Initialize Task Planner
+        self.task_planner = TaskPlanner(self.tool_manager)
+        self.task_planner.ui = self.ui
+        self.task_planner.set_verbose(verbose)
+        
+        # Find and configure task plan tool if available
+        for tool in tools:
+            if tool.name == "task_plan":
+                tool.set_task_planner(self.task_planner)
+                break
 
         # Initialize Command Handler
         self.command_handler = CommandHandler(

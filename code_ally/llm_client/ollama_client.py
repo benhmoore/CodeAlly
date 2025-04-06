@@ -44,6 +44,7 @@ class OllamaClient(ModelClient):
         self.context_size = context_size
         self.max_tokens = max_tokens
         self.api_url = f"{endpoint}/api/chat"
+        self.is_qwen_model = "qwen" in model_name.lower()
 
     @property
     def model_name(self) -> str:
@@ -164,6 +165,48 @@ class OllamaClient(ModelClient):
         """
         return [self._generate_schema_from_function(tool) for tool in tools]
 
+    def _get_qwen_template_options(
+        self, messages: List[Dict[str, Any]], tools: Optional[List[Callable]] = None
+    ) -> Dict[str, Any]:
+        """Generate Qwen-specific template options for function calling.
+
+        Args:
+            messages: The messages to send
+            tools: Optional list of tools to be exposed
+
+        Returns:
+            Options dict with template settings
+        """
+        if not self.is_qwen_model:
+            return {}
+
+        # Determine if we should use parallel function calls
+        enable_parallel = False
+        for msg in messages:
+            if (
+                msg.get("role") == "system"
+                and "parallel" in msg.get("content", "").lower()
+            ):
+                enable_parallel = True
+                break
+
+        # Determine language from system or user message
+        is_chinese = False
+        for msg in messages:
+            if msg.get("role") in ["system", "user"] and msg.get("content"):
+                # Simple heuristic: if there are Chinese characters in the message
+                if any("\u4e00" <= char <= "\u9fff" for char in msg.get("content", "")):
+                    is_chinese = True
+                    break
+
+        return {
+            "template": "qwen2.5_function_calling",
+            "template_params": {
+                "parallel_calls": enable_parallel,
+                "chinese": is_chinese,
+            },
+        }
+
     def send(
         self,
         messages: List[Dict[str, Any]],
@@ -196,6 +239,8 @@ class OllamaClient(ModelClient):
                 "temperature": self.temperature,
                 "num_ctx": self.context_size,
                 "num_predict": self.max_tokens,
+                # Add Qwen-specific template options for function calling
+                **self._get_qwen_template_options(messages_copy, tools),
             },
         }
 

@@ -315,7 +315,17 @@ def main() -> None:
                 f"[green]✓ Ollama is running and model '{args.model}' is available[/]"
             )
 
-    # Create the LLM client
+    # Determine client type based on model name
+    client_type = None
+    if "qwen" in args.model.lower():
+        # For Qwen models, detect if we're using Ollama
+        if args.endpoint and "ollama" in args.endpoint.lower():
+            client_type = "ollama"
+        else:
+            # Default for Qwen models is to use Qwen-Agent style formatting
+            client_type = "qwen_agent"
+
+    # Create the LLM client with appropriate type
     model_client = OllamaClient(
         endpoint=args.endpoint,
         model_name=args.model,
@@ -333,6 +343,7 @@ def main() -> None:
     # Create the agent
     agent = Agent(
         model_client=model_client,
+        client_type=client_type,
         tools=tools,
         system_prompt=system_prompt,
         verbose=args.verbose,

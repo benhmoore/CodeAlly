@@ -11,5 +11,6 @@
   "auto_dump": true,
   "theme": "default",
   "compact_threshold": 95,
-  "show_token_usage": true
+  "show_token_usage": true,
+  "qwen_template": "qwen2.5_function_calling"
 }

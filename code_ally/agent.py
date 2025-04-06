@@ -376,6 +376,7 @@ class ToolManager:
         self.tools = {tool.name: tool for tool in tools}
         self.trust_manager = trust_manager
         self.ui = None  # Will be set by the Agent class
+        self.client_type = None  # Will be set by the Agent when initialized
 
         # Track recent tool calls to avoid redundancy
         self.recent_tool_calls: List[Tuple[str, Dict[str, Any]]] = []
@@ -510,7 +511,11 @@ class ToolManager:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
     def execute_tool(
-        self, tool_name: str, arguments: Dict[str, Any], check_context_msg: bool = True
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        check_context_msg: bool = True,
+        client_type: str = None,
     ) -> Dict[str, Any]:
         """Execute a tool with the given arguments after checking trust.
 
@@ -518,6 +523,7 @@ class ToolManager:
             tool_name: The name of the tool to execute
             arguments: The arguments to pass to the tool
             check_context_msg: Whether to add context check message for redundant calls
+            client_type: The client type to use for formatting the result
 
         Returns:
             The result of the tool execution
@@ -621,6 +627,12 @@ class ToolManager:
 
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
             return result
+        except json.JSONDecodeError as json_exc:
+            logger.exception("Error parsing JSON in tool execution for %s", tool_name)
+            return {
+                "success": False,
+                "error": f"JSON Error executing {tool_name}: {str(json_exc)}",
+            }
         except Exception as exc:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
@@ -631,6 +643,22 @@ class ToolManager:
                 "success": False,
                 "error": f"Error executing {tool_name}: {str(exc)}",
             }
+
+    def format_tool_result(
+        self, result: Dict[str, Any], client_type: str = None
+    ) -> Dict[str, Any]:
+        """Format the tool result based on the client type.
+
+        Args:
+            result: The result to format
+            client_type: The client type to use for formatting
+
+        Returns:
+            The formatted result
+        """
+        client_type = client_type or self.client_type
+        # Add any client-specific formatting logic here
+        return result
 
 
 class CommandHandler:
@@ -951,6 +979,7 @@ class Agent:
         self,
         model_client: ModelClient,
         tools: List[BaseTool],
+        client_type: str = None,
         system_prompt: Optional[str] = None,
         verbose: bool = False,
         check_context_msg: bool = True,
@@ -960,6 +989,7 @@ class Agent:
 
         Args:
             model_client: The LLM client to use
+            client_type: The client type to use for formatting the result
             tools: List of available tools
             system_prompt: The system prompt to use (optional)
             verbose: Whether to enable verbose mode (defaults to False)
@@ -988,6 +1018,12 @@ class Agent:
         )
         self.command_handler.set_verbose(verbose)
         self.command_handler.agent = self  # Set the reference to this agent
+
+        if client_type is None:
+            # Attempt to detect client type automatically
+            client_type = "ollama"
+        self.client_type = client_type
+        self.tool_manager.client_type = self.client_type
 
         # Add system prompt if provided
         if system_prompt:
@@ -1032,8 +1068,11 @@ class Agent:
                 self.ui.print_tool_call(tool_name, arguments)
 
                 # Execute the tool
-                result = self.tool_manager.execute_tool(
-                    tool_name, arguments, self.check_context_msg
+                raw_result = self.tool_manager.execute_tool(
+                    tool_name, arguments, self.check_context_msg, self.client_type
+                )
+                result = self.tool_manager.format_tool_result(
+                    raw_result, self.client_type
                 )
 
                 # Add tool result to message history

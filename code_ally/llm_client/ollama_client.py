@@ -425,25 +425,57 @@ class OllamaClient(ModelClient):
             if self.is_qwen_model:
                 payload["options"]["parallel_function_calls"] = True
 
+        response = None
+        session = None
         try:
             # Log the request if in debug mode
             logger.debug(f"Sending request to Ollama: {self.api_url}")
 
-            # Send the request
-            response = requests.post(self.api_url, json=payload, timeout=240)
+            # Use a session for better cleanup on interruption
+            session = requests.Session()
+            response = session.post(
+                self.api_url, 
+                json=payload, 
+                timeout=240,
+                stream=True  # Always use stream mode to allow proper cancellation
+            )
             response.raise_for_status()
-            result = response.json()
+            
+            # Only process the response if not streaming
+            if not stream:
+                result = response.json()
+                
+                # Extract the message from the response
+                message = result.get("message", {})
+                
+                # Add robust parsing for tool calls in different formats
+                self._normalize_tool_calls_in_message(message)
+                
+                if "message" in result:
+                    return message
+                return result
+            return response
 
-            # Extract the message from the response
-            message = result.get("message", {})
-
-            # Add robust parsing for tool calls in different formats
-            self._normalize_tool_calls_in_message(message)
-
-            if "message" in result:
-                return message
-            return result
-
+        except KeyboardInterrupt:
+            # User interrupted the request
+            logger.info("Request interrupted by user")
+            # Return a special message that indicates the user interrupted the request
+            # NOTE: This is a key part of making sure Ctrl+C doesn't exit the program
+            # The interrupted flag is checked in multiple places to ensure proper handling
+            try:
+                # Clean up resources to ensure the request is cancelled
+                if response is not None:
+                    response.close()
+                if session is not None:
+                    session.close()
+            except Exception as e:
+                logger.error(f"Error cancelling request: {e}")
+            
+            return {
+                "role": "assistant",
+                "content": "[Request interrupted by user]",
+                "interrupted": True
+            }
         except requests.RequestException as e:
             # Log the error
             logger.error(f"Error communicating with Ollama: {str(e)}")

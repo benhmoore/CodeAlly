@@ -14,8 +14,20 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Pattern, Set, Tuple, Union
 
+
+class PermissionDeniedError(Exception):
+    """Raised when a user denies permission for a tool.
+    
+    This special exception allows the agent to immediately stop processing
+    and return to the main conversation loop.
+    """
+    pass
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
+# Enable debug logging for trust-related operations
+logger.setLevel(logging.DEBUG)
 
 # Commands that are not allowed for security reasons
 DISALLOWED_COMMANDS = [
@@ -206,10 +218,18 @@ class TrustManager:
         # PRIORITY 1: Check if the specific operation was approved in a batch
         if operation_id and operation_id in self.approved_operations:
             tool_path_key = self._get_tool_path_key(tool_name, path)
+            # Add more debugging to troubleshoot the issue
+            logger.debug(f"Checking batch approval for {tool_path_key} in batch {operation_id}")
+            logger.debug(f"Approved operations in batch: {self.approved_operations[operation_id]}")
+            
+            # Check for the specific key
             if tool_path_key in self.approved_operations[operation_id]:
-                logger.debug(
-                    f"Operation {operation_id} is approved for {tool_path_key}"
-                )
+                logger.debug(f"Found exact match: Operation {operation_id} is approved for {tool_path_key}")
+                return True
+            
+            # Also check if the tool itself is approved for all paths in this batch
+            if tool_name in self.approved_operations[operation_id]:
+                logger.debug(f"Tool {tool_name} is generally approved in batch {operation_id}")
                 return True
 
         # Check if the tool is in the globally trusted dictionary
@@ -268,12 +288,27 @@ class TrustManager:
         Returns:
             A unique key representing the tool and path combination
         """
-        # If path is None or not a string (e.g., dict for bash command args),
-        # just use the tool name as the key component.
-        if path is None or not isinstance(path, (str, bytes, os.PathLike)):
+        # Special handling for bash commands
+        if tool_name == "bash" and isinstance(path, dict) and "command" in path:
+            # Create a unique hash of the command
+            import hashlib
+            cmd_hash = hashlib.md5(path["command"].encode()).hexdigest()[:8]
+            return f"{tool_name}:cmd:{cmd_hash}"
+        
+        # If path is None, just use the tool name
+        if path is None:
             return tool_name
-        # Only call abspath if path is a valid path type
-        return f"{tool_name}:{os.path.abspath(path)}"
+            
+        # If path is a string, try to normalize it
+        if isinstance(path, str):
+            try:
+                return f"{tool_name}:{os.path.abspath(path)}"
+            except (TypeError, ValueError):
+                # If path can't be normalized, use as is
+                return f"{tool_name}:{path}"
+        
+        # For other types, just return the tool name
+        return tool_name
 
     def trust_tool(self, tool_name: str, path: Optional[str] = None) -> None:
         """Mark a tool as trusted for the given path.
@@ -293,12 +328,13 @@ class TrustManager:
             logger.info(f"Trusting {tool_name} for path: {normalized_path}")
             self.trusted_tools[tool_name].add(normalized_path)
 
-    def prompt_for_permission(self, tool_name: str, path: Optional[str] = None) -> bool:
+    def prompt_for_permission(self, tool_name: str, path: Optional[str] = None, batch_id: Optional[str] = None) -> bool:
         """Prompt the user for permission to use a tool.
 
         Args:
             tool_name: The name of the tool
             path: The path being accessed (if applicable)
+            batch_id: Optional batch operation ID for group permissions
 
         Returns:
             Whether permission was granted
@@ -308,8 +344,9 @@ class TrustManager:
             logger.info(f"Auto-confirming {tool_name} for {path}")
             return True
 
-        if self.is_trusted(tool_name, path):
-            logger.info(f"Tool {tool_name} is already trusted for {path}")
+        # Check if this tool+path is already trusted via any method (including batch ID)
+        if self.is_trusted(tool_name, path, batch_id):
+            logger.info(f"Tool {tool_name} is already trusted for {path} (batch ID: {batch_id})")
             return True
 
         # Build the prompt message with visual emphasis and special handling for bash
@@ -408,7 +445,8 @@ class TrustManager:
                 return True
             elif permission == "n" or permission == "no":
                 logger.info(f"User denied permission for {tool_name}")
-                return False
+                console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+                raise PermissionDeniedError(f"User denied permission for {tool_name}")
             elif permission == "a" or permission == "always":
                 logger.info(f"User granted permanent permission for {tool_name}")
                 # For bash command, just trust the tool itself rather than the specific command
@@ -447,7 +485,11 @@ class TrustManager:
             return True
         elif permission == "n" or permission == "no":
             logger.info(f"User denied permission for {tool_name}")
-            return False
+            # Raise a special exception to interrupt processing
+            from rich.console import Console
+            console = Console()
+            console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+            raise PermissionDeniedError(f"User denied permission for {tool_name}")
         elif permission == "a" or permission == "always":
             logger.info(f"User granted permanent permission for {tool_name}")
             # Just trust the tool itself rather than the specific path
@@ -481,8 +523,16 @@ class TrustManager:
             # Still need to populate the approved cache even in auto-confirm mode
             self.approved_operations[batch_id] = set()
             for tool_name, path in operations:
+                # Add the specific tool-path combination
                 tool_path_key = self._get_tool_path_key(tool_name, path)
                 self.approved_operations[batch_id].add(tool_path_key)
+                
+                # Also add just the tool name to handle cases where path formatting might differ
+                self.approved_operations[batch_id].add(tool_name)
+                
+                # For debugging purposes
+                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
+                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
             return True
 
         # Create a visually distinct panel for the permission prompt
@@ -518,8 +568,16 @@ class TrustManager:
             )
             self.approved_operations[batch_id] = set()
             for tool_name, path in operations:
+                # Add the specific tool-path combination
                 tool_path_key = self._get_tool_path_key(tool_name, path)
                 self.approved_operations[batch_id].add(tool_path_key)
+                
+                # Also add just the tool name to handle cases where path formatting might differ
+                self.approved_operations[batch_id].add(tool_name)
+                
+                # For debugging purposes
+                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
+                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
             return True
         else:
             logger.info(

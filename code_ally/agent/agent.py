@@ -12,11 +12,13 @@ import concurrent.futures
 from typing import Any, Dict, List, Optional, Tuple
 
 from code_ally.llm_client import ModelClient
-from code_ally.trust import TrustManager
+from code_ally.trust import TrustManager, PermissionDeniedError
 from code_ally.agent.token_manager import TokenManager
 from code_ally.agent.ui_manager import UIManager
 from code_ally.agent.tool_manager import ToolManager
+from code_ally.agent.task_planner import TaskPlanner
 from code_ally.agent.command_handler import CommandHandler
+from code_ally.agent.error_handler import display_error
 from code_ally.config import load_config
 
 logger = logging.getLogger(__name__)
@@ -54,10 +56,12 @@ class Agent:
         self.check_context_msg = check_context_msg
         self.parallel_tools = parallel_tools
         self.auto_dump = auto_dump
+        self.request_in_progress = False  # Flag to track if an API request is in progress
 
         # Initialize UI
         self.ui = UIManager()
         self.ui.set_verbose(verbose)
+        self.ui.agent = self  # Provide a reference to the agent
 
         # Initialize Token Manager
         self.token_manager = TokenManager(model_client.context_size)
@@ -66,6 +70,17 @@ class Agent:
         # Initialize Tool Manager
         self.tool_manager = ToolManager(tools, self.trust_manager)
         self.tool_manager.ui = self.ui
+
+        # Initialize Task Planner
+        self.task_planner = TaskPlanner(self.tool_manager)
+        self.task_planner.ui = self.ui
+        self.task_planner.set_verbose(verbose)
+        
+        # Find and configure task plan tool if available
+        for tool in tools:
+            if tool.name == "task_plan":
+                tool.set_task_planner(self.task_planner)
+                break
 
         # Initialize Command Handler
         self.command_handler = CommandHandler(
@@ -116,10 +131,14 @@ class Agent:
             self.token_manager.update_token_count(self.messages)
 
             # Process tools
-            if self.parallel_tools and len(tool_calls) > 1:
-                self._process_parallel_tool_calls(tool_calls)
-            else:
-                self._process_sequential_tool_calls(tool_calls)
+            try:
+                if self.parallel_tools and len(tool_calls) > 1:
+                    self._process_parallel_tool_calls(tool_calls)
+                else:
+                    self._process_sequential_tool_calls(tool_calls)
+            except PermissionDeniedError:
+                # Permission was denied by user; return to main conversation loop
+                return
 
             # Get a follow-up response
             animation_thread = self.ui.start_thinking_animation(
@@ -135,34 +154,54 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
-            follow_up_response = self.model_client.send(
-                self.messages,
-                functions=self.tool_manager.get_function_definitions(),
-                include_reasoning=self.ui.verbose,
-            )
-
-            if self.ui.verbose:
-                has_tool_calls = (
-                    "tool_calls" in follow_up_response
-                    and follow_up_response["tool_calls"]
+            try:
+                self.request_in_progress = True  # Set flag before sending request
+                follow_up_response = self.model_client.send(
+                    self.messages,
+                    functions=self.tool_manager.get_function_definitions(),
+                    include_reasoning=self.ui.verbose,
                 )
-                tool_names = []
-                if has_tool_calls:
-                    for tc in follow_up_response["tool_calls"]:
-                        if "function" in tc and "name" in tc["function"]:
-                            tool_names.append(tc["function"]["name"])
+                self.request_in_progress = False  # Clear flag after response received
 
-                resp_type = "tool calls" if has_tool_calls else "text response"
-                tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
-                self.ui.console.print(
-                    f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]"
-                )
+                # Special handling for interrupted requests
+                if (follow_up_response.get("content", "").strip() == "[Request interrupted by user]" or
+                    follow_up_response.get("content", "").strip() == "[Request interrupted by user for tool use]" or
+                    follow_up_response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
+                    follow_up_response.get("interrupted", False)):
+                    # Make absolutely sure the flag is cleared
+                    self.request_in_progress = False
+                    self.ui.stop_thinking_animation()
+                    animation_thread.join(timeout=1.0)
+                    self.ui.print_content("[yellow]Request interrupted by user[/]")
+                    return  # Exit without processing response
+                    
+                if self.ui.verbose:
+                    has_tool_calls = (
+                        "tool_calls" in follow_up_response
+                        and follow_up_response["tool_calls"]
+                    )
+                    tool_names = []
+                    if has_tool_calls:
+                        for tc in follow_up_response["tool_calls"]:
+                            if "function" in tc and "name" in tc["function"]:
+                                tool_names.append(tc["function"]["name"])
 
-            self.ui.stop_thinking_animation()
-            animation_thread.join(timeout=1.0)
+                    resp_type = "tool calls" if has_tool_calls else "text response"
+                    tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
+                    self.ui.console.print(
+                        f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]"
+                    )
 
-            # Recursively process the follow-up
-            self.process_llm_response(follow_up_response)
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+
+                # Recursively process the follow-up
+                self.process_llm_response(follow_up_response)
+            except KeyboardInterrupt:
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+                self.ui.print_content("[yellow]Request interrupted by user[/]")
+                return  # Exit without processing response
 
         else:
             # Normal text response
@@ -218,9 +257,26 @@ class Agent:
                 self.ui.print_tool_call(tool_name, arguments)
 
                 # Execute
-                raw_result = self.tool_manager.execute_tool(
-                    tool_name, arguments, self.check_context_msg, self.client_type
-                )
+                try:
+                    raw_result = self.tool_manager.execute_tool(
+                        tool_name, arguments, self.check_context_msg, self.client_type
+                    )
+                except PermissionDeniedError:
+                    # User denied permission, add a special message to history
+                    self.messages.append({
+                        "role": "assistant",
+                        "content": "[Request interrupted by user due to permission denial]"
+                    })
+                    self.token_manager.update_token_count(self.messages)
+                    raise  # Re-raise to exit the entire process
+                
+                # Check for errors and provide acknowledgement if needed
+                if not raw_result.get("success", False):
+                    error_msg = raw_result.get("error", "Unknown error")
+                    
+                    # Display formatted error with suggestions
+                    display_error(self.ui, error_msg, tool_name, arguments)
+                
                 result = self.tool_manager.format_tool_result(
                     raw_result, self.client_type
                 )
@@ -238,6 +294,9 @@ class Agent:
                     }
                 )
 
+            except PermissionDeniedError:
+                # Let this propagate up to abort the whole process
+                raise
             except Exception as e:
                 logger.exception(f"Error processing tool call: {e}")
                 self.ui.print_error(f"Error processing tool call: {str(e)}")
@@ -326,6 +385,18 @@ class Agent:
                 call_id, tool_name = future_to_call[future]
                 try:
                     raw_result = future.result()
+                    
+                    # Check for errors and provide acknowledgement if needed
+                    if not raw_result.get("success", False):
+                        error_msg = raw_result.get("error", "Unknown error")
+                        
+                        # Get arguments for this tool call
+                        for _, t_name, args in normalized_calls:
+                            if t_name == tool_name and call_id == future_to_call[future][0]:
+                                # Display formatted error with suggestions
+                                display_error(self.ui, error_msg, tool_name, args)
+                                break
+                    
                     result = self.tool_manager.format_tool_result(
                         raw_result, self.client_type
                     )
@@ -448,6 +519,16 @@ class Agent:
                 if handled:
                     continue
 
+            # Check for special messages after permission denial
+            last_message = self.messages[-1] if self.messages else None
+            if (last_message and last_message.get("role") == "assistant" and
+                last_message.get("content", "").strip() == "[Request interrupted by user due to permission denial]"):
+                # Replace the permission denial message with a more useful one
+                self.messages[-1] = {
+                    "role": "assistant",
+                    "content": "I understand you denied permission. Let me know how I can better assist you."
+                }
+
             self.messages.append(
                 {"role": "user", "content": user_input}
             )  # Keep this line
@@ -468,26 +549,48 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
-            response = self.model_client.send(
-                self.messages,
-                functions=self.tool_manager.get_function_definitions(),
-                include_reasoning=self.ui.verbose,
-            )
-
-            if self.ui.verbose:
-                has_tool_calls = "tool_calls" in response and response["tool_calls"]
-                tool_names = []
-                if has_tool_calls:
-                    for tc in response["tool_calls"]:
-                        if "function" in tc and "name" in tc["function"]:
-                            tool_names.append(tc["function"]["name"])
-                resp_type = "tool calls" if has_tool_calls else "text response"
-                tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
-                self.ui.console.print(
-                    f"[dim blue][Verbose] Received {resp_type}{tools_info} from LLM[/]"
+            try:
+                self.request_in_progress = True  # Set flag before sending request
+                response = self.model_client.send(
+                    self.messages,
+                    functions=self.tool_manager.get_function_definitions(),
+                    include_reasoning=self.ui.verbose,
                 )
+                self.request_in_progress = False  # Clear flag after response received
+                
+                # Special handling for interrupted requests
+                if (response.get("content", "").strip() == "[Request interrupted by user]" or
+                    response.get("content", "").strip() == "[Request interrupted by user for tool use]" or 
+                    response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
+                    response.get("interrupted", False)):
+                    # Make absolutely sure the flag is cleared
+                    self.request_in_progress = False
+                    self.ui.stop_thinking_animation()
+                    animation_thread.join(timeout=1.0)
+                    self.ui.print_content("[yellow]Request interrupted by user[/]")
+                    return  # Get new user input
+                
+                if self.ui.verbose:
+                    has_tool_calls = "tool_calls" in response and response["tool_calls"]
+                    tool_names = []
+                    if has_tool_calls:
+                        for tc in response["tool_calls"]:
+                            if "function" in tc and "name" in tc["function"]:
+                                tool_names.append(tc["function"]["name"])
+                    resp_type = "tool calls" if has_tool_calls else "text response"
+                    tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
+                    self.ui.console.print(
+                        f"[dim blue][Verbose] Received {resp_type}{tools_info} from LLM[/]"
+                    )
 
-            self.ui.stop_thinking_animation()
-            animation_thread.join(timeout=1.0)
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
 
-            self.process_llm_response(response)
+                self.process_llm_response(response)
+            except KeyboardInterrupt:
+                # Make absolutely sure the flag is cleared
+                self.request_in_progress = False
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+                self.ui.print_content("[yellow]Request interrupted by user[/]")
+                # Continue the conversation loop without processing this response

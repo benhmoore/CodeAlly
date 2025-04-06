@@ -333,13 +333,13 @@ class CommandHandler:
     def compact_conversation(
         self, messages: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Compact the conversation to reduce context size.
+        """Compact the conversation to reduce context size by generating a summary.
 
         Args:
             messages: Current message list
 
         Returns:
-            Compacted message list
+            Compacted message list with generated summary
         """
         if self.verbose:
             message_count = len(messages)
@@ -351,43 +351,97 @@ class CommandHandler:
                 f"({percent_used}% of context)[/]"
             )
 
-        # Preserve system message
-        system_message = None
+        # Find the initial system message (if any)
+        initial_system_message = None
         for msg in messages:
             if msg.get("role") == "system":
-                system_message = msg
+                initial_system_message = msg
                 break
 
-        # If we have fewer than 4 messages, nothing to compact
-        if len(messages) < 4:
+        # If we have fewer than 3 messages, nothing to compact
+        if len(messages) < 3:
             if self.verbose:
                 self.ui.console.print(
                     f"[dim yellow][Verbose] Not enough messages to compact (only {len(messages)} messages)[/]"
                 )
             return messages
 
+        # Start building compacted message list
         compacted = []
-        if system_message:
-            compacted.append(system_message)
+        if initial_system_message:
+            compacted.append(initial_system_message)
+            # Determine which messages to summarize (everything except the initial system message)
+            messages_to_summarize = [
+                msg for msg in messages if msg != initial_system_message
+            ]
+        else:
+            # If no system message, summarize everything
+            messages_to_summarize = messages
 
-        # Keep first user message for context
-        first_user_msg_found = False
-        for msg in messages:
-            if msg.get("role") == "user" and not first_user_msg_found:
-                compacted.append(msg)
-                first_user_msg_found = True
-                break
+        if len(messages_to_summarize) < 2:
+            # Not enough to summarize meaningfully
+            if self.verbose:
+                self.ui.console.print(
+                    f"[dim yellow][Verbose] Not enough messages to summarize meaningfully[/]"
+                )
+            return messages
 
-        # Add a summary marker
-        compacted.append(
+        # Create a temporary message list to send to the LLM for summarization
+        summarization_request = []
+
+        # Add a system message asking for summarization
+        summarization_request.append(
             {
                 "role": "system",
-                "content": get_system_message("compaction_notice"),
+                "content": "You are an AI assistant helping to summarize a conversation. "
+                "Create a concise, short-hand summary of the key points discussed and any conclusions reached."
+                "Keep it brief and informative. Use sentence fragments and bullet points instead of full sentences.",
             }
         )
 
-        # Keep the last 6 messages for recent context
-        compacted.extend(messages[-6:])
+        # Add messages to be summarized
+        summarization_request.extend(messages_to_summarize)
+
+        # Add a final user request to summarize
+        summarization_request.append(
+            {
+                "role": "user",
+                "content": "Please provide a concise summary of this conversation that captures the important "
+                "points, questions, and answers. Keep it brief but include key details.",
+            }
+        )
+
+        # Generate animation to show we're creating a summary
+        self.ui.print_content("Generating conversation summary...", style="dim blue")
+        animation_thread = self.ui.start_thinking_animation(0)
+
+        try:
+            # Use the model client to generate a summary
+            if hasattr(self, "agent") and hasattr(self.agent, "model_client"):
+                model_client = self.agent.model_client
+                response = model_client.send(summarization_request, functions=None)
+                summary = response.get("content", "")
+            else:
+                # Fallback if model client isn't accessible
+                summary = (
+                    "Conversation history has been compacted to save context space."
+                )
+        except Exception as e:
+            # If summarization fails, use a default message
+            if self.verbose:
+                self.ui.console.print(
+                    f"[dim red][Verbose] Error generating summary: {str(e)}[/]"
+                )
+            summary = "Conversation history has been compacted to save context space."
+        finally:
+            # Stop the animation
+            self.ui.stop_thinking_animation()
+            animation_thread.join(timeout=1.0)
+
+        # Add the generated summary as a system message
+        compacted.append(
+            {"role": "system", "content": f"CONVERSATION SUMMARY: {summary}"}
+        )
 
         self.token_manager.last_compaction_time = time.time()
 

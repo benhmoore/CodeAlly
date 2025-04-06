@@ -114,9 +114,7 @@ def get_main_system_prompt() -> str:
     Returns:
         The system prompt string with directives and tool list.
     """
-    tool_list = (
-        ToolRegistry().get_tools_for_prompt()
-    )  # Assumes ToolRegistry is implemented
+    tool_list = ToolRegistry().get_tools_for_prompt()
 
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     working_dir = ""
@@ -166,7 +164,6 @@ SYSTEM_MESSAGES = {
     "main_prompt": get_main_system_prompt(),
     "compaction_notice": "Conversation history compacted to save context space.",
     "verbose_thinking": "IMPORTANT: For this response only, first explain your complete reasoning process, starting with: 'THINKING: '. After your reasoning, provide your final response.",
-    # Add other specific messages as needed
 }
 
 
@@ -187,21 +184,8 @@ def get_tool_guidance(tool_name: Optional[str] = None) -> str:
 def detect_relevant_tools(user_message: str) -> List[str]:
     """Detect potentially relevant tools based on keywords in the user message."""
     message_lower = user_message.lower()
-    relevant_tools = set()  # Use a set to avoid duplicates
-
-    # Keyword mapping (simplified example, refine as needed)
+    relevant_tools = set()
     tool_keywords = {
-        "git": [
-            "git",
-            "commit",
-            "branch",
-            "merge",
-            "pull",
-            "push",
-            "repo",
-            "clone",
-            "checkout",
-        ],
         "file": [
             "file",
             "read",
@@ -240,7 +224,6 @@ def detect_relevant_tools(user_message: str) -> List[str]:
             "pattern",
             "contain",
         ],
-        # Add other tools like 'math' if applicable
     }
 
     for tool, keywords in tool_keywords.items():

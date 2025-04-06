@@ -19,7 +19,7 @@ dev_requires = read_requirements("requirements-dev.txt")
 
 setup(
     name="code-ally",
-    version="0.3.51",
+    version="0.3.6",
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={

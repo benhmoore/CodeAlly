@@ -160,43 +160,174 @@ class CommandHandler:
 
         key, value = parts[0].strip(), parts[1].strip()
 
-        # Handle special cases
-        if key == "auto_confirm":
-            value_lower = value.lower()
-            if value_lower in ("true", "yes", "y", "1"):
-                self.trust_manager.set_auto_confirm(True)
-                config["auto_confirm"] = True
-            elif value_lower in ("false", "no", "n", "0"):
-                self.trust_manager.set_auto_confirm(False)
-                config["auto_confirm"] = False
-            else:
-                self.ui.print_error(
-                    "Invalid value for auto_confirm. Use 'true' or 'false'."
+        # Handle special cases with type conversion
+        try:
+            if key == "auto_confirm":
+                value_lower = value.lower()
+                if value_lower in ("true", "yes", "y", "1"):
+                    self.trust_manager.set_auto_confirm(True)
+                    config["auto_confirm"] = True
+                elif value_lower in ("false", "no", "n", "0"):
+                    self.trust_manager.set_auto_confirm(False)
+                    config["auto_confirm"] = False
+                else:
+                    self.ui.print_error(
+                        "Invalid value for auto_confirm. Use 'true' or 'false'."
+                    )
+                    return True, messages
+
+            elif key == "auto_dump":
+                value_lower = value.lower()
+                if value_lower in ("true", "yes", "y", "1"):
+                    if self.agent:
+                        self.agent.auto_dump = True
+                    config["auto_dump"] = True
+                elif value_lower in ("false", "no", "n", "0"):
+                    if self.agent:
+                        self.agent.auto_dump = False
+                    config["auto_dump"] = False
+                else:
+                    self.ui.print_error(
+                        "Invalid value for auto_dump. Use 'true' or 'false'."
+                    )
+                    return True, messages
+
+            # LLM model client settings
+            elif key == "temperature" and self.agent and self.agent.model_client:
+                try:
+                    temp_value = float(value)
+                    self.agent.model_client.temperature = temp_value
+                    config["temperature"] = temp_value
+                    self.ui.print_success(
+                        f"Temperature updated to {temp_value} for current session"
+                    )
+                except ValueError:
+                    self.ui.print_error(
+                        f"Invalid temperature value: {value}. Must be a number."
+                    )
+                    return True, messages
+
+            elif key == "context_size" and self.agent and self.agent.model_client:
+                try:
+                    ctx_value = int(value)
+                    self.agent.model_client.context_size = ctx_value
+                    self.agent.token_manager.context_size = (
+                        ctx_value  # Update token manager too
+                    )
+                    config["context_size"] = ctx_value
+                    self.ui.print_success(
+                        f"Context size updated to {ctx_value} for current session"
+                    )
+                except ValueError:
+                    self.ui.print_error(
+                        f"Invalid context_size value: {value}. Must be a number."
+                    )
+                    return True, messages
+
+            elif key == "max_tokens" and self.agent and self.agent.model_client:
+                try:
+                    max_tok_value = int(value)
+                    self.agent.model_client.max_tokens = max_tok_value
+                    config["max_tokens"] = max_tok_value
+                    self.ui.print_success(
+                        f"Max tokens updated to {max_tok_value} for current session"
+                    )
+                except ValueError:
+                    self.ui.print_error(
+                        f"Invalid max_tokens value: {value}. Must be a number."
+                    )
+                    return True, messages
+
+            elif key == "model" and self.agent and self.agent.model_client:
+                current_model = self.agent.model_client.model_name
+                self.ui.print_warning(
+                    f"Model can't be changed in current session (current: {current_model}). "
+                    f"This setting will apply on restart."
                 )
-                return True, messages
+                config["model"] = value
 
-        elif key == "auto_dump":
-            value_lower = value.lower()
-            if value_lower in ("true", "yes", "y", "1"):
-                if self.agent:
-                    self.agent.auto_dump = True
-                config["auto_dump"] = True
-            elif value_lower in ("false", "no", "n", "0"):
-                if self.agent:
-                    self.agent.auto_dump = False
-                config["auto_dump"] = False
+            elif key == "check_context_msg" and self.agent:
+                value_lower = value.lower()
+                if value_lower in ("true", "yes", "y", "1"):
+                    self.agent.check_context_msg = True
+                    config["check_context_msg"] = True
+                    self.ui.print_success(
+                        "Check context message enabled for current session"
+                    )
+                elif value_lower in ("false", "no", "n", "0"):
+                    self.agent.check_context_msg = False
+                    config["check_context_msg"] = False
+                    self.ui.print_success(
+                        "Check context message disabled for current session"
+                    )
+                else:
+                    self.ui.print_error(
+                        "Invalid value for check_context_msg. Use 'true' or 'false'."
+                    )
+                    return True, messages
+
+            elif key == "parallel_tools" and self.agent:
+                value_lower = value.lower()
+                if value_lower in ("true", "yes", "y", "1"):
+                    self.agent.parallel_tools = True
+                    config["parallel_tools"] = True
+                    self.ui.print_success("Parallel tools enabled for current session")
+                elif value_lower in ("false", "no", "n", "0"):
+                    self.agent.parallel_tools = False
+                    config["parallel_tools"] = False
+                    self.ui.print_success("Parallel tools disabled for current session")
+                else:
+                    self.ui.print_error(
+                        "Invalid value for parallel_tools. Use 'true' or 'false'."
+                    )
+                    return True, messages
+
+            elif key == "compact_threshold" and self.agent and self.agent.token_manager:
+                try:
+                    threshold = int(value)
+                    self.agent.token_manager.token_buffer_ratio = threshold / 100.0
+                    config["compact_threshold"] = threshold
+                    self.ui.print_success(
+                        f"Compact threshold updated to {threshold}% for current session"
+                    )
+                except ValueError:
+                    self.ui.print_error(
+                        f"Invalid compact_threshold value: {value}. Must be a number."
+                    )
+                    return True, messages
+
+            elif key == "verbose" and self.agent:
+                value_lower = value.lower()
+                if value_lower in ("true", "yes", "y", "1"):
+                    self.agent.ui.set_verbose(True)
+                    self.set_verbose(True)
+                    config["verbose"] = True
+                    self.ui.print_success("Verbose mode enabled for current session")
+                elif value_lower in ("false", "no", "n", "0"):
+                    self.agent.ui.set_verbose(False)
+                    self.set_verbose(False)
+                    config["verbose"] = False
+                    self.ui.print_success("Verbose mode disabled for current session")
+                else:
+                    self.ui.print_error(
+                        "Invalid value for verbose. Use 'true' or 'false'."
+                    )
+                    return True, messages
+
             else:
-                self.ui.print_error(
-                    "Invalid value for auto_dump. Use 'true' or 'false'."
+                # For other settings, just update the config file
+                config[key] = value
+                self.ui.print_success(
+                    f"Configuration {key}={value} will apply on restart"
                 )
-                return True, messages
 
-        else:
-            # Update config with the new value
-            config[key] = value
+        except Exception as e:
+            self.ui.print_error(f"Error updating configuration: {str(e)}")
+            return True, messages
 
+        # Save to config file
         save_config(config)
-        self.ui.print_success(f"Configuration updated: {key}={value}")
+        self.ui.print_success(f"Configuration updated and saved: {key}={value}")
         return True, messages
 
     def compact_conversation(

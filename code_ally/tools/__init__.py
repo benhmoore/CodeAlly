@@ -15,6 +15,10 @@ from .grep import GrepTool
 from .read import FileReadTool
 from .registry import ToolRegistry, register_tool
 from .write import FileWriteTool
+from .code import CodeStructureAnalyzerTool
+from .batch import BatchOperationTool
+from .directory import DirectoryTool
+from .refactor import RefactorTool
 
 # Public API
 __all__ = [
@@ -30,6 +34,9 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "CodeStructureAnalyzerTool",
+    "BatchOperationTool",
+    "DirectoryTool",
+    "RefactorTool",
 ]
 
 # Create registry instance to ensure all tools are registered

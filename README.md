@@ -211,8 +211,11 @@ Note: To exit Code Ally, press `Ctrl+C` or `Ctrl+D`.
 | `file_write` | Write content to a file (creates or overwrites)                     |
 | `file_edit`  | Edit an existing file by replacing a specific portion               |
 | `bash`       | Execute a shell command and return its output                       |
+| `batch`      | Execute operations on multiple files with pattern matching          |
+| `directory`  | Reorganize project directories and manage file structures           |
 | `glob`       | Find files matching a glob pattern with improved context efficiency |
 | `grep`       | Search for a pattern in files                                       |
+| `refactor`   | Perform code refactoring operations across multiple files           |
 
 ## 🔒 Security Considerations
 

@@ -448,10 +448,12 @@ class OllamaClient(ModelClient):
             # User interrupted the request
             logger.info("Request interrupted by user")
             # Return a special message that indicates the user interrupted the request
+            # NOTE: This is a key part of making sure Ctrl+C doesn't exit the program
+            # The interrupted flag is checked in multiple places to ensure proper handling
             return {
                 "role": "assistant",
                 "content": "[Request interrupted by user]",
-                "interrupted": True  # Add a flag to help identify interruptions
+                "interrupted": True
             }
         except requests.RequestException as e:
             # Log the error

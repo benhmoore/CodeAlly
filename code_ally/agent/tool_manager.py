@@ -296,6 +296,12 @@ class ToolManager:
                     f"[dim blue][Verbose] Tool {tool_name} requires confirmation[/]"
                 )
 
+            # Log batch_id for debugging
+            if batch_id:
+                logger.info(f"Checking permission for {tool_name} with batch_id: {batch_id}")
+            else:
+                logger.info(f"Checking permission for {tool_name} WITHOUT batch_id")
+
             # For bash tool, pass arguments.command as the path
             if tool_name == "bash" and "command" in arguments:
                 permission_path = arguments
@@ -307,7 +313,10 @@ class ToolManager:
                         permission_path = arg_value
                         break
 
-            if not self.trust_manager.is_trusted(tool_name, permission_path, batch_id):
+            # Check if this is trusted based on the batch_id
+            is_trusted = self.trust_manager.is_trusted(tool_name, permission_path, batch_id)
+            if not is_trusted:
+                logger.info(f"Tool {tool_name} is NOT trusted with batch_id: {batch_id}")
                 try:
                     permission_granted = self.trust_manager.prompt_for_permission(tool_name, permission_path, batch_id)
                     if not permission_granted:
@@ -323,6 +332,8 @@ class ToolManager:
                     # If prompt_for_permission throws an exception (likely PermissionDeniedError)
                     # let it propagate upward to interrupt the process
                     raise
+            else:
+                logger.info(f"Tool {tool_name} is already trusted with batch_id: {batch_id}")
 
         # Execute the tool
         try:

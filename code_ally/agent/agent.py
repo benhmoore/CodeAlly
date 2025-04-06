@@ -168,6 +168,8 @@ class Agent:
                     follow_up_response.get("content", "").strip() == "[Request interrupted by user for tool use]" or
                     follow_up_response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
                     follow_up_response.get("interrupted", False)):
+                    # Make absolutely sure the flag is cleared
+                    self.request_in_progress = False
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
@@ -561,6 +563,8 @@ class Agent:
                     response.get("content", "").strip() == "[Request interrupted by user for tool use]" or 
                     response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
                     response.get("interrupted", False)):
+                    # Make absolutely sure the flag is cleared
+                    self.request_in_progress = False
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
@@ -584,7 +588,8 @@ class Agent:
 
                 self.process_llm_response(response)
             except KeyboardInterrupt:
-                self.request_in_progress = False  # Clear flag when interrupted
+                # Make absolutely sure the flag is cleared
+                self.request_in_progress = False
                 self.ui.stop_thinking_animation()
                 animation_thread.join(timeout=1.0)
                 self.ui.print_content("[yellow]Request interrupted by user[/]")

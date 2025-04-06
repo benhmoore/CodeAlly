@@ -10,6 +10,7 @@ import argparse
 import json
 import logging
 import os
+import signal
 import sys
 from typing import Any, Dict, Optional, Tuple
 
@@ -32,6 +33,29 @@ logging.basicConfig(
     handlers=[RichHandler(rich_tracebacks=True)],
 )
 logger = logging.getLogger("code_ally")
+
+# Global reference to the agent for signal handling
+_global_agent = None
+
+def handle_interrupt(signum, frame):
+    """Handle keyboard interrupt (SIGINT) signals.
+    
+    If a request is in progress, just let the agent handle it internally.
+    Otherwise, exit the program.
+    """
+    global _global_agent
+    
+    if _global_agent and _global_agent.request_in_progress:
+        # If a request is in progress, let the agent handle it
+        # by doing nothing here (not propagating the signal)
+        logger.debug("Keyboard interrupt caught, but request in progress - letting agent handle it")
+        return
+    else:
+        # Otherwise, exit like normal
+        logger.debug("Keyboard interrupt caught with no request in progress - exiting")
+        console = Console()
+        console.print("\n[bold]Goodbye![/]")
+        sys.exit(0)
 
 
 def configure_logging(verbose: bool) -> None:
@@ -364,33 +388,30 @@ def main() -> None:
     if args.yes_to_all:
         agent.trust_manager.set_auto_confirm(True)
         logger.warning("Auto-confirm mode enabled - will skip all confirmation prompts")
-
+        
+    # Set up the global agent reference for signal handling
+    global _global_agent
+    _global_agent = agent
+    
+    # Install signal handler for SIGINT (Ctrl+C)
+    signal.signal(signal.SIGINT, handle_interrupt)
+    
     try:
         # Run the conversation loop
         agent.run_conversation()
     except KeyboardInterrupt:
-        # Only exit if no request is in progress
-        if not agent.request_in_progress:
-            # Only dump conversation if auto_dump is enabled
-            if agent.auto_dump:  # Use agent's property instead of args.auto_dump
-                try:
-                    agent.command_handler.dump_conversation(agent.messages, "")
-                    console.print("\n[bold]Goodbye![/]")
-                except Exception as e:
-                    console.print(f"\n[bold red]Error during auto-dump: {str(e)}[/]")
-                    console.print("[bold]Goodbye![/]")
-            else:
-                console.print("\n[bold]Goodbye![/]")
-            sys.exit(0)
-        else:
-            # If a request is in progress, let it be handled by the agent's internal
-            # KeyboardInterrupt handlers and continue with the conversation loop
+        # This should only happen if our signal handler didn't catch it
+        # or if it happens during agent initialization - handle it gracefully
+        if agent.auto_dump:
             try:
-                agent.run_conversation()
+                agent.command_handler.dump_conversation(agent.messages, "")
+                console.print("\n[bold]Goodbye![/]")
             except Exception as e:
-                logger.exception("Error after resuming conversation:")
-                console.print(f"\n[bold red]Error: {str(e)}[/]")
-                sys.exit(1)
+                console.print(f"\n[bold red]Error during auto-dump: {str(e)}[/]")
+                console.print("[bold]Goodbye![/]")
+        else:
+            console.print("\n[bold]Goodbye![/]")
+        sys.exit(0)
     except requests.exceptions.RequestException as e:
         console.print(f"\n[bold red]Error connecting to Ollama:[/] {str(e)}")
         print_ollama_instructions(args.endpoint, args.model, str(e))

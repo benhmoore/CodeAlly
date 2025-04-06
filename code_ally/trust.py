@@ -26,6 +26,8 @@ class PermissionDeniedError(Exception):
 
 # Configure logging
 logger = logging.getLogger(__name__)
+# Enable debug logging for trust-related operations
+logger.setLevel(logging.DEBUG)
 
 # Commands that are not allowed for security reasons
 DISALLOWED_COMMANDS = [
@@ -216,10 +218,18 @@ class TrustManager:
         # PRIORITY 1: Check if the specific operation was approved in a batch
         if operation_id and operation_id in self.approved_operations:
             tool_path_key = self._get_tool_path_key(tool_name, path)
+            # Add more debugging to troubleshoot the issue
+            logger.debug(f"Checking batch approval for {tool_path_key} in batch {operation_id}")
+            logger.debug(f"Approved operations in batch: {self.approved_operations[operation_id]}")
+            
+            # Check for the specific key
             if tool_path_key in self.approved_operations[operation_id]:
-                logger.debug(
-                    f"Operation {operation_id} is approved for {tool_path_key}"
-                )
+                logger.debug(f"Found exact match: Operation {operation_id} is approved for {tool_path_key}")
+                return True
+            
+            # Also check if the tool itself is approved for all paths in this batch
+            if tool_name in self.approved_operations[operation_id]:
+                logger.debug(f"Tool {tool_name} is generally approved in batch {operation_id}")
                 return True
 
         # Check if the tool is in the globally trusted dictionary
@@ -513,8 +523,16 @@ class TrustManager:
             # Still need to populate the approved cache even in auto-confirm mode
             self.approved_operations[batch_id] = set()
             for tool_name, path in operations:
+                # Add the specific tool-path combination
                 tool_path_key = self._get_tool_path_key(tool_name, path)
                 self.approved_operations[batch_id].add(tool_path_key)
+                
+                # Also add just the tool name to handle cases where path formatting might differ
+                self.approved_operations[batch_id].add(tool_name)
+                
+                # For debugging purposes
+                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
+                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
             return True
 
         # Create a visually distinct panel for the permission prompt
@@ -550,8 +568,16 @@ class TrustManager:
             )
             self.approved_operations[batch_id] = set()
             for tool_name, path in operations:
+                # Add the specific tool-path combination
                 tool_path_key = self._get_tool_path_key(tool_name, path)
                 self.approved_operations[batch_id].add(tool_path_key)
+                
+                # Also add just the tool name to handle cases where path formatting might differ
+                self.approved_operations[batch_id].add(tool_name)
+                
+                # For debugging purposes
+                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
+                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
             return True
         else:
             logger.info(

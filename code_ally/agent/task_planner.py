@@ -281,6 +281,8 @@ class TaskPlanner:
                     self.ui.print_tool_call(tool_name, arguments)
                 
                 # Execute the tool - pass the batch_id for permission tracking
+                # Log to help debug the permission issue
+                logger.info(f"Executing task '{task_id}' with tool '{tool_name}' using batch_id: {batch_id}")
                 raw_result = self.tool_manager.execute_tool(
                     tool_name, arguments, True, client_type, batch_id
                 )

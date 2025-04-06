@@ -125,11 +125,19 @@ class UIManager:
         panel: bool = False,
         title: str = None,
         border_style: str = None,
+        use_markdown: bool = False
     ) -> None:
         """Print content with optional styling and panel."""
         renderable = content
         if isinstance(content, str):
-            renderable = Markdown(content) if not style else Text(content, style=style)
+            if use_markdown:
+                renderable = Markdown(content)
+            elif style:
+                # Use Rich's Text object for styled content
+                renderable = Text(content, style=style)
+            else:
+                # For plain text that may contain rich tags but shouldn't be parsed as such
+                renderable = Text(content)
 
         if panel:
             renderable = Panel(
@@ -143,7 +151,7 @@ class UIManager:
 
     def print_markdown(self, content: str) -> None:
         """Print markdown-formatted content."""
-        self.print_content(content)
+        self.print_content(content, use_markdown=True)
 
     def print_assistant_response(self, content: str) -> None:
         """Print an assistant's response."""
@@ -181,6 +189,34 @@ class UIManager:
         """Print a success message."""
         self.print_content(f"✓ {message}", style="bold green")
 
+    def confirm(self, prompt: str, default: bool = True) -> bool:
+        """Ask the user for confirmation.
+        
+        Args:
+            prompt: The confirmation prompt
+            default: Default return value if user just presses Enter
+            
+        Returns:
+            The user's confirmation choice
+        """
+        prompt_text = f"{prompt} (Y/n)" if default else f"{prompt} (y/N)"
+        response = self.prompt_session.prompt(f"\n{prompt_text} > ")
+        
+        # Handle empty response
+        if not response:
+            return default
+            
+        # Process user input
+        response = response.strip().lower()
+        if response in ('y', 'yes'):
+            return True
+        elif response in ('n', 'no'):
+            return False
+        else:
+            # For invalid responses, fall back to default
+            self.print_warning(f"Invalid response '{response}'. Using default: {default}")
+            return default
+    
     def print_help(self) -> None:
         """Print help information."""
         help_text = """

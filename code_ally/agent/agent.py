@@ -18,6 +18,7 @@ from code_ally.agent.ui_manager import UIManager
 from code_ally.agent.tool_manager import ToolManager
 from code_ally.agent.task_planner import TaskPlanner
 from code_ally.agent.command_handler import CommandHandler
+from code_ally.agent.error_handler import display_error
 from code_ally.config import load_config
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,14 @@ class Agent:
                 raw_result = self.tool_manager.execute_tool(
                     tool_name, arguments, self.check_context_msg, self.client_type
                 )
+                
+                # Check for errors and provide acknowledgement if needed
+                if not raw_result.get("success", False):
+                    error_msg = raw_result.get("error", "Unknown error")
+                    
+                    # Display formatted error with suggestions
+                    display_error(self.ui, error_msg, tool_name, arguments)
+                
                 result = self.tool_manager.format_tool_result(
                     raw_result, self.client_type
                 )
@@ -338,6 +347,18 @@ class Agent:
                 call_id, tool_name = future_to_call[future]
                 try:
                     raw_result = future.result()
+                    
+                    # Check for errors and provide acknowledgement if needed
+                    if not raw_result.get("success", False):
+                        error_msg = raw_result.get("error", "Unknown error")
+                        
+                        # Get arguments for this tool call
+                        for _, t_name, args in normalized_calls:
+                            if t_name == tool_name and call_id == future_to_call[future][0]:
+                                # Display formatted error with suggestions
+                                display_error(self.ui, error_msg, tool_name, args)
+                                break
+                    
                     result = self.tool_manager.format_tool_result(
                         raw_result, self.client_type
                     )

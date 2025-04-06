@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from code_ally.agent.tool_manager import ToolManager
+from code_ally.agent.error_handler import display_error
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,10 @@ class TaskPlanner:
                 "failed_tasks": []
             }
             
+        # Display plan summary to the user (informational only, no confirmation)
+        if self.ui:
+            self._display_plan_summary(plan)
+        
         start_time = time.time()
         
         try:
@@ -167,6 +172,30 @@ class TaskPlanner:
             results = {}
             completed_tasks = []
             failed_tasks = []
+            
+            # Display task execution progress overview
+            if self.ui:
+                from rich.table import Table
+                
+                # Create a progress overview
+                progress_table = Table(title="Task Execution Plan", box=None, pad_edge=False)
+                progress_table.add_column("#", style="dim", width=3)
+                progress_table.add_column("Status", width=8)
+                progress_table.add_column("Task ID", style="cyan")
+                progress_table.add_column("Description", style="yellow")
+                
+                for i, task in enumerate(plan["tasks"], 1):
+                    task_id = task.get("id", f"task{i}")
+                    description = task.get("description", f"Execute {task.get('tool_name', 'unknown')}")
+                    progress_table.add_row(
+                        str(i),
+                        "[dim]Pending[/]",
+                        task_id,
+                        description
+                    )
+                
+                self.ui.console.print(progress_table)
+                self.ui.console.print("")  # Add a blank line
             
             # Process tasks in order (we'll handle dependencies)
             for task in plan["tasks"]:
@@ -213,6 +242,14 @@ class TaskPlanner:
                         continue
                 
                 # Execute the task
+                if self.ui:
+                    # Show task execution status
+                    task_desc = task.get("description", f"Execute {task['tool_name']}")
+                    self.ui.print_content(
+                        f"[cyan]⏳ Task {len(completed_tasks) + 1}/{len(plan['tasks'])}: {task_desc}[/]",
+                        style="cyan"
+                    )
+                
                 if self.verbose and self.ui:
                     self.ui.console.print(
                         f"[dim cyan][Verbose] Executing task '{task_id}' with tool '{task['tool_name']}'[/]"
@@ -247,13 +284,46 @@ class TaskPlanner:
                 }
                 self.execution_history.append(history_entry)
                 
-                # Update tracking
+                # Update tracking and show result status
                 if raw_result.get("success", False):
                     completed_tasks.append(task_id)
+                    if self.ui:
+                        self.ui.print_content(
+                            f"[green]✓ Task '{task_id}' completed successfully[/]",
+                            style=None
+                        )
                 else:
                     failed_tasks.append(task_id)
+                    error_msg = raw_result.get("error", "Unknown error")
+                    
+                    # Get task details for error context
+                    tool_name = task.get("tool_name", "unknown")
+                    task_desc = task.get("description", f"Execute {tool_name}")
+                    
+                    if self.ui:
+                        # Print the error status
+                        self.ui.print_content(
+                            f"[red]✗ Task '{task_id}' failed: {error_msg}[/]",
+                            style=None
+                        )
+                        
+                        # Display formatted error with suggestions
+                        display_error(
+                            self.ui, 
+                            error_msg, 
+                            tool_name, 
+                            arguments, 
+                            task_id, 
+                            task_desc
+                        )
+                    
                     # Check if we should stop on failure
                     if plan.get("stop_on_failure", False):
+                        if self.ui:
+                            self.ui.print_content(
+                                f"[yellow]⚠ Stopping plan execution due to task failure (stop_on_failure=True)[/]",
+                                style=None
+                            )
                         if self.verbose and self.ui:
                             self.ui.console.print(
                                 f"[dim red][Verbose] Task '{task_id}' failed and stop_on_failure is set. Stopping plan execution.[/]"
@@ -261,6 +331,52 @@ class TaskPlanner:
                         break
             
             execution_time = time.time() - start_time
+            
+            # Display final summary
+            if self.ui:
+                # Create a summary message
+                if len(failed_tasks) == 0:
+                    color = "green"
+                    icon = "✓"
+                    status = "Successfully"
+                    recovery_needed = False
+                elif len(completed_tasks) > 0:
+                    color = "yellow"
+                    icon = "⚠"
+                    status = "Partially"
+                    recovery_needed = True
+                else:
+                    color = "red"
+                    icon = "✗"
+                    status = "Failed to"
+                    recovery_needed = True
+                
+                self.ui.print_content(
+                    f"[{color}]{icon} {status} completed plan '{plan['name']}' in {execution_time:.2f}s. "
+                    f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]",
+                    style=None
+                )
+                
+                # Add guidance for error recovery if needed
+                if recovery_needed and failed_tasks:
+                    failed_tasks_info = []
+                    for task_id in failed_tasks:
+                        task = tasks_by_id.get(task_id)
+                        if task:
+                            task_tool = task.get("tool_name", "unknown")
+                            task_desc = task.get("description", f"Execute {task_tool}")
+                            error = results.get(task_id, {}).get("error", "Unknown error")
+                            failed_tasks_info.append(f"- Task '{task_id}' ({task_desc}): {error}")
+                    
+                    if failed_tasks_info:
+                        # Create error summary without rich formatting in text
+                        failed_summary = "\n".join(failed_tasks_info)
+                        self.ui.print_content(
+                            f"[yellow bold]Error Summary:[/]\n{failed_summary}\n\n"
+                            f"[blue bold]Next Steps:[/] The LLM should analyze these errors and attempt recovery "
+                            f"by modifying the approach or creating a new plan.",
+                            style=None
+                        )
             
             if self.verbose and self.ui:
                 self.ui.console.print(
@@ -424,6 +540,97 @@ class TaskPlanner:
                 
         return processed_args
         
+    def _display_plan_summary(self, plan: Dict[str, Any]) -> None:
+        """Display a summary of the plan to the user.
+        
+        Args:
+            plan: The task plan to display
+        """
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.console import Console
+        from rich.text import Text
+        import time
+        
+        # Create a formatted table of tasks
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("#", style="dim")
+        table.add_column("Task ID", style="cyan")
+        table.add_column("Tool", style="green")
+        table.add_column("Description", style="yellow")
+        table.add_column("Dependencies", style="blue")
+        table.add_column("Conditional", style="magenta")
+        
+        for i, task in enumerate(plan.get("tasks", []), 1):
+            task_id = task.get("id", f"task{i}")
+            tool_name = task.get("tool_name", "unknown")
+            description = task.get("description", f"Execute {tool_name}")
+            
+            # Format dependencies if present
+            dependencies = ""
+            if "depends_on" in task:
+                dependencies = ", ".join(task["depends_on"])
+            
+            # Check if this task has conditions
+            conditional = "No"
+            if "condition" in task:
+                condition = task["condition"]
+                if condition.get("type") == "task_result":
+                    task_id_ref = condition.get("task_id", "")
+                    field = condition.get("field", "success")
+                    operator = condition.get("operator", "equals")
+                    value = condition.get("value", True)
+                    conditional = f"Yes ({task_id_ref}.{field} {operator} {value})"
+                else:
+                    conditional = "Yes (custom)"
+            
+            table.add_row(
+                str(i),
+                task_id,
+                tool_name,
+                description,
+                dependencies,
+                conditional
+            )
+        
+        # Create a summary panel content
+        panel_content = []
+        panel_content.append(Text("🔄 TASK PLAN: ", style="bold blue"))
+        panel_content.append(Text(plan.get('name', 'Unnamed Plan'), style="bold white"))
+        panel_content.append(Text("\n\n"))
+        
+        panel_content.append(Text("Description: ", style="bold"))
+        panel_content.append(Text(plan.get("description", "No description provided")))
+        panel_content.append(Text("\n"))
+        
+        panel_content.append(Text("Number of Tasks: ", style="bold"))
+        panel_content.append(Text(str(len(plan.get("tasks", [])))))
+        panel_content.append(Text("\n"))
+        
+        panel_content.append(Text("Stop on Failure: ", style="bold"))
+        panel_content.append(Text("Yes" if plan.get("stop_on_failure", False) else "No"))
+        
+        # Combine all text segments
+        panel_text = Text.assemble(*panel_content)
+        
+        # Create the panel
+        panel = Panel(panel_text, border_style="blue", expand=False)
+        
+        # Display the plan to the user
+        if self.ui:
+            self.ui.console.print("\n")
+            self.ui.console.print(panel)
+            self.ui.console.print(table)
+            self.ui.console.print("\n")
+            
+            # Display execution message
+            execution_msg = Text.assemble(
+                Text("Starting execution", style="bold green"),
+                Text("..."), 
+                Text(" Task plan will be executed in sequence with dependencies.", style="dim")
+            )
+            self.ui.console.print(execution_msg)
+    
     def get_plan_schema(self) -> Dict[str, Any]:
         """Get the JSON schema for task plans.
         

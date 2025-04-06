@@ -19,6 +19,7 @@ from .code import CodeStructureAnalyzerTool
 from .batch import BatchOperationTool
 from .directory import DirectoryTool
 from .refactor import RefactorTool
+from .plan import TaskPlanTool
 
 # Public API
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "BatchOperationTool",
     "DirectoryTool",
     "RefactorTool",
+    "TaskPlanTool",
 ]
 
 # Create registry instance to ensure all tools are registered

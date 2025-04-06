@@ -14,6 +14,16 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Pattern, Set, Tuple, Union
 
+
+class PermissionDeniedError(Exception):
+    """Raised when a user denies permission for a tool.
+    
+    This special exception allows the agent to immediately stop processing
+    and return to the main conversation loop.
+    """
+    pass
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -408,7 +418,8 @@ class TrustManager:
                 return True
             elif permission == "n" or permission == "no":
                 logger.info(f"User denied permission for {tool_name}")
-                return False
+                console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+                raise PermissionDeniedError(f"User denied permission for {tool_name}")
             elif permission == "a" or permission == "always":
                 logger.info(f"User granted permanent permission for {tool_name}")
                 # For bash command, just trust the tool itself rather than the specific command
@@ -447,7 +458,11 @@ class TrustManager:
             return True
         elif permission == "n" or permission == "no":
             logger.info(f"User denied permission for {tool_name}")
-            return False
+            # Raise a special exception to interrupt processing
+            from rich.console import Console
+            console = Console()
+            console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+            raise PermissionDeniedError(f"User denied permission for {tool_name}")
         elif permission == "a" or permission == "always":
             logger.info(f"User granted permanent permission for {tool_name}")
             # Just trust the tool itself rather than the specific path

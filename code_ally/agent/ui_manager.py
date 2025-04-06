@@ -136,8 +136,13 @@ class UIManager:
                 # Use Rich's Text object for styled content
                 renderable = Text(content, style=style)
             else:
-                # For plain text that may contain rich tags but shouldn't be parsed as such
-                renderable = Text(content)
+                # Check if the content has Rich formatting tags
+                if "[" in content and "]" in content and "/]" in content:
+                    # Let Rich render the formatting
+                    renderable = content
+                else:
+                    # For plain text with no Rich tags
+                    renderable = Text(content)
 
         if panel:
             renderable = Panel(

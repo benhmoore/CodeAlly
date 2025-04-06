@@ -303,8 +303,7 @@ class TaskPlanner:
                     if self.ui:
                         # Print the error status
                         self.ui.print_content(
-                            f"[red]✗ Task '{task_id}' failed: {error_msg}[/]",
-                            style=None
+                            f"[red]✗ Task '{task_id}' failed: {error_msg}[/]"
                         )
                         
                         # Display formatted error with suggestions
@@ -321,8 +320,7 @@ class TaskPlanner:
                     if plan.get("stop_on_failure", False):
                         if self.ui:
                             self.ui.print_content(
-                                f"[yellow]⚠ Stopping plan execution due to task failure (stop_on_failure=True)[/]",
-                                style=None
+                                f"[yellow]⚠ Stopping plan execution due to task failure (stop_on_failure=True)[/]"
                             )
                         if self.verbose and self.ui:
                             self.ui.console.print(
@@ -353,8 +351,7 @@ class TaskPlanner:
                 
                 self.ui.print_content(
                     f"[{color}]{icon} {status} completed plan '{plan['name']}' in {execution_time:.2f}s. "
-                    f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]",
-                    style=None
+                    f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]"
                 )
                 
                 # Add guidance for error recovery if needed
@@ -374,8 +371,7 @@ class TaskPlanner:
                         self.ui.print_content(
                             f"[yellow bold]Error Summary:[/]\n{failed_summary}\n\n"
                             f"[blue bold]Next Steps:[/] The LLM should analyze these errors and attempt recovery "
-                            f"by modifying the approach or creating a new plan.",
-                            style=None
+                            f"by modifying the approach or creating a new plan."
                         )
             
             if self.verbose and self.ui:

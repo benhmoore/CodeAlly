@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Union
 
 from code_ally.tools.base import BaseTool
-from code_ally.trust import TrustManager
+from code_ally.trust import TrustManager, PermissionDeniedError
 
 logger = logging.getLogger(__name__)
 
@@ -307,19 +307,22 @@ class ToolManager:
                         permission_path = arg_value
                         break
 
-            if not self.trust_manager.is_trusted(
-                tool_name, permission_path, batch_id
-            ) and not self.trust_manager.prompt_for_permission(
-                tool_name, permission_path
-            ):
-                if verbose_mode:
-                    self.ui.console.print(
-                        f"[dim red][Verbose] Permission denied for {tool_name}[/]"
-                    )
-                return {
-                    "success": False,
-                    "error": f"Permission denied for {tool_name}",
-                }
+            if not self.trust_manager.is_trusted(tool_name, permission_path, batch_id):
+                try:
+                    permission_granted = self.trust_manager.prompt_for_permission(tool_name, permission_path)
+                    if not permission_granted:
+                        if verbose_mode:
+                            self.ui.console.print(
+                                f"[dim red][Verbose] Permission denied for {tool_name}[/]"
+                            )
+                        return {
+                            "success": False,
+                            "error": f"Permission denied for {tool_name}",
+                        }
+                except Exception as e:
+                    # If prompt_for_permission throws an exception (likely PermissionDeniedError)
+                    # let it propagate upward to interrupt the process
+                    raise
 
         # Execute the tool
         try:

@@ -29,7 +29,7 @@ class TaskPlanTool(BaseTool):
     - Error handling and recovery
     - Parallel-friendly execution
     """
-    requires_confirmation = True
+    requires_confirmation = False
 
     def __init__(self):
         """Initialize the task plan tool."""

@@ -84,13 +84,11 @@ def display_error(
     
     # Use Rich formatting for the error note
     ui_manager.print_content(
-        f"[yellow bold]Error Note:[/] {formatted['error_note']}",
-        style=None
+        f"[yellow bold]Error Note:[/] {formatted['error_note']}"
     )
     
     # Display suggestion if available
     if formatted["possible_fix"]:
         ui_manager.print_content(
-            f"[blue]Possible fix:[/] {formatted['possible_fix']}",
-            style=None
+            f"[blue]Possible fix:[/] {formatted['possible_fix']}"
         )

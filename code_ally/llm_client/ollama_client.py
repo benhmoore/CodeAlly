@@ -444,6 +444,14 @@ class OllamaClient(ModelClient):
                 return message
             return result
 
+        except KeyboardInterrupt:
+            # User interrupted the request
+            logger.info("Request interrupted by user")
+            # Return a special message that indicates the user interrupted the request
+            return {
+                "role": "assistant",
+                "content": "[Request interrupted by user]",
+            }
         except requests.RequestException as e:
             # Log the error
             logger.error(f"Error communicating with Ollama: {str(e)}")

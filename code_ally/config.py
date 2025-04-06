@@ -24,13 +24,13 @@ DEFAULT_CONFIG = {
     "bash_timeout": 30,
     "auto_confirm": False,
     "check_context_msg": True,
+    "parallel_tools": True,
+    "qwen_template": "qwen2.5_function_calling",
     "dump_dir": "ally",
     "auto_dump": True,  # Whether to automatically dump conversations on exit
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,
-    "qwen_template": "qwen2.5_function_calling",
-    "parallel_tools": True,
 }
 
 # Config keys that should be type-checked
@@ -43,13 +43,13 @@ CONFIG_TYPES = {
     "bash_timeout": int,
     "auto_confirm": bool,
     "check_context_msg": bool,
+    "parallel_tools": bool,
+    "qwen_template": str,
     "dump_dir": str,  # Type for dump directory
     "auto_dump": bool,  # Type for auto dump option
     "theme": str,
     "compact_threshold": int,
     "show_token_usage": bool,
-    "qwen_template": str,
-    "parallel_tools": bool,
 }
 
 

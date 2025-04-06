@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 import time
+import re
 import concurrent.futures
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -382,6 +383,71 @@ class ToolManager:
         # Track recent tool calls to avoid redundancy
         self.recent_tool_calls: List[Tuple[str, Dict[str, Any]]] = []
         self.max_recent_calls = 5  # Remember last 5 calls
+
+        # Initialize tool result formatters
+        self._init_tool_formatters()
+
+    def _init_tool_formatters(self):
+        """Initialize formatters for converting tool results to natural language."""
+        self.tool_formatters = {
+            # Filesystem tools
+            "file_read": self._format_file_read_result,
+            "file_write": self._format_file_write_result,
+            "file_edit": self._format_file_edit_result,
+            # Search tools
+            "glob": self._format_glob_result,
+            "grep": self._format_grep_result,
+            # Command execution
+            "bash": self._format_bash_result,
+            # General tools
+            "ls": self._format_ls_result,
+            "math": self._format_math_result,
+        }
+
+    def _format_file_read_result(self, result: Dict[str, Any]) -> str:
+        """Format file_read result as natural language."""
+        if not result.get("success", False):
+            return json.dumps(result)
+
+        content_length = len(result.get("content", ""))
+        return json.dumps(
+            {
+                "content": result.get("content", ""),
+                "description": f"Successfully read file with {content_length} characters",
+            }
+        )
+
+    def _format_file_write_result(self, result: Dict[str, Any]) -> str:
+        """Format file_write result as natural language."""
+        if result.get("success", False):
+            return json.dumps({"success": True, "message": "File written successfully"})
+        return json.dumps(result)
+
+    def _format_file_edit_result(self, result: Dict[str, Any]) -> str:
+        """Format file_edit result as natural language."""
+        if result.get("success", False):
+            return json.dumps({"success": True, "message": "File edited successfully"})
+        return json.dumps(result)
+
+    def _format_bash_result(self, result: Dict[str, Any]) -> str:
+        """Format bash result as natural language."""
+        return json.dumps(result)
+
+    def _format_glob_result(self, result: Dict[str, Any]) -> str:
+        """Format glob result as natural language."""
+        return json.dumps(result)
+
+    def _format_grep_result(self, result: Dict[str, Any]) -> str:
+        """Format grep result as natural language."""
+        return json.dumps(result)
+
+    def _format_ls_result(self, result: Dict[str, Any]) -> str:
+        """Format ls result as natural language."""
+        return json.dumps(result)
+
+    def _format_math_result(self, result: Dict[str, Any]) -> str:
+        """Format math result as natural language."""
+        return json.dumps(result)
 
     def get_function_definitions(self) -> List[Dict[str, Any]]:
         """Create function definitions for tools in the format expected by the LLM.
@@ -1148,31 +1214,7 @@ class Agent:
             self.process_llm_response(follow_up_response)
 
             # Clean up the contextual tool guidance message if it was added
-            if last_user_message:
-                # Find and remove the contextual guidance system message
-                i = len(self.messages) - 1
-                removed = False
-                while i >= 0:
-                    msg = self.messages[i]
-                    if msg.get("role") == "system" and msg.get(
-                        "content", ""
-                    ).startswith(
-                        "Based on the user's request, consider using these tools:"
-                    ):
-                        self.messages.pop(i)
-                        removed = True
-                        break
-                    i -= 1
-
-                # Log in verbose mode
-                if removed and self.ui.verbose:
-                    self.ui.console.print(
-                        "[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]"
-                    )
-
-                # Update token count after removing guidance
-                self.token_manager.update_token_count(self.messages)
-
+            self._cleanup_contextual_guidance()
         else:
             # Regular text response
             self.messages.append(response)
@@ -1257,6 +1299,7 @@ class Agent:
                 call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
 
                 if not tool_name:
+                    logger.warning(f"Invalid tool call detected: {tool_call}")
                     self.ui.print_warning(
                         f"Invalid tool call: missing tool name. Skipping."
                     )
@@ -1275,17 +1318,18 @@ class Agent:
                     raw_result, self.client_type
                 )
 
+                # Convert tool result to natural language if needed
+                content = self._format_tool_result_as_natural_language(
+                    tool_name, result
+                )
+
                 # Add tool result to message history
                 self.messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call_id,
                         "name": tool_name,
-                        "content": (
-                            json.dumps(result)
-                            if not isinstance(result, str)
-                            else result
-                        ),
+                        "content": content,
                     }
                 )
             except Exception as e:
@@ -1302,6 +1346,9 @@ class Agent:
         Args:
             tool_calls: List of tool calls to process
         """
+        self.ui.print_content(
+            f"Processing {len(tool_calls)} tool calls in parallel...", style="dim cyan"
+        )
         # First normalize all tool calls to extract consistent info
         normalized_calls = []
         for tool_call in tool_calls:
@@ -1311,6 +1358,7 @@ class Agent:
                     normalized_calls.append((call_id, tool_name, arguments))
                     # Show tool call
                     self.ui.print_tool_call(tool_name, arguments)
+                    logger.debug(f"Queued parallel tool call: {tool_name}")
                 else:
                     self.ui.print_warning(
                         f"Invalid tool call: missing tool name. Skipping."
@@ -1343,16 +1391,15 @@ class Agent:
                     result = self.tool_manager.format_tool_result(
                         raw_result, self.client_type
                     )
+                    content = self._format_tool_result_as_natural_language(
+                        tool_name, result
+                    )
                     self.messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": call_id,
                             "name": tool_name,
-                            "content": (
-                                json.dumps(result)
-                                if not isinstance(result, str)
-                                else result
-                            ),
+                            "content": content,
                         }
                     )
                 except Exception as e:
@@ -1365,6 +1412,87 @@ class Agent:
 
         # Update token count after all tool calls are processed
         self.token_manager.update_token_count(self.messages)
+
+    def _cleanup_contextual_guidance(self) -> None:
+        """Clean up any contextual guidance messages added during processing."""
+        i = len(self.messages) - 1
+        removed = False
+        while i >= 0:
+            msg = self.messages[i]
+            if msg.get("role") == "system" and msg.get("content", "").startswith(
+                "Based on the user's request, consider using these tools:"
+            ):
+                self.messages.pop(i)
+                removed = True
+                break
+            i -= 1
+        if removed and self.ui.verbose:
+            self.ui.console.print(
+                "[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]"
+            )
+        self.token_manager.update_token_count(self.messages)
+
+    def _format_tool_result_as_natural_language(
+        self, tool_name: str, result: Dict[str, Any]
+    ) -> str:
+        """Format tool result as natural language when appropriate.
+
+        Args:
+            tool_name: The name of the tool
+            result: The tool result
+
+        Returns:
+            Formatted content string
+        """
+        # First, ensure we have a proper string representation
+        if not isinstance(result, str):
+            result_str = json.dumps(result)
+        else:
+            result_str = result
+
+        # Clean up any tags that might be in the result
+        if isinstance(result_str, str) and (
+            "<tool_response>" in result_str or "<search_reminders>" in result_str
+        ):
+            # Use the OllamaClient's extraction method if available
+            if hasattr(self.model_client, "_extract_tool_response"):
+                cleaned_result = self.model_client._extract_tool_response(result_str)
+                if isinstance(cleaned_result, dict):
+                    result = cleaned_result
+                    result_str = json.dumps(cleaned_result)
+                else:
+                    result_str = cleaned_result
+            else:
+                # Basic cleanup if extraction method not available
+                result_str = re.sub(
+                    r"<tool_response>(.*?)</tool_response>",
+                    r"\1",
+                    result_str,
+                    flags=re.DOTALL,
+                )
+                result_str = re.sub(
+                    r"<search_reminders>.*?</search_reminders>",
+                    "",
+                    result_str,
+                    flags=re.DOTALL,
+                )
+                result_str = re.sub(
+                    r"<automated_reminder_from_anthropic>.*?</automated_reminder_from_anthropic>",
+                    "",
+                    result_str,
+                    flags=re.DOTALL,
+                )
+
+        # For successful tool executions, consider providing a natural language description
+        if (
+            isinstance(result, dict)
+            and result.get("success", False)
+            and "error" not in result
+        ):
+            # Return the result as formatted JSON for now
+            return result_str
+
+        return result_str
 
     def run_conversation(self) -> None:
         """Run the conversation loop."""

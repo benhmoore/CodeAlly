@@ -320,6 +320,44 @@ class OllamaClient(ModelClient):
                 }
             ]
 
+    def _extract_tool_response(self, content: str) -> str:
+        """Extract the actual tool response from content with tags.
+
+        Args:
+            content: The content string potentially containing tool response tags
+
+        Returns:
+            Cleaned tool response
+        """
+        # Extract content from tool_response tags if present
+        tool_response_pattern = r"<tool_response>(.*?)</tool_response>"
+        tool_matches = re.findall(tool_response_pattern, content, re.DOTALL)
+
+        if tool_matches:
+            # Use the first match as the tool response
+            response_content = tool_matches[0].strip()
+
+            # Try to parse as JSON
+            try:
+                response_json = json.loads(response_content)
+                return response_json
+            except json.JSONDecodeError:
+                # Return as is if not valid JSON
+                return response_content
+
+        # Remove any search reminders or automated reminders
+        content = re.sub(
+            r"<search_reminders>.*?</search_reminders>", "", content, flags=re.DOTALL
+        )
+        content = re.sub(
+            r"<automated_reminder_from_anthropic>.*?</automated_reminder_from_anthropic>",
+            "",
+            content,
+            flags=re.DOTALL,
+        )
+
+        return content.strip()
+
     def send(
         self,
         messages: List[Dict[str, Any]],

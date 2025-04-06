@@ -226,6 +226,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose mode with detailed logging",
     )
+    debug_group.add_argument(
+        "--debug-tool-calls",
+        action="store_true",
+        help="Print raw tool calls for debugging",
+    )
 
     return parser.parse_args()
 
@@ -350,6 +355,10 @@ def main() -> None:
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
     )
+
+    # Set debug options
+    if args.debug_tool_calls:
+        logging.getLogger("code_ally.agent").setLevel(logging.DEBUG)
 
     # Set auto-confirm if specified
     if args.yes_to_all:

@@ -373,12 +373,12 @@ def main() -> None:
         if agent.auto_dump:  # Use agent's property instead of args.auto_dump
             try:
                 agent.command_handler.dump_conversation(agent.messages, "")
-                console.print("\n[bold]Goodbye![/]")
+                console.print("\n[bold]Goodbye[/]")
             except Exception as e:
                 console.print(f"\n[bold red]Error during auto-dump: {str(e)}[/]")
-                console.print("[bold]Goodbye![/]")
+                console.print("[bold]Goodbye[/]")
         else:
-            console.print("\n[bold]Goodbye![/]")
+            console.print("\n[bold]Goodbye[/]")
         sys.exit(0)
     except requests.exceptions.RequestException as e:
         console.print(f"\n[bold red]Error connecting to Ollama:[/] {str(e)}")

@@ -141,6 +141,10 @@ class Agent:
                 include_reasoning=self.ui.verbose,
             )
 
+            # Always stop thinking animation, regardless of result
+            self.ui.stop_thinking_animation()
+            animation_thread.join(timeout=1.0)
+
             if self.ui.verbose:
                 has_tool_calls = (
                     "tool_calls" in follow_up_response
@@ -158,8 +162,10 @@ class Agent:
                     f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]"
                 )
 
-            self.ui.stop_thinking_animation()
-            animation_thread.join(timeout=1.0)
+            # Check if the follow-up was cancelled
+            if follow_up_response.get("cancelled", False):
+                # Return to the prompt without further processing
+                return
 
             # Recursively process the follow-up
             self.process_llm_response(follow_up_response)
@@ -448,10 +454,8 @@ class Agent:
                 if handled:
                     continue
 
-            self.messages.append(
-                {"role": "user", "content": user_input}
-            )  # Keep this line
-
+            # Add user message to history
+            self.messages.append({"role": "user", "content": user_input})
             self.token_manager.update_token_count(self.messages)
 
             # Start "thinking" animation
@@ -468,11 +472,21 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
+            # Send request to model
             response = self.model_client.send(
                 self.messages,
                 functions=self.tool_manager.get_function_definitions(),
                 include_reasoning=self.ui.verbose,
             )
+
+            # Always stop the thinking animation before processing the response
+            self.ui.stop_thinking_animation()
+            animation_thread.join(timeout=1.0)
+
+            # Check if the request was cancelled
+            if response.get("cancelled", False):
+                # Don't add cancelled responses to history
+                continue
 
             if self.ui.verbose:
                 has_tool_calls = "tool_calls" in response and response["tool_calls"]
@@ -487,7 +501,5 @@ class Agent:
                     f"[dim blue][Verbose] Received {resp_type}{tools_info} from LLM[/]"
                 )
 
-            self.ui.stop_thinking_animation()
-            animation_thread.join(timeout=1.0)
-
+            # Process the response (only if not cancelled)
             self.process_llm_response(response)

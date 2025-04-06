@@ -8,6 +8,9 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import requests
+import threading
+import signal
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from code_ally.prompts import get_system_message
 from .model_client import ModelClient
@@ -425,40 +428,105 @@ class OllamaClient(ModelClient):
             if self.is_qwen_model:
                 payload["options"]["parallel_function_calls"] = True
 
+        # Make requests cancelable with ctrl+c
+        request_result = {
+            "success": False,
+            "data": None,
+            "error": None,
+            "cancelled": False,
+        }
+        request_thread = None
+        original_sigint_handler = signal.getsignal(signal.SIGINT)
+
+        def make_request():
+            try:
+                response = requests.post(self.api_url, json=payload, timeout=240)
+                response.raise_for_status()
+                request_result["success"] = True
+                request_result["data"] = response.json()
+            except Exception as e:
+                request_result["error"] = e
+
+        def sigint_handler(sig, frame):
+            # Mark the request as cancelled
+            request_result["cancelled"] = True
+
+            # Print a message to inform the user
+            print("\nCancelling request to Ollama... (This may take a moment)")
+            logger.info("Request cancelled by user")
+
+            # Force-quit the animation by setting result values
+            # This will make the waiting code stop waiting for the result
+            return
+
         try:
-            # Log the request if in debug mode
             logger.debug(f"Sending request to Ollama: {self.api_url}")
 
-            # Send the request
-            response = requests.post(self.api_url, json=payload, timeout=240)
-            response.raise_for_status()
-            result = response.json()
+            # Set up signal handler
+            signal.signal(signal.SIGINT, sigint_handler)
 
-            # Extract the message from the response
-            message = result.get("message", {})
+            # Run the request in a separate thread
+            request_thread = threading.Thread(target=make_request)
+            request_thread.daemon = True
+            request_thread.start()
 
-            # Add robust parsing for tool calls in different formats
-            self._normalize_tool_calls_in_message(message)
+            # Wait for the thread to join with a short timeout - we'll check for cancellation in a loop
+            while request_thread.is_alive():
+                # Use a short timeout so we can check for cancellation frequently
+                request_thread.join(timeout=0.1)
 
-            if "message" in result:
-                return message
-            return result
+                # If the request was cancelled, break out immediately
+                if request_result["cancelled"]:
+                    break
 
-        except requests.RequestException as e:
-            # Log the error
-            logger.error(f"Error communicating with Ollama: {str(e)}")
+                # After reasonable timeout, stop waiting
+                if not hasattr(request_thread, "_start_time"):
+                    request_thread._start_time = time.time()
+                elif time.time() - request_thread._start_time > 240:
+                    logger.warning("Request to Ollama timed out after 240 seconds")
+                    break
 
-            # Handle API errors (connection issues, etc.)
+            # Always restore original signal handler
+            signal.signal(signal.SIGINT, original_sigint_handler)
+
+            # Handle cancellation
+            if request_result["cancelled"]:
+                logger.info("Responding with cancellation message")
+                return {
+                    "role": "assistant",
+                    "content": "The request was cancelled.",
+                    "cancelled": True,
+                }
+
+            # If thread is still alive after handling, it's taking too long
+            if request_thread.is_alive():
+                logger.warning("Request to Ollama timed out or was cancelled")
+                return {
+                    "role": "assistant",
+                    "content": "Error: Request to Ollama timed out or was cancelled.",
+                    "cancelled": True,
+                }
+
+            # Process the result
+            if request_result["success"]:
+                result = request_result["data"]
+                message = result.get("message", {})
+                self._normalize_tool_calls_in_message(message)
+                if "message" in result:
+                    return message
+                return result
+            elif request_result["error"]:
+                e = request_result["error"]
+                logger.error(f"Error communicating with Ollama: {str(e)}")
+                return {
+                    "role": "assistant",
+                    "content": f"Error communicating with Ollama: {str(e)}",
+                }
+        except Exception as e:
+            # Restore original signal handler in case of any exception
+            signal.signal(signal.SIGINT, original_sigint_handler)
+            logger.error(f"Unexpected error when sending request: {str(e)}")
             return {
                 "role": "assistant",
-                "content": f"Error communicating with Ollama: {str(e)}",
-            }
-        except json.JSONDecodeError as e:
-            # Log the error
-            logger.error(f"Invalid JSON response from Ollama API: {str(e)}")
-
-            # Handle invalid JSON responses
-            return {
-                "role": "assistant",
-                "content": f"Error: Received invalid response from Ollama API",
+                "content": f"Unexpected error: {str(e)}",
             }

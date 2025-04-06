@@ -38,6 +38,16 @@ A local LLM-powered pair programming assistant using function calling capabiliti
 
 ## 🔧 Installation
 
+### Model Compatibility
+
+**Important**: Code Ally currently works only with models that support Ollama's native "tools" API field. This includes:
+
+-   ✅ Qwen models (qwen2:7b, qwen2:4b, qwen2-coder:14b, etc.)
+
+Attempting to use incompatible models will result in a 400 Bad Request error from the Ollama API. At this point, I recommend a trial-and-error approach to find a compatible model, as I haven't done extensive testing.
+
+For the current list of likely-compatible models, check [Ollama's model library](https://ollama.com/search?c=tools).
+
 ### From PyPI (Recommended)
 
 ```bash

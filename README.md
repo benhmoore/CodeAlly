@@ -200,7 +200,6 @@ Code Ally also supports the following slash commands during a conversation:
 | `glob`       | Find files matching a glob pattern                    |
 | `grep`       | Search for a pattern in files                         |
 | `ls`         | List directory contents                               |
-| `git`        | Perform basic Git operations                          |
 
 ## 🔒 Security Considerations
 

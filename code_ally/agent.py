@@ -22,6 +22,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.table import Table
+from rich.text import Text  # Added missing import
 
 from code_ally.config import load_config, save_config
 from code_ally.llm_client import ModelClient
@@ -44,7 +45,7 @@ class TokenManager:
         """Initialize the token manager.
 
         Args:
-            context_size: Maximum context size in tokens
+            context_size: Maximum context size in tokenss
         """
         self.context_size = context_size
         self.estimated_tokens = 0
@@ -55,6 +56,8 @@ class TokenManager:
         self.last_compaction_time = 0
         self.min_compaction_interval = 300  # Seconds between auto-compactions
         self.ui = None  # Will be set by the Agent class
+        # Cache for token counts to avoid re-estimation
+        self._token_cache = {}
 
     def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
@@ -68,31 +71,74 @@ class TokenManager:
         token_count = 0
 
         for message in messages:
+            # Create a message cache key based on content and role
+            cache_key = None
+            if "role" in message and "content" in message:
+                cache_key = (message["role"], message["content"])
+
+            # Use cached count if available
+            if cache_key and cache_key in self._token_cache:
+                token_count += self._token_cache[cache_key]
+                continue
+
+            # Otherwise calculate the token count
+            message_tokens = 0
             # Count tokens for message structure
-            token_count += self.tokens_per_message
+            message_tokens += self.tokens_per_message
 
             # Count tokens for role
             if "role" in message:
-                token_count += self.tokens_per_name
+                message_tokens += self.tokens_per_name
 
             # Count tokens for content (4 chars per token approximation)
             if "content" in message and message["content"]:
                 content = message["content"]
-                token_count += len(content) / self.chars_per_token
+                message_tokens += len(content) / self.chars_per_token
 
             # Count tokens for function calls
             if "function_call" in message and message["function_call"]:
                 function_call = message["function_call"]
                 # Count function name
                 if "name" in function_call:
-                    token_count += len(function_call["name"]) / self.chars_per_token
+                    message_tokens += len(function_call["name"]) / self.chars_per_token
                 # Count arguments
                 if "arguments" in function_call:
-                    token_count += (
+                    message_tokens += (
                         len(function_call["arguments"]) / self.chars_per_token
                     )
 
-        return int(token_count)
+            # Count tokens for tool calls
+            if "tool_calls" in message and message["tool_calls"]:
+                for tool_call in message["tool_calls"]:
+                    if "function" in tool_call:
+                        function = tool_call["function"]
+                        if "name" in function:
+                            message_tokens += (
+                                len(function["name"]) / self.chars_per_token
+                            )
+                        if "arguments" in function:
+                            if isinstance(function["arguments"], str):
+                                message_tokens += (
+                                    len(function["arguments"]) / self.chars_per_token
+                                )
+                            elif isinstance(function["arguments"], dict):
+                                message_tokens += (
+                                    len(json.dumps(function["arguments"]))
+                                    / self.chars_per_token
+                                )
+
+            # Store in cache if we have a key
+            if cache_key:
+                self._token_cache[cache_key] = message_tokens
+
+            # Add to total count
+            token_count += message_tokens
+
+        return max(1, int(token_count))  # Ensure at least 1 token
+
+    def clear_cache(self) -> None:
+        """Clear the token count cache."""
+        self._token_cache = {}
 
     def update_token_count(self, messages: List[Dict[str, Any]]) -> None:
         """Update the token count for the current messages.
@@ -183,57 +229,19 @@ class UIManager:
         self.verbose = verbose
 
     def start_thinking_animation(self, token_percentage: int = 0) -> threading.Thread:
-        """Start the thinking animation in a separate thread.
-
-        Args:
-            token_percentage: Percentage of context window used
-
-        Returns:
-            The animation thread
-        """
+        """Start the thinking animation."""
         self.thinking_event.clear()
 
         def animate():
-            # Regular animation for non-verbose mode
-            if not self.verbose:
-                # Create spinner with token usage if available
-                if token_percentage > 0:
-                    if token_percentage > 80:
-                        color = "red"
-                    elif token_percentage > 50:
-                        color = "yellow"
-                    else:
-                        color = "green"
-                    context_info = f"({token_percentage}% context used)"
-                    thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/]"
-                else:
-                    thinking_text = "[cyan]Thinking[/]"
-
-                thinking_spinner = Spinner("dots2", text=thinking_text)
-
-                start_time = time.time()
-                with Live(
-                    thinking_spinner, refresh_per_second=10, console=self.console
-                ) as live:
-                    while not self.thinking_event.is_set():
-                        elapsed_seconds = int(time.time() - start_time)
-                        if token_percentage > 0:
-                            if token_percentage > 80:
-                                color = "red"
-                            elif token_percentage > 50:
-                                color = "yellow"
-                            else:
-                                color = "green"
-                            context_info = f"({token_percentage}% context used)"
-                            thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
-                        else:
-                            thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
-
-                        thinking_spinner = Spinner("dots2", text=thinking_text)
-                        live.update(thinking_spinner)
-                        time.sleep(0.1)
+            # Determine display color based on token percentage
+            if token_percentage > 80:
+                color = "red"
+            elif token_percentage > 50:
+                color = "yellow"
             else:
-                # In verbose mode, show a spinner with a message
+                color = "green"
+            # Show special intro message in verbose mode
+            if self.verbose:
                 self.console.print(
                     "[bold cyan]🤔 VERBOSE MODE: Waiting for model to respond[/]",
                     highlight=False,
@@ -242,20 +250,21 @@ class UIManager:
                     "[dim]Complete model reasoning will be shown with the response[/]",
                     highlight=False,
                 )
+            start_time = time.time()
+            with Live(
+                self.thinking_spinner, refresh_per_second=10, console=self.console
+            ) as live:
+                while not self.thinking_event.is_set():
+                    elapsed_seconds = int(time.time() - start_time)
+                    if token_percentage > 0:
+                        context_info = f"({token_percentage}% context used)"
+                        thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
+                    else:
+                        thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
+                    spinner = Spinner("dots2", text=thinking_text)
+                    live.update(spinner)
+                    time.sleep(0.1)
 
-                start_time = time.time()
-                with Live(
-                    self.thinking_spinner, refresh_per_second=10, console=self.console
-                ) as live:
-                    while not self.thinking_event.is_set():
-                        elapsed_seconds = int(time.time() - start_time)
-                        self.thinking_spinner = Spinner(
-                            "dots2", text=f"[cyan]Thinking[/] [{elapsed_seconds}s]"
-                        )
-                        live.update(self.thinking_spinner)
-                        time.sleep(0.1)
-
-        # Start animation in a daemon thread
         thread = threading.Thread(target=animate, daemon=True)
         thread.start()
         return thread
@@ -272,79 +281,67 @@ class UIManager:
         """
         return self.prompt_session.prompt("\n> ")
 
-    def print_markdown(self, content: str) -> None:
-        """Print markdown-formatted content.
+    def print_content(
+        self,
+        content: str,
+        style: str = None,
+        panel: bool = False,
+        title: str = None,
+        border_style: str = None,
+    ) -> None:
+        """Print content with formatting options."""
+        renderable = content
+        if isinstance(content, str):
+            renderable = Markdown(content)
+            if style:
+                renderable = Text(content, style=style)
+        if panel:
+            renderable = Panel(
+                renderable,
+                title=title,
+                border_style=border_style or "none",
+                expand=False,
+            )
+        self.console.print(renderable)
 
-        Args:
-            content: The markdown content to print
-        """
-        self.console.print(Markdown(content))
+    def print_markdown(self, content: str) -> None:
+        """Print markdown-formatted content."""
+        self.print_content(content)
 
     def print_assistant_response(self, content: str) -> None:
-        """Print an assistant's response with proper formatting.
-
-        Args:
-            content: The content to print
-        """
-        # Check if the response includes thinking (verbose mode)
+        """Print an assistant's response."""
         if self.verbose and "THINKING:" in content:
-            # Split into thinking and response
             parts = content.split("\n\n", 1)
             if len(parts) == 2 and parts[0].startswith("THINKING:"):
-                thinking = parts[0]
-                response = parts[1]
-
-                # Display thinking in a panel
-                thinking_panel = Panel(
-                    Markdown(thinking),
+                thinking, response = parts
+                self.print_content(
+                    thinking,
+                    panel=True,
                     title="[bold cyan]Thinking Process[/]",
                     border_style="cyan",
                 )
-                self.console.print(thinking_panel)
-
-                # Display final response
                 self.print_markdown(response)
             else:
-                # Fall back to regular markdown if format is unexpected
                 self.print_markdown(content)
         else:
-            # Regular response
             self.print_markdown(content)
 
     def print_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> None:
-        """Print a tool call notification.
-
-        Args:
-            tool_name: Name of the tool
-            arguments: Tool arguments
-        """
-        # Create a compact representation of the arguments
+        """Print a tool call notification."""
         args_str = ", ".join(f"{k}={v}" for k, v in arguments.items())
-        self.console.print(f"[dim yellow]> Running {tool_name}({args_str})[/]")
+        self.print_content(f"> Running {tool_name}({args_str})", style="dim yellow")
 
     def print_error(self, message: str) -> None:
-        """Print an error message.
-
-        Args:
-            message: The error message
-        """
-        self.console.print(f"[bold red]Error:[/] {message}")
+        """Print an error message."""
+        self.print_content(f"Error: {message}", style="bold red")
 
     def print_warning(self, message: str) -> None:
-        """Print a warning message.
-
-        Args:
-            message: The warning message
-        """
-        self.console.print(f"[bold yellow]Warning:[/] {message}")
+        """Print a warning message."""
+        self.print_content(f"Warning: {message}", style="bold yellow")
 
     def print_success(self, message: str) -> None:
-        """Print a success message.
-
-        Args:
-            message: The success message
-        """
-        self.console.print(f"[bold green]✓[/] {message}")
+        """Print a success message."""
+        self.print_content(f"✓ {message}", style="bold green")
 
     def print_help(self) -> None:
         """Print help information."""
@@ -363,7 +360,7 @@ class UIManager:
 Type a message to chat with the AI assistant.
 Use up/down arrow keys to navigate through command history.
 """
-        self.console.print(Markdown(help_text))
+        self.print_markdown(help_text)
 
 
 class ToolManager:

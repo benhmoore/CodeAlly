@@ -451,6 +451,7 @@ class OllamaClient(ModelClient):
             return {
                 "role": "assistant",
                 "content": "[Request interrupted by user]",
+                "interrupted": True  # Add a flag to help identify interruptions
             }
         except requests.RequestException as e:
             # Log the error

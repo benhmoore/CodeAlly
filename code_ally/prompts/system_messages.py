@@ -135,6 +135,7 @@ CORE_DIRECTIVES = """
     - Do not skip verification steps.
     - Do not ask the user to perform tool actions for you.
     - Do not just show `task_plan` JSON; *execute* it with the `task_plan` tool.
+    - Never display the task plan in Markdown or code blocks. Always **execute** it via: `task_plan plan={...}`.
 """
 
 

@@ -116,7 +116,20 @@ class UIManager:
         Returns:
             The user input string
         """
-        return self.prompt_session.prompt("\n> ")
+        # Get a reference to the agent object (if present)
+        agent = getattr(self, 'agent', None)
+        
+        # Create a custom processor to handle keyboard interrupts
+        def pre_run():
+            def handle_interrupt(event):
+                # If there's an agent and a request is in progress, don't propagate the KeyboardInterrupt
+                if agent and agent.request_in_progress:
+                    event.prevent_default()
+                    # The agent's KeyboardInterrupt handling in the model client will take care of this
+                
+            return handle_interrupt
+            
+        return self.prompt_session.prompt("\n> ", pre_run=pre_run)
 
     def print_content(
         self,

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from code_ally.agent.tool_manager import ToolManager
 from code_ally.agent.error_handler import display_error
+from code_ally.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,19 @@ class TaskPlanner:
         if self.ui:
             self._display_plan_summary(plan)
         
+        # Pre-check all permissions needed for the plan
+        batch_id = f"task-plan-{int(time.time())}"
+        permission_operations = self._collect_permission_operations(plan)
+        if permission_operations and not self._request_plan_permissions(permission_operations, plan["name"], batch_id):
+            return {
+                "success": False,
+                "error": "Permission denied for task plan operations",
+                "plan_name": plan.get("name", "unknown"),
+                "results": {},
+                "completed_tasks": [],
+                "failed_tasks": []
+            }
+            
         start_time = time.time()
         
         try:
@@ -266,9 +280,9 @@ class TaskPlanner:
                 if self.ui:
                     self.ui.print_tool_call(tool_name, arguments)
                 
-                # Execute the tool
+                # Execute the tool - pass the batch_id for permission tracking
                 raw_result = self.tool_manager.execute_tool(
-                    tool_name, arguments, True, client_type
+                    tool_name, arguments, True, client_type, batch_id
                 )
                 
                 # Store the result
@@ -490,7 +504,8 @@ class TaskPlanner:
                                             field_value = var_def.get("default", "")
                                             break
                                     
-                                    replacement_value = str(field_value)
+                                    # Clean up the value - replace newlines with empty string to handle paths properly
+                                    replacement_value = str(field_value).replace("\n", "")
                                 else:
                                     # Use the whole result (as JSON if it's a dict)
                                     if isinstance(result_value, dict):
@@ -626,6 +641,80 @@ class TaskPlanner:
                 Text(" Task plan will be executed in sequence with dependencies.", style="dim")
             )
             self.ui.console.print(execution_msg)
+    
+    def _collect_permission_operations(self, plan: Dict[str, Any]) -> List[Tuple[str, Any, str]]:
+        """Collect all operations in the plan that require permission.
+        
+        Args:
+            plan: The task plan to analyze
+            
+        Returns:
+            List of (tool_name, path, description) tuples for operations requiring permission
+        """
+        permission_operations = []
+        
+        # Find all tools that require confirmation
+        tools_requiring_permission = {}
+        for tool_name, tool in self.tool_manager.tools.items():
+            if tool.requires_confirmation:
+                tools_requiring_permission[tool_name] = tool
+        
+        # Process all tasks in the plan
+        for task in plan.get("tasks", []):
+            tool_name = task.get("tool_name")
+            
+            if tool_name in tools_requiring_permission:
+                arguments = task.get("arguments", {})
+                
+                # For bash tool, pass arguments.command as the path
+                if tool_name == "bash" and "command" in arguments:
+                    permission_path = arguments
+                    task_desc = task.get("description", f"Execute command: {arguments.get('command')}")
+                else:
+                    # Use the first string argument as the path, if any
+                    permission_path = None
+                    for arg_name, arg_value in arguments.items():
+                        if isinstance(arg_value, str) and arg_name in ("path", "file_path"):
+                            permission_path = arg_value
+                            break
+                    
+                    task_desc = task.get("description", f"Execute {tool_name}")
+                
+                # Add to the list with a detailed description
+                permission_operations.append((tool_name, permission_path, task_desc))
+        
+        return permission_operations
+    
+    def _request_plan_permissions(self, operations: List[Tuple[str, Any, str]], plan_name: str, batch_id: str) -> bool:
+        """Request permission for all operations in a plan at once.
+        
+        Args:
+            operations: List of (tool_name, path, description) tuples requiring permission
+            plan_name: Name of the task plan
+            batch_id: Unique ID for this batch of operations
+            
+        Returns:
+            Whether all permissions were granted
+        """
+        if not operations:
+            return True
+            
+        if not self.tool_manager.trust_manager:
+            logger.warning("Trust manager not initialized, can't request permissions")
+            return False
+            
+        # Format the permission text
+        operations_text = f"The task plan '{plan_name}' requires permission for the following operations:\n"
+        for i, (tool_name, path, description) in enumerate(operations, 1):
+            operations_text += f"{i}. {description}\n"
+        
+        # Strip out the description for the actual trust manager call
+        trust_operations = [(tool_name, path) for tool_name, path, _ in operations]
+            
+        # Use the trust manager to request all permissions at once
+        return self.tool_manager.trust_manager.prompt_for_parallel_operations(
+            trust_operations, operations_text, batch_id
+        )
     
     def get_plan_schema(self) -> Dict[str, Any]:
         """Get the JSON schema for task plans.

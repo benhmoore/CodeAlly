@@ -278,12 +278,27 @@ class TrustManager:
         Returns:
             A unique key representing the tool and path combination
         """
-        # If path is None or not a string (e.g., dict for bash command args),
-        # just use the tool name as the key component.
-        if path is None or not isinstance(path, (str, bytes, os.PathLike)):
+        # Special handling for bash commands
+        if tool_name == "bash" and isinstance(path, dict) and "command" in path:
+            # Create a unique hash of the command
+            import hashlib
+            cmd_hash = hashlib.md5(path["command"].encode()).hexdigest()[:8]
+            return f"{tool_name}:cmd:{cmd_hash}"
+        
+        # If path is None, just use the tool name
+        if path is None:
             return tool_name
-        # Only call abspath if path is a valid path type
-        return f"{tool_name}:{os.path.abspath(path)}"
+            
+        # If path is a string, try to normalize it
+        if isinstance(path, str):
+            try:
+                return f"{tool_name}:{os.path.abspath(path)}"
+            except (TypeError, ValueError):
+                # If path can't be normalized, use as is
+                return f"{tool_name}:{path}"
+        
+        # For other types, just return the tool name
+        return tool_name
 
     def trust_tool(self, tool_name: str, path: Optional[str] = None) -> None:
         """Mark a tool as trusted for the given path.
@@ -303,12 +318,13 @@ class TrustManager:
             logger.info(f"Trusting {tool_name} for path: {normalized_path}")
             self.trusted_tools[tool_name].add(normalized_path)
 
-    def prompt_for_permission(self, tool_name: str, path: Optional[str] = None) -> bool:
+    def prompt_for_permission(self, tool_name: str, path: Optional[str] = None, batch_id: Optional[str] = None) -> bool:
         """Prompt the user for permission to use a tool.
 
         Args:
             tool_name: The name of the tool
             path: The path being accessed (if applicable)
+            batch_id: Optional batch operation ID for group permissions
 
         Returns:
             Whether permission was granted
@@ -318,8 +334,9 @@ class TrustManager:
             logger.info(f"Auto-confirming {tool_name} for {path}")
             return True
 
-        if self.is_trusted(tool_name, path):
-            logger.info(f"Tool {tool_name} is already trusted for {path}")
+        # Check if this tool+path is already trusted via any method (including batch ID)
+        if self.is_trusted(tool_name, path, batch_id):
+            logger.info(f"Tool {tool_name} is already trusted for {path} (batch ID: {batch_id})")
             return True
 
         # Build the prompt message with visual emphasis and special handling for bash

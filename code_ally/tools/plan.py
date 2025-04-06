@@ -27,7 +27,7 @@ class TaskPlanTool(BaseTool):
     - Dependencies between tasks
     - Variable substitution between tasks
     - Error handling and recovery
-    - Parallel-friendly execution
+    - Consolidated permission prompts for all operations
     """
     requires_confirmation = False
 

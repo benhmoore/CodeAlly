@@ -56,10 +56,12 @@ class Agent:
         self.check_context_msg = check_context_msg
         self.parallel_tools = parallel_tools
         self.auto_dump = auto_dump
+        self.request_in_progress = False  # Flag to track if an API request is in progress
 
         # Initialize UI
         self.ui = UIManager()
         self.ui.set_verbose(verbose)
+        self.ui.agent = self  # Provide a reference to the agent
 
         # Initialize Token Manager
         self.token_manager = TokenManager(model_client.context_size)
@@ -153,18 +155,22 @@ class Agent:
                 )
 
             try:
+                self.request_in_progress = True  # Set flag before sending request
                 follow_up_response = self.model_client.send(
                     self.messages,
                     functions=self.tool_manager.get_function_definitions(),
                     include_reasoning=self.ui.verbose,
                 )
+                self.request_in_progress = False  # Clear flag after response received
 
                 # Special handling for interrupted requests
                 if (follow_up_response.get("content", "").strip() == "[Request interrupted by user]" or
                     follow_up_response.get("content", "").strip() == "[Request interrupted by user for tool use]" or
-                    follow_up_response.get("content", "").strip() == "[Request interrupted by user due to permission denial]"):
+                    follow_up_response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
+                    follow_up_response.get("interrupted", False)):
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
+                    self.ui.print_content("[yellow]Request interrupted by user[/]")
                     return  # Exit without processing response
                     
                 if self.ui.verbose:
@@ -542,18 +548,22 @@ class Agent:
                 )
 
             try:
+                self.request_in_progress = True  # Set flag before sending request
                 response = self.model_client.send(
                     self.messages,
                     functions=self.tool_manager.get_function_definitions(),
                     include_reasoning=self.ui.verbose,
                 )
+                self.request_in_progress = False  # Clear flag after response received
                 
                 # Special handling for interrupted requests
                 if (response.get("content", "").strip() == "[Request interrupted by user]" or
                     response.get("content", "").strip() == "[Request interrupted by user for tool use]" or 
-                    response.get("content", "").strip() == "[Request interrupted by user due to permission denial]"):
+                    response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
+                    response.get("interrupted", False)):
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
+                    self.ui.print_content("[yellow]Request interrupted by user[/]")
                     return  # Get new user input
                 
                 if self.ui.verbose:
@@ -574,6 +584,7 @@ class Agent:
 
                 self.process_llm_response(response)
             except KeyboardInterrupt:
+                self.request_in_progress = False  # Clear flag when interrupted
                 self.ui.stop_thinking_animation()
                 animation_thread.join(timeout=1.0)
                 self.ui.print_content("[yellow]Request interrupted by user[/]")

@@ -309,7 +309,7 @@ class ToolManager:
 
             if not self.trust_manager.is_trusted(tool_name, permission_path, batch_id):
                 try:
-                    permission_granted = self.trust_manager.prompt_for_permission(tool_name, permission_path)
+                    permission_granted = self.trust_manager.prompt_for_permission(tool_name, permission_path, batch_id)
                     if not permission_granted:
                         if verbose_mode:
                             self.ui.console.print(

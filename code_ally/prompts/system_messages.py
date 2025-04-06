@@ -168,7 +168,7 @@ def get_main_system_prompt() -> str:
     context = f"""
     **Contextual Information:**
     - Current Date: {current_date}
-    - Working Directory: {working_dir}
+    - Working Directory (pwd): {working_dir}
     - Directory Contents:
     {directory_contents}
     - Operating System: {os_info}

@@ -88,20 +88,20 @@ ollama pull qwen2.5-coder:latest
 Code Ally uses a layered configuration approach:
 
 1. **Command line arguments** (highest precedence)
-2. **User config file** located at `~/.config/code-ally/config.json`
+2. **User config file** located at `~/.config/ally/config.json`
 3. **Default values**
 
 ### Managing Configuration
 
 ```bash
 # View your current configuration
-code-ally --config-show
+ally --config-show
 
 # Save current settings as defaults
-code-ally --model qwen2.5-coder:latest --temperature 0.8 --config
+ally --model qwen2.5-coder:latest --temperature 0.8 --config
 
 # Reset to default configuration
-code-ally --config-reset
+ally --config-reset
 ```
 
 ### Configuration File Structure
@@ -126,26 +126,26 @@ The configuration file is a JSON file with the following structure:
 
 ```bash
 # Start Code Ally with default settings
-code-ally
+ally
 
 # Display help information about available commands
-code-ally --help
+ally --help
 ```
 
 ### Advanced Options
 
 ```bash
 # Use a specific model
-code-ally --model qwen2.5-coder:latest
+ally --model qwen2.5-coder:latest
 
 # Connect to a different Ollama endpoint
-code-ally --endpoint http://localhost:11434
+ally --endpoint http://localhost:11434
 
 # Adjust generation parameters
-code-ally --temperature 0.8 --context-size 8192 --max-tokens 2000
+ally --temperature 0.8 --context-size 8192 --max-tokens 2000
 
 # Skip all confirmation prompts (use with caution!)
-code-ally --yes-to-all
+ally --yes-to-all
 ```
 
 ### Direct Commands and Slash Commands

@@ -339,8 +339,9 @@ class Agent:
                 else:
                     permission_text += f"{i}. {tname} operation\n"
 
+            # Pass the batch_id when prompting
             if not self.trust_manager.prompt_for_parallel_operations(
-                protected_tools, permission_text
+                protected_tools, permission_text, batch_id
             ):
                 self.ui.print_warning("Permission denied for parallel operations")
                 return

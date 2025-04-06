@@ -461,20 +461,28 @@ class TrustManager:
             return True
 
     def prompt_for_parallel_operations(
-        self, operations: List[Tuple[str, Any]], operations_text: str
+        self, operations: List[Tuple[str, Any]], operations_text: str, batch_id: str
     ) -> bool:
         """Prompt the user for permission to perform multiple operations at once.
 
         Args:
             operations: List of tuples containing tool names and paths
             operations_text: Description of all operations that need permission
+            batch_id: The unique identifier for this batch of operations
 
         Returns:
             Whether permission was granted
         """
         # If auto-confirm is enabled, skip the prompt
         if self.auto_confirm:
-            logger.info(f"Auto-confirming {len(operations)} parallel operations")
+            logger.info(
+                f"Auto-confirming {len(operations)} parallel operations (ID: {batch_id})"
+            )
+            # Still need to populate the approved cache even in auto-confirm mode
+            self.approved_operations[batch_id] = set()
+            for tool_name, path in operations:
+                tool_path_key = self._get_tool_path_key(tool_name, path)
+                self.approved_operations[batch_id].add(tool_path_key)
             return True
 
         # Create a visually distinct panel for the permission prompt
@@ -499,7 +507,6 @@ class TrustManager:
 
         # Read input with default to yes (just pressing enter)
         import sys
-        import time
 
         sys.stdout.write("> ")
         sys.stdout.flush()
@@ -507,9 +514,8 @@ class TrustManager:
 
         if permission == "" or permission == "y" or permission == "yes":
             logger.info(
-                f"User granted permission for {len(operations)} parallel operations"
+                f"User granted permission for {len(operations)} parallel operations (ID: {batch_id})"
             )
-            batch_id = f"batch-{int(time.time())}"
             self.approved_operations[batch_id] = set()
             for tool_name, path in operations:
                 tool_path_key = self._get_tool_path_key(tool_name, path)
@@ -517,7 +523,7 @@ class TrustManager:
             return True
         else:
             logger.info(
-                f"User denied permission for {len(operations)} parallel operations"
+                f"User denied permission for {len(operations)} parallel operations (ID: {batch_id})"
             )
             return False
 

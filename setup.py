@@ -44,7 +44,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "code-ally=code_ally.main:main",
+            "ally=code_ally.main:main",
         ],
     },
     python_requires=">=3.8",

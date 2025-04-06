@@ -29,7 +29,7 @@ class UIManager:
         self.verbose = False
 
         # Create history directory if it doesn't exist
-        history_dir = os.path.expanduser("~/.code_ally")
+        history_dir = os.path.expanduser("~/.ally")
         os.makedirs(history_dir, exist_ok=True)
 
         # Create custom key bindings

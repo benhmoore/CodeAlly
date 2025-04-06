@@ -31,7 +31,7 @@ DEFAULT_CONFIG = {
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,
-    "contextual_help": True,  # Enable/disable contextual tool guidance
+    "contextual_help": False,
 }
 
 # Config keys that should be type-checked
@@ -70,7 +70,7 @@ def get_config_dir() -> Path:
         logger.debug(f"Using development mode config directory: {config_dir}")
     else:
         # User mode - use user config directory
-        config_dir = Path.home() / ".config" / "code-ally"
+        config_dir = Path.home() / ".config" / "ally"
         os.makedirs(config_dir, exist_ok=True)
         logger.debug(f"Using user mode config directory: {config_dir}")
 

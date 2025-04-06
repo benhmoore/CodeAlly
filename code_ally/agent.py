@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 import time
+import concurrent.futures
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from prompt_toolkit import PromptSession
@@ -982,6 +983,7 @@ class Agent:
         client_type: str = None,
         system_prompt: Optional[str] = None,
         verbose: bool = False,
+        parallel_tools: bool = True,
         check_context_msg: bool = True,
         auto_dump: bool = True,
     ):
@@ -989,10 +991,11 @@ class Agent:
 
         Args:
             model_client: The LLM client to use
-            client_type: The client type to use for formatting the result
             tools: List of available tools
+            client_type: The client type to use for formatting the result
             system_prompt: The system prompt to use (optional)
             verbose: Whether to enable verbose mode (defaults to False)
+            parallel_tools: Whether to enable parallel tool execution (defaults to True)
             check_context_msg: Whether to encourage LLM to check context when redundant
                               tool calls are detected (defaults to True)
             auto_dump: Whether to automatically dump conversation on exit (defaults to True)
@@ -1001,6 +1004,7 @@ class Agent:
         self.trust_manager = TrustManager()
         self.messages: List[Dict[str, Any]] = []
         self.check_context_msg = check_context_msg
+        self.parallel_tools = parallel_tools
         self.auto_dump = auto_dump
 
         # Initialize component managers
@@ -1031,62 +1035,44 @@ class Agent:
             self.token_manager.update_token_count(self.messages)
 
     def process_llm_response(self, response: Dict[str, Any]) -> None:
-        """Process the LLM's response and execute any tool calls.
+        """Process the LLM's response and execute any tool calls in parallel if enabled.
 
         Args:
             response: The LLM's response
         """
         # Extract content and tool calls
         content = response.get("content", "")
+        tool_calls = []
 
-        # Handle tool calls if present
-        tool_calls = response.get("tool_calls", [])
+        # Handle different formats of tool calls
+        if "tool_calls" in response:
+            # Standard format
+            tool_calls = response.get("tool_calls", [])
+        elif "function_call" in response:
+            # Qwen-Agent format with single function call
+            if response.get("function_call"):
+                tool_calls = [
+                    {
+                        "id": f"manual-id-{int(time.time())}",
+                        "type": "function",
+                        "function": response.get("function_call"),
+                    }
+                ]
 
+        # Process tool calls if present
         if tool_calls:
             # Add assistant message with tool calls to history
-            self.messages.append(response)
+            # Clone the response to avoid modifying the original
+            assistant_message = response.copy()
+            self.messages.append(assistant_message)
             self.token_manager.update_token_count(self.messages)
 
-            # Execute each tool call
-            for tool_call in tool_calls:
-                # Extract tool information
-                call_id = tool_call.get("id", "")
-                function_call = tool_call.get("function", {})
-                tool_name = function_call.get("name", "")
-
-                # Parse arguments
-                arguments_raw = function_call.get("arguments", "{}")
-                if isinstance(arguments_raw, dict):
-                    arguments = arguments_raw
-                else:
-                    try:
-                        arguments = json.loads(arguments_raw)
-                    except json.JSONDecodeError:
-                        arguments = {}
-
-                # Show tool call
-                self.ui.print_tool_call(tool_name, arguments)
-
-                # Execute the tool
-                raw_result = self.tool_manager.execute_tool(
-                    tool_name, arguments, self.check_context_msg, self.client_type
-                )
-                result = self.tool_manager.format_tool_result(
-                    raw_result, self.client_type
-                )
-
-                # Add tool result to message history
-                self.messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "name": tool_name,
-                        "content": json.dumps(result),
-                    }
-                )
-
-            # Update token count
-            self.token_manager.update_token_count(self.messages)
+            if self.parallel_tools and len(tool_calls) > 1:
+                # Execute tool calls in parallel
+                self._process_parallel_tool_calls(tool_calls)
+            else:
+                # Execute tool calls sequentially
+                self._process_sequential_tool_calls(tool_calls)
 
             # Find the last user message to extract context
             last_user_message = ""
@@ -1194,6 +1180,191 @@ class Agent:
 
             # Display the response
             self.ui.print_assistant_response(content)
+
+    def _normalize_tool_call(
+        self, tool_call: Dict[str, Any]
+    ) -> Tuple[str, str, Dict[str, Any]]:
+        """Normalize a tool call to extract id, name, and arguments consistently.
+
+        Args:
+            tool_call: The tool call to normalize
+
+        Returns:
+            Tuple of (call_id, tool_name, arguments)
+        """
+        # Default values
+        call_id = tool_call.get("id", f"auto-id-{int(time.time())}")
+        tool_name = ""
+        arguments = {}
+
+        # Extract function information
+        function_call = tool_call.get("function", {})
+        if not function_call and "name" in tool_call:
+            # Direct function call format
+            function_call = tool_call
+
+        # Extract tool name
+        tool_name = function_call.get("name", "")
+        if not tool_name:
+            if "type" in function_call and "function" in function_call:
+                # Nested format
+                if "name" in function_call.get("function", {}):
+                    tool_name = function_call["function"]["name"]
+
+        # Parse arguments
+        arguments_raw = function_call.get("arguments", "{}")
+        if isinstance(arguments_raw, dict):
+            arguments = arguments_raw
+        else:
+            try:
+                arguments = json.loads(arguments_raw)
+            except json.JSONDecodeError:
+                # Handle malformed JSON
+                if isinstance(arguments_raw, str):
+                    # Try to parse Python-style dict
+                    try:
+                        # Replace single quotes with double quotes
+                        fixed_json = arguments_raw.replace("'", '"')
+                        arguments = json.loads(fixed_json)
+                    except json.JSONDecodeError:
+                        # Try to extract key-value pairs as a last resort
+                        arg_dict = {}
+                        try:
+                            # Basic key-value extraction for common formats
+                            pairs = arguments_raw.strip("{}").split(",")
+                            for pair in pairs:
+                                if ":" in pair:
+                                    k, v = pair.split(":", 1)
+                                    k = k.strip().strip("\"'")
+                                    v = v.strip().strip("\"'")
+                                    arg_dict[k] = v
+                            arguments = arg_dict
+                        except Exception:
+                            # If all parsing attempts fail, use as-is
+                            arguments = {"raw_args": arguments_raw}
+
+        return call_id, tool_name, arguments
+
+    def _process_sequential_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> None:
+        """Process tool calls sequentially.
+
+        Args:
+            tool_calls: List of tool calls to process
+        """
+        for tool_call in tool_calls:
+            try:
+                # Normalize the tool call format
+                call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
+
+                if not tool_name:
+                    self.ui.print_warning(
+                        f"Invalid tool call: missing tool name. Skipping."
+                    )
+                    continue
+
+                # Show tool call
+                self.ui.print_tool_call(tool_name, arguments)
+
+                # Execute the tool
+                raw_result = self.tool_manager.execute_tool(
+                    tool_name, arguments, self.check_context_msg, self.client_type
+                )
+
+                # Format the result according to client needs
+                result = self.tool_manager.format_tool_result(
+                    raw_result, self.client_type
+                )
+
+                # Add tool result to message history
+                self.messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": tool_name,
+                        "content": (
+                            json.dumps(result)
+                            if not isinstance(result, str)
+                            else result
+                        ),
+                    }
+                )
+            except Exception as e:
+                # Catch any errors in processing individual tool calls
+                logger.exception(f"Error processing tool call: {e}")
+                self.ui.print_error(f"Error processing tool call: {str(e)}")
+
+        # Update token count after all tool calls
+        self.token_manager.update_token_count(self.messages)
+
+    def _process_parallel_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> None:
+        """Process tool calls in parallel.
+
+        Args:
+            tool_calls: List of tool calls to process
+        """
+        # First normalize all tool calls to extract consistent info
+        normalized_calls = []
+        for tool_call in tool_calls:
+            try:
+                call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
+                if tool_name:
+                    normalized_calls.append((call_id, tool_name, arguments))
+                    # Show tool call
+                    self.ui.print_tool_call(tool_name, arguments)
+                else:
+                    self.ui.print_warning(
+                        f"Invalid tool call: missing tool name. Skipping."
+                    )
+            except Exception as e:
+                logger.exception(f"Error normalizing tool call: {e}")
+                self.ui.print_error(f"Error normalizing tool call: {str(e)}")
+
+        # Execute tool calls in parallel
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(normalized_calls), 5)
+        ) as executor:
+            # Submit all tasks
+            future_to_call = {
+                executor.submit(
+                    self.tool_manager.execute_tool,
+                    tool_name,
+                    arguments,
+                    self.check_context_msg,
+                    self.client_type,
+                ): (call_id, tool_name)
+                for call_id, tool_name, arguments in normalized_calls
+            }
+
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_call):
+                call_id, tool_name = future_to_call[future]
+                try:
+                    raw_result = future.result()
+                    result = self.tool_manager.format_tool_result(
+                        raw_result, self.client_type
+                    )
+                    self.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "name": tool_name,
+                            "content": (
+                                json.dumps(result)
+                                if not isinstance(result, str)
+                                else result
+                            ),
+                        }
+                    )
+                except Exception as e:
+                    logger.exception(
+                        f"Error processing parallel tool call {tool_name}: {e}"
+                    )
+                    self.ui.print_error(
+                        f"Error processing parallel tool call {tool_name}: {str(e)}"
+                    )
+
+        # Update token count after all tool calls are processed
+        self.token_manager.update_token_count(self.messages)
 
     def run_conversation(self) -> None:
         """Run the conversation loop."""

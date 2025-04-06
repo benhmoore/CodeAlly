@@ -3,6 +3,8 @@
 import inspect
 import json
 import logging
+import re
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import requests
@@ -207,6 +209,117 @@ class OllamaClient(ModelClient):
             },
         }
 
+    def _normalize_tool_calls_in_message(self, message: Dict[str, Any]) -> None:
+        """Normalize tool calls in a message to ensure consistent format.
+
+        Args:
+            message: The message to normalize
+        """
+        # Check for function calls in the content that might not be properly parsed
+        if "content" in message and message["content"]:
+            content = message["content"]
+
+            # Check for common tool call patterns in text
+            tool_call_patterns = [
+                r"<tool_call>\s*({.*?})\s*</tool_call>",  # Hermes format
+                r"✿FUNCTION✿:\s*(.*?)\s*\n✿ARGS✿:\s*(.*?)(?:\n✿|$)",  # Qwen format
+                r"Action:\s*(.*?)\nAction Input:\s*(.*?)(?:\n|$)",  # ReAct format
+            ]
+
+            tool_calls = []
+
+            for pattern in tool_call_patterns:
+                matches = re.findall(pattern, content, re.DOTALL)
+                if matches:
+                    for match in matches:
+                        try:
+                            if isinstance(match, tuple):
+                                # ReAct or Qwen format
+                                function_name = match[0].strip()
+                                arguments = match[1].strip()
+                                try:
+                                    # Try parsing as JSON
+                                    arg_obj = json.loads(arguments)
+                                except json.JSONDecodeError:
+                                    # Use as string if not valid JSON
+                                    arg_obj = arguments
+
+                                tool_calls.append(
+                                    {
+                                        "id": f"extracted-{int(time.time())}-{len(tool_calls)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": function_name,
+                                            "arguments": (
+                                                arg_obj
+                                                if isinstance(arg_obj, dict)
+                                                else arguments
+                                            ),
+                                        },
+                                    }
+                                )
+                            else:
+                                # Hermes format - single JSON string
+                                tool_json = json.loads(match)
+                                tool_calls.append(
+                                    {
+                                        "id": f"extracted-{int(time.time())}-{len(tool_calls)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": tool_json.get("name", ""),
+                                            "arguments": tool_json.get("arguments", {}),
+                                        },
+                                    }
+                                )
+                        except Exception as e:
+                            logger.debug(f"Error parsing tool call from text: {e}")
+
+            # If we found tool calls in text but none are in the message structure
+            if tool_calls and not message.get("tool_calls"):
+                message["tool_calls"] = tool_calls
+                # Clean up the content if we extracted tool calls
+                for pattern in tool_call_patterns:
+                    content = re.sub(pattern, "", content, flags=re.DOTALL)
+                message["content"] = content.strip()
+
+        # Normalize existing tool_calls format
+        if "tool_calls" in message:
+            normalized_calls = []
+            for call in message["tool_calls"]:
+                if "function" not in call and "name" in call:
+                    # Convert simplified format to standard format
+                    normalized_calls.append(
+                        {
+                            "id": call.get(
+                                "id",
+                                f"normalized-{int(time.time())}-{len(normalized_calls)}",
+                            ),
+                            "type": "function",
+                            "function": {
+                                "name": call.get("name"),
+                                "arguments": call.get("arguments", {}),
+                            },
+                        }
+                    )
+                else:
+                    normalized_calls.append(call)
+            message["tool_calls"] = normalized_calls
+
+        # Also handle function_call format (for backward compatibility)
+        if (
+            "function_call" in message
+            and message["function_call"]
+            and not message.get("tool_calls")
+        ):
+            # Convert function_call to tool_calls format
+            message["tool_calls"] = [
+                {
+                    "id": f"function-{int(time.time())}",
+                    "type": "function",
+                    "function": message["function_call"],
+                }
+            ]
+
     def send(
         self,
         messages: List[Dict[str, Any]],
@@ -244,6 +357,10 @@ class OllamaClient(ModelClient):
             },
         }
 
+        payload["options"][
+            "tool_choice"
+        ] = "auto"  # Allow model to decide when to use tools
+
         # For verbose mode, ask the model to include its reasoning
         if include_reasoning:
             # Add a system message requesting reasoning
@@ -259,11 +376,16 @@ class OllamaClient(ModelClient):
                     break
 
         # Add tool/function definitions if available
-        if functions:
-            payload["tools"] = functions
-        elif tools:
-            # Generate tool schemas from Python functions
-            payload["tools"] = self._convert_tools_to_schemas(tools)
+        if functions or tools:
+            if functions:
+                payload["tools"] = functions
+            elif tools:
+                # Generate tool schemas from Python functions
+                payload["tools"] = self._convert_tools_to_schemas(tools)
+
+            # Set parallel function calling if using Qwen
+            if self.is_qwen_model:
+                payload["options"]["parallel_function_calls"] = True
 
         try:
             # Log the request if in debug mode
@@ -275,8 +397,13 @@ class OllamaClient(ModelClient):
             result = response.json()
 
             # Extract the message from the response
+            message = result.get("message", {})
+
+            # Add robust parsing for tool calls in different formats
+            self._normalize_tool_calls_in_message(message)
+
             if "message" in result:
-                return result["message"]
+                return message
             return result
 
         except requests.RequestException as e:

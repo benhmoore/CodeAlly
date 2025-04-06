@@ -26,6 +26,11 @@ DEFAULT_CONFIG = {
     "check_context_msg": True,
     "dump_dir": "ally",
     "auto_dump": True,  # Whether to automatically dump conversations on exit
+    "theme": "default",
+    "compact_threshold": 95,
+    "show_token_usage": True,
+    "qwen_template": "qwen2.5_function_calling",
+    "parallel_tools": True,
 }
 
 # Config keys that should be type-checked
@@ -40,6 +45,11 @@ CONFIG_TYPES = {
     "check_context_msg": bool,
     "dump_dir": str,  # Type for dump directory
     "auto_dump": bool,  # Type for auto dump option
+    "theme": str,
+    "compact_threshold": int,
+    "show_token_usage": bool,
+    "qwen_template": str,
+    "parallel_tools": bool,
 }
 
 

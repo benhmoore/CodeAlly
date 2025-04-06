@@ -12,5 +12,6 @@
   "theme": "default",
   "compact_threshold": 95,
   "show_token_usage": true,
-  "qwen_template": "qwen2.5_function_calling"
+  "qwen_template": "qwen2.5_function_calling",
+  "parallel_tools": true
 }

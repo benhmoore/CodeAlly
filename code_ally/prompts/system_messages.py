@@ -191,17 +191,6 @@ def detect_relevant_tools(user_message: str) -> List[str]:
 
     # Keyword mapping (simplified example, refine as needed)
     tool_keywords = {
-        "git": [
-            "git",
-            "commit",
-            "branch",
-            "merge",
-            "pull",
-            "push",
-            "repo",
-            "clone",
-            "checkout",
-        ],
         "file": [
             "file",
             "read",

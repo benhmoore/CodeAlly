@@ -12,9 +12,6 @@ from datetime import datetime
 import os
 import platform
 import sys
-from code_ally.prompts.tool_guidance import (
-    TOOL_GUIDANCE,
-)
 
 # --- Core Agent Directives ---
 
@@ -86,7 +83,6 @@ def get_main_system_prompt() -> str:
     python_version = sys.version.split()[0]
 
     context = f"""
-**Contextual Information:**
 - Current Date: {current_date}
 - Working Directory (pwd): {working_dir}
 - Directory Contents:
@@ -101,8 +97,7 @@ def get_main_system_prompt() -> str:
 **Available Tools:**
 {tool_list}
 
-{TOOL_GUIDANCE['default']}
-
+**Contextual Information:**
 {context}
 """
 
@@ -118,70 +113,3 @@ SYSTEM_MESSAGES = {
 def get_system_message(key: str) -> str:
     """Retrieve a specific system message by its key."""
     return SYSTEM_MESSAGES.get(key, "")
-
-
-# --- Contextual Guidance Functions ---
-
-
-def get_tool_guidance(tool_name: Optional[str] = None) -> str:
-    """Retrieve detailed guidance for a specific tool or default guidance."""
-    return TOOL_GUIDANCE.get(tool_name, TOOL_GUIDANCE["default"])
-
-
-def detect_relevant_tools(user_message: str) -> List[str]:
-    """Detect potentially relevant tools based on keywords in the user message."""
-    message_lower = user_message.lower()
-    relevant_tools = set()
-    tool_keywords = {
-        "file": [
-            "file",
-            "read",
-            "write",
-            "edit",
-            "create",
-            "delete",
-            "modify",
-            "content",
-            "script",
-            "save",
-        ],
-        "bash": [
-            "run",
-            "execute",
-            "command",
-            "terminal",
-            "shell",
-            "bash",
-            "script",
-            "cli",
-            "install",
-            "build",
-            "mkdir",
-            "ls",
-            "pwd",
-            "echo",
-        ],
-        "search": [
-            "find",
-            "search",
-            "locate",
-            "grep",
-            "look for",
-            "where",
-            "pattern",
-            "contain",
-        ],
-    }
-
-    for tool, keywords in tool_keywords.items():
-        if any(keyword in message_lower for keyword in keywords):
-            relevant_tools.add(tool)
-
-    return list(relevant_tools) if relevant_tools else ["default"]
-
-
-def get_contextual_guidance(user_message: str) -> str:
-    """Generate combined guidance based on tools detected in the user message."""
-    detected_tools = detect_relevant_tools(user_message)
-    guidance_sections = [get_tool_guidance(tool) for tool in detected_tools]
-    return "\n\n".join(guidance_sections)

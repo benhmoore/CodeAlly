@@ -4,6 +4,7 @@ import inspect
 import json
 import logging
 import re
+import signal
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
@@ -41,6 +42,10 @@ class OllamaClient(ModelClient):
         
         # Load configuration for model-specific settings
         self.config = ConfigManager.get_instance().get_config()
+        
+        # State for interruption handling
+        self.current_session = None
+        self.interrupted = False
 
     @property
     def model_name(self) -> str:
@@ -301,8 +306,68 @@ class OllamaClient(ModelClient):
         messages_copy = messages.copy()
         payload = self._prepare_payload(messages_copy, functions, tools, stream, include_reasoning)
         
+        # Reset interruption flag before starting new request
+        self.interrupted = False
+        
         try:
-            return self._execute_request(payload, stream)
+            # Set up keyboard interrupt handler for this request
+            original_sigint_handler = signal.getsignal(signal.SIGINT)
+            
+            def sigint_handler(sig, frame):
+                logger.warning("SIGINT received during request. Interrupting Ollama request.")
+                self.interrupted = True
+                
+                # Close current session if it exists
+                if self.current_session:
+                    try:
+                        logger.debug("Attempting to close session")
+                        self.current_session.close()
+                    except Exception as e:
+                        logger.error(f"Error closing session: {e}")
+                
+                # Restore original handler for future handling
+                signal.signal(signal.SIGINT, original_sigint_handler)
+                
+                # Raise KeyboardInterrupt to propagate upward
+                raise KeyboardInterrupt("Request interrupted by user")
+            
+            # Set our custom handler for SIGINT
+            signal.signal(signal.SIGINT, sigint_handler)
+            
+            try:
+                result = self._execute_request(payload, stream)
+                
+                # Restore the original SIGINT handler
+                signal.signal(signal.SIGINT, original_sigint_handler)
+                
+                # If we got here and interruption flag is set, something went wrong with interruption
+                if self.interrupted:
+                    logger.warning("Request was interrupted but still returned a result")
+                    # Return a special response indicating interruption
+                    return {
+                        "role": "assistant",
+                        "content": "[Request interrupted by user]",
+                        "interrupted": True
+                    }
+                
+                return result
+            except KeyboardInterrupt:
+                # This will be caught immediately after our handler raises KeyboardInterrupt
+                logger.warning("Request interrupted by user")
+                
+                # Restore the original SIGINT handler
+                signal.signal(signal.SIGINT, original_sigint_handler)
+                
+                # Return a special response indicating interruption
+                return {
+                    "role": "assistant",
+                    "content": "[Request interrupted by user]",
+                    "interrupted": True
+                }
+            finally:
+                # Make sure the original SIGINT handler is restored
+                signal.signal(signal.SIGINT, original_sigint_handler)
+        
         except requests.RequestException as e:
             return self._handle_request_error(e)
         except json.JSONDecodeError as e:
@@ -351,26 +416,67 @@ class OllamaClient(ModelClient):
         """Execute the request to the Ollama API."""
         logger.debug(f"Sending request to Ollama: {self.api_url}")
         
-        session = requests.Session()
-        response = session.post(
-            self.api_url, 
-            json=payload, 
-            timeout=240,
-            stream=True
-        )
-        response.raise_for_status()
+        # Create a new session for this request
+        self.current_session = requests.Session()
         
-        if not stream:
-            result = response.json()
-            message = result.get("message", {})
+        try:
+            response = self.current_session.post(
+                self.api_url, 
+                json=payload, 
+                timeout=240,
+                stream=True
+            )
+            response.raise_for_status()
             
-            # Normalize tool calls - try structured first, fallback to regex
-            self._normalize_tool_calls_in_message(message)
+            if not stream:
+                # For non-streaming requests, we need to check for interruption while collecting the response
+                full_content = ""
+                for chunk in response.iter_content(chunk_size=1024):
+                    if self.interrupted:
+                        logger.warning("Request interrupted while reading response")
+                        response.close()
+                        # Close the session
+                        self.current_session.close()
+                        self.current_session = None
+                        raise KeyboardInterrupt("Request interrupted by user")
+                    
+                    if chunk:
+                        full_content += chunk.decode('utf-8')
+                
+                # Parse the full response
+                try:
+                    result = json.loads(full_content)
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON response from Ollama API: {full_content[:100]}...")
+                    raise
+                
+                message = result.get("message", {})
+                
+                # Normalize tool calls - try structured first, fallback to regex
+                self._normalize_tool_calls_in_message(message)
+                
+                if "message" in result:
+                    # Close the session
+                    self.current_session.close()
+                    self.current_session = None
+                    return message
+                
+                # Close the session
+                self.current_session.close()
+                self.current_session = None
+                return result
             
-            if "message" in result:
-                return message
-            return result
-        return response
+            # For streaming, just return the response object
+            return response
+        except KeyboardInterrupt:
+            # This will be raised by our signal handler
+            raise
+        except Exception as e:
+            # Close the session on error
+            if self.current_session:
+                self.current_session.close()
+                self.current_session = None
+            raise
 
     def _handle_request_error(self, e):
         """Handle request exceptions."""

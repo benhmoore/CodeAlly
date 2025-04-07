@@ -25,7 +25,11 @@ CORE_DIRECTIVES = """
    <tool_call>{"name": "bash", "arguments": {"command": "pwd"}}</tool_call>
 4. **Error Recovery:** When errors occur, explain simply and offer clear solutions.
 5. **Extreme Conciseness:** Keep all responses brief and direct. Avoid unnecessary explanation.
-6. **Plan Sequential Tasks:** Use the task_plan tool to create a plan for sequential tasks.
+6. **Interactive Planning:** Use interactive planning for complex multi-step tasks:
+   a) Start with <tool_call>{"name": "task_plan", "arguments": {"mode": "start_plan", "name": "Plan Name", "description": "Description"}}</tool_call>
+   b) Add tasks one by one using <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {...}}}</tool_call>
+   c) Finalize with <tool_call>{"name": "task_plan", "arguments": {"mode": "finalize_plan"}}</tool_call>
+   d) Execute with <tool_call>{"name": "task_plan", "arguments": {"mode": "execute_plan"}}</tool_call>
 7. **Batch Independent Tasks:** Use the batch tool for independent tasks that can be run in parallel.
 
 ## Hermes Format Standard
@@ -34,6 +38,14 @@ All tool calls must use this format:
 This format is mandatory for ALL TOOLS. Do not use any other format. Do not put calls in code blocks.
 
 Each tool's description includes a specific example of its proper usage format.
+
+## Interactive Planning Guidelines
+- When a user asks for a complex task requiring multiple steps, use interactive planning
+- Create descriptive plan names that explain the overall goal
+- Use natural language to explain each task before adding it
+- Break complex operations into logical, focused tasks
+- Wait for user confirmation before executing plans
+- Explain errors and suggest recovery strategies
 
 ## Strictly Prohibited
 - Never display raw JSON plans; always execute via task_plan
@@ -97,6 +109,9 @@ SYSTEM_MESSAGES = {
     "main_prompt": get_main_system_prompt(),
     "compaction_notice": "Conversation history compacted to save context space.",
     "verbose_thinking": "IMPORTANT: For this response only, first explain your complete reasoning process, starting with: 'THINKING: '. After your reasoning, provide your final response.",
+    "interactive_planning_intro": """
+I'll help you create a step-by-step plan for this task. I'll outline each step in the process, and you'll have a chance to review the entire plan before I execute it. Let me start by breaking this down into manageable tasks.
+    """,
 }
 
 

@@ -7,6 +7,7 @@ Enables the agent to define, validate, and execute multi-step plans.
 import json
 import logging
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from code_ally.agent.tool_manager import ToolManager
@@ -28,6 +29,7 @@ class TaskPlanner:
     3. Parallel or sequential execution
     4. Error handling and recovery
     5. Result tracking for each step
+    6. Interactive plan creation with user confirmation
     """
 
     def __init__(self, tool_manager: ToolManager):
@@ -40,6 +42,11 @@ class TaskPlanner:
         self.execution_history: List[Dict[str, Any]] = []
         self.ui = None  # Will be set by the Agent class
         self.verbose = False
+        
+        # Interactive planning state
+        self.interactive_plan: Optional[Dict[str, Any]] = None
+        self.interactive_plan_tasks: List[Dict[str, Any]] = []
+        self.interactive_plan_finalized = False
     
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -129,6 +136,29 @@ class TaskPlanner:
                     if "depends_on" in dep_task and task["id"] in dep_task["depends_on"]:
                         return False, f"Circular dependency detected between tasks '{task['id']}' and '{dep_id}'"
         
+        return True, None
+    
+    def validate_task(self, task: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """Validate a single task for structural correctness.
+        
+        Args:
+            task: The task to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check required fields
+        if "tool_name" not in task:
+            return False, "Task missing 'tool_name' field"
+            
+        # Check that tool exists
+        if task["tool_name"] not in self.tool_manager.tools:
+            return False, f"Task references unknown tool '{task['tool_name']}'"
+            
+        # Arguments must be a dictionary if present
+        if "arguments" in task and not isinstance(task["arguments"], dict):
+            return False, f"Task has invalid 'arguments' (must be a dictionary)"
+            
         return True, None
         
     def execute_plan(self, plan: Dict[str, Any], client_type: str = None) -> Dict[str, Any]:
@@ -468,6 +498,174 @@ class TaskPlanner:
             # Clear pre-approved operations after plan execution
             if operations_pre_approved:
                 self.tool_manager.trust_manager.clear_approved_operations()
+
+    # ----- Start of Interactive Planning Methods -----
+    
+    def start_interactive_plan(self, name: str, description: str) -> Dict[str, Any]:
+        """Start an interactive planning session.
+        
+        Args:
+            name: The name of the plan
+            description: The description of the plan
+            
+        Returns:
+            Dict with the result of starting the plan
+        """
+        # Reset interactive planning state
+        self.interactive_plan = {
+            "name": name,
+            "description": description,
+            "stop_on_failure": True,  # Default to stop on failure
+            "tasks": []
+        }
+        self.interactive_plan_tasks = []
+        self.interactive_plan_finalized = False
+        
+        # Display the plan being started
+        if self.ui:
+            self.ui.display_interactive_plan_started(name, description)
+        
+        return {
+            "success": True,
+            "plan_name": name,
+            "message": f"Started creating plan: {name}",
+            "task_count": 0
+        }
+    
+    def add_task_to_interactive_plan(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Add a task to the interactive plan.
+        
+        Args:
+            task: The task to add
+            
+        Returns:
+            Dict with the result of adding the task
+        """
+        # Check if we have an active plan
+        if not self.interactive_plan:
+            return {
+                "success": False,
+                "error": "No active plan. Start a plan first with mode='start_plan'."
+            }
+            
+        # Validate the task
+        is_valid, error = self.validate_task(task)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Invalid task: {error}"
+            }
+            
+        # Generate a task ID if not provided
+        if "id" not in task:
+            task["id"] = f"task{len(self.interactive_plan_tasks) + 1}"
+        
+        # Add to the plan
+        self.interactive_plan_tasks.append(task)
+        
+        # Display the task being added
+        if self.ui:
+            task_index = len(self.interactive_plan_tasks)
+            self.ui.display_interactive_plan_task_added(
+                task_index, 
+                task["id"], 
+                task.get("description", f"Execute {task['tool_name']}")
+            )
+        
+        return {
+            "success": True,
+            "task_id": task["id"],
+            "task_index": len(self.interactive_plan_tasks),
+            "message": f"Added task {task['id']} to plan"
+        }
+    
+    def finalize_interactive_plan(self) -> Dict[str, Any]:
+        """Finalize the interactive plan, preparing it for execution.
+        
+        Returns:
+            Dict with the result of finalizing the plan
+        """
+        # Check if we have an active plan
+        if not self.interactive_plan:
+            return {
+                "success": False,
+                "error": "No active plan. Start a plan first with mode='start_plan'."
+            }
+            
+        # Check if we have any tasks
+        if not self.interactive_plan_tasks:
+            return {
+                "success": False,
+                "error": "Plan has no tasks. Add tasks first with mode='add_task'."
+            }
+            
+        # Update the plan with tasks
+        self.interactive_plan["tasks"] = self.interactive_plan_tasks
+        
+        # Validate the complete plan
+        is_valid, error = self.validate_plan(self.interactive_plan)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Invalid plan: {error}"
+            }
+            
+        # Mark as finalized
+        self.interactive_plan_finalized = True
+        
+        # Ask for user confirmation
+        if self.ui:
+            # Display the full plan for user confirmation
+            self._display_plan_summary(self.interactive_plan)
+            confirmed = self.ui.confirm_interactive_plan(self.interactive_plan["name"])
+            
+            if not confirmed:
+                # Clear the plan if rejected
+                self.interactive_plan = None
+                self.interactive_plan_tasks = []
+                self.interactive_plan_finalized = False
+                
+                return {
+                    "success": False,
+                    "error": "Plan rejected by user",
+                    "user_action": "rejected"
+                }
+        
+        return {
+            "success": True,
+            "plan_name": self.interactive_plan["name"],
+            "task_count": len(self.interactive_plan_tasks),
+            "message": "Plan finalized and ready for execution",
+            "user_action": "confirmed"
+        }
+    
+    def execute_interactive_plan(self, client_type: str = None) -> Dict[str, Any]:
+        """Execute the finalized interactive plan.
+        
+        Args:
+            client_type: The client type to use for result formatting
+            
+        Returns:
+            Dict with execution results
+        """
+        # Check if we have a finalized plan
+        if not self.interactive_plan or not self.interactive_plan_finalized:
+            return {
+                "success": False,
+                "error": "No finalized plan. Finalize a plan first with mode='finalize_plan'."
+            }
+            
+        # Execute the plan
+        result = self.execute_plan(self.interactive_plan, client_type)
+        
+        # Clear the interactive planning state
+        self.interactive_plan = None
+        self.interactive_plan_tasks = []
+        self.interactive_plan_finalized = False
+        
+        return result
+    
+    # ----- End of Interactive Planning Methods -----
     
     def _evaluate_condition(self, condition: Dict[str, Any], results: Dict[str, Any]) -> bool:
         """Evaluate a condition to determine if a task should be executed.
@@ -731,37 +929,6 @@ class TaskPlanner:
                 permission_operations.append((tool_name, permission_path, task_desc))
         
         return permission_operations
-    
-    def _request_plan_permissions(self, operations: List[Tuple[str, Any, str]], plan_name: str, batch_id: str) -> bool:
-        """Request permission for all operations in a plan at once.
-        
-        Args:
-            operations: List of (tool_name, path, description) tuples requiring permission
-            plan_name: Name of the task plan
-            batch_id: Unique ID for this batch of operations
-            
-        Returns:
-            Whether all permissions were granted
-        """
-        if not operations:
-            return True
-            
-        if not self.tool_manager.trust_manager:
-            logger.warning("Trust manager not initialized, can't request permissions")
-            return False
-            
-        # Format the permission text
-        operations_text = f"The task plan '{plan_name}' requires permission for the following operations:\n"
-        for i, (tool_name, path, description) in enumerate(operations, 1):
-            operations_text += f"{i}. {description}\n"
-        
-        # Strip out the description for the actual trust manager call
-        trust_operations = [(tool_name, path) for tool_name, path, _ in operations]
-            
-        # Use the trust manager to request all permissions at once
-        return self.tool_manager.trust_manager.prompt_for_parallel_operations(
-            trust_operations, operations_text, batch_id
-        )
     
     def get_plan_schema(self) -> Dict[str, Any]:
         """Get the JSON schema for task plans.

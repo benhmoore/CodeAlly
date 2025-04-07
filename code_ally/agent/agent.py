@@ -74,6 +74,9 @@ class Agent:
         if system_prompt:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
+
+        # Interactive planning state
+        self.in_interactive_planning = False
         
     def _initialize_components(self, tools, verbose):
         """Initialize and register all agent components.
@@ -157,15 +160,19 @@ class Agent:
             self.messages.append(assistant_message)
             self.token_manager.update_token_count(self.messages)
 
-            # Process tools
-            try:
-                if self.parallel_tools and len(tool_calls) > 1:
-                    self._process_parallel_tool_calls(tool_calls)
-                else:
-                    self._process_sequential_tool_calls(tool_calls)
-            except PermissionDeniedError:
-                # Permission was denied by user; return to main conversation loop
-                return
+            # Check if this is an interactive planning operation
+            if self._is_interactive_planning_call(tool_calls):
+                self._handle_interactive_planning(tool_calls, content)
+            else:
+                # Process tools normally
+                try:
+                    if self.parallel_tools and len(tool_calls) > 1:
+                        self._process_parallel_tool_calls(tool_calls)
+                    else:
+                        self._process_sequential_tool_calls(tool_calls)
+                except PermissionDeniedError:
+                    # Permission was denied by user; return to main conversation loop
+                    return
 
             # Get a follow-up response
             animation_thread = self.ui.start_thinking_animation(
@@ -192,6 +199,8 @@ class Agent:
                         functions=self.tool_manager.get_function_definitions(),
                         include_reasoning=self.ui.verbose,
                     )
+                    # Check if the response indicates it was interrupted
+                    was_interrupted = follow_up_response.get('interrupted', False)
                 except KeyboardInterrupt:
                     logger.warning("KeyboardInterrupt caught during model_client.send call.")
                     was_interrupted = True
@@ -255,6 +264,77 @@ class Agent:
             self.token_manager.update_token_count(self.messages)
             self.ui.print_assistant_response(content)
 
+    def _is_interactive_planning_call(self, tool_calls: List[Dict[str, Any]]) -> bool:
+        """Check if this is an interactive planning operation.
+        
+        Args:
+            tool_calls: The tool calls to check
+            
+        Returns:
+            Whether this is an interactive planning operation
+        """
+        for tool_call in tool_calls:
+            call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
+            
+            if tool_name == "task_plan" and "mode" in arguments:
+                mode = arguments.get("mode", "")
+                if mode in ["start_plan", "add_task", "finalize_plan", "execute_plan"]:
+                    return True
+        
+        return False
+    
+    def _handle_interactive_planning(self, tool_calls: List[Dict[str, Any]], content: str) -> None:
+        """Handle interactive planning operations.
+        
+        Args:
+            tool_calls: The tool calls to handle
+            content: The LLM's response content
+        """
+        for tool_call in tool_calls:
+            call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
+            
+            if tool_name == "task_plan" and "mode" in arguments:
+                mode = arguments.get("mode", "")
+                
+                # Display the natural language explanation before executing the tool
+                if content.strip():
+                    self.ui.print_assistant_response(content)
+                
+                # Execute the appropriate planning operation
+                if mode == "start_plan":
+                    result = self.task_planner.start_interactive_plan(
+                        arguments.get("name", "Unnamed Plan"),
+                        arguments.get("description", "")
+                    )
+                    self.in_interactive_planning = True
+                elif mode == "add_task":
+                    result = self.task_planner.add_task_to_interactive_plan(
+                        arguments.get("task", {})
+                    )
+                elif mode == "finalize_plan":
+                    result = self.task_planner.finalize_interactive_plan()
+                    # If the user rejected the plan, we need to exit interactive planning
+                    if not result.get("success", False) and result.get("user_action") == "rejected":
+                        self.in_interactive_planning = False
+                elif mode == "execute_plan":
+                    result = self.task_planner.execute_interactive_plan(self.client_type)
+                    self.in_interactive_planning = False
+                else:
+                    result = {
+                        "success": False,
+                        "error": f"Unknown planning mode: {mode}"
+                    }
+                
+                # Add the result to the message history
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": tool_name,
+                    "content": json.dumps(result)
+                })
+                
+                self.token_manager.update_token_count(self.messages)
+    
     def _normalize_tool_call(
         self, tool_call: Dict[str, Any]
     ) -> Tuple[str, str, Dict[str, Any]]:
@@ -594,6 +674,8 @@ class Agent:
                         functions=self.tool_manager.get_function_definitions(),
                         include_reasoning=self.ui.verbose,
                     )
+                    # Check if the response indicates it was interrupted
+                    was_interrupted = response.get('interrupted', False)
                 except KeyboardInterrupt:
                     logger.warning("KeyboardInterrupt caught during model_client.send call.")
                     was_interrupted = True

@@ -53,6 +53,10 @@ class UIManager:
         self.prompt_session = PromptSession(
             history=FileHistory(history_file), key_bindings=kb
         )
+        
+        # Interactive planning state
+        self.current_interactive_plan = None
+        self.current_interactive_plan_tasks = []
 
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -242,3 +246,90 @@ Type a message to chat with the AI assistant.
 Use up/down arrow keys to navigate through command history.
 """
         self.print_markdown(help_text)
+
+    # ----- Interactive Planning UI Methods -----
+    
+    def display_interactive_plan_started(self, name: str, description: str) -> None:
+        """Display that a new interactive plan has been started.
+        
+        Args:
+            name: The name of the plan
+            description: The description of the plan
+        """
+        # Save the current interactive plan info
+        self.current_interactive_plan = {
+            "name": name,
+            "description": description
+        }
+        self.current_interactive_plan_tasks = []
+        
+        # Create and display the panel
+        from rich.panel import Panel
+        from rich.text import Text
+        
+        title_text = Text("📋 Creating Task Plan", style="bold blue")
+        content = Text.assemble(
+            Text(f"Name: ", style="bold"), Text(name), Text("\n"),
+            Text(f"Description: ", style="bold"), Text(description), Text("\n\n"),
+            Text("Creating tasks for this plan...", style="dim cyan")
+        )
+        
+        panel = Panel(
+            content,
+            title=title_text,
+            border_style="blue",
+            expand=False
+        )
+        
+        self.console.print("\n")
+        self.console.print(panel)
+        self.console.print("\n")
+    
+    def display_interactive_plan_task_added(self, task_index: int, task_id: str, description: str) -> None:
+        """Display that a task has been added to the interactive plan.
+        
+        Args:
+            task_index: The index of the task (1-based)
+            task_id: The ID of the task
+            description: The description of the task
+        """
+        # Add to the list of tasks
+        self.current_interactive_plan_tasks.append({
+            "index": task_index,
+            "id": task_id,
+            "description": description
+        })
+        
+        # Display the task
+        self.print_content(
+            f"[cyan]📌 Task {task_index}:[/] {description}",
+            style=None
+        )
+    
+    def confirm_interactive_plan(self, plan_name: str) -> bool:
+        """Ask the user to confirm execution of the interactive plan.
+        
+        Args:
+            plan_name: The name of the plan
+            
+        Returns:
+            Whether the user confirmed the plan
+        """
+        # Display a summary of tasks
+        if self.current_interactive_plan_tasks:
+            from rich.table import Table
+            
+            table = Table(title="Tasks to Execute", show_header=True, box=None)
+            table.add_column("#", style="dim")
+            table.add_column("Task", style="cyan")
+            
+            for task in self.current_interactive_plan_tasks:
+                table.add_row(
+                    str(task["index"]),
+                    task["description"]
+                )
+            
+            self.console.print(table)
+        
+        # Ask for confirmation
+        return self.confirm(f"Execute the task plan '{plan_name}'?", default=True)

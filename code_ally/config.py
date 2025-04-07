@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Default configuration values
 DEFAULT_CONFIG = {
-    "model": "llama3",
+    "model": "qwen2.5-coder:latest",
     "endpoint": "http://localhost:11434",
-    "context_size": 8192,
+    "context_size": 16384,
     "temperature": 0.7,
-    "max_tokens": 5000,
+    "max_tokens": 7000,
     "bash_timeout": 30,
     "auto_confirm": False,
     "check_context_msg": True,

@@ -20,10 +20,11 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 
 from code_ally.agent import Agent
-from code_ally.config import DEFAULT_CONFIG, load_config, reset_config, save_config
+from code_ally.config import DEFAULT_CONFIG, ConfigManager
 from code_ally.llm_client import OllamaClient
 from code_ally.prompts import get_main_system_prompt
 from code_ally.tools import ToolRegistry
+from code_ally.service_registry import ServiceRegistry
 
 # Configure logging
 logging.basicConfig(
@@ -161,12 +162,9 @@ Current error: {error_message}
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command line arguments.
-
-    Returns:
-        The parsed arguments
-    """
-    config = load_config()
+    """Parse command line arguments."""
+    config_manager = ConfigManager.get_instance()
+    config = config_manager.get_config()
 
     parser = argparse.ArgumentParser(
         description="Code Ally - Local LLM-powered pair programming assistant",
@@ -260,31 +258,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def handle_config_commands(args: argparse.Namespace) -> bool:
-    """Handle configuration-related commands.
-
-    Args:
-        args: The parsed command line arguments
-
-    Returns:
-        True if a config command was handled and the program should exit,
-        False otherwise
-    """
+    """Handle configuration-related commands."""
     console = Console()
 
     # Show current configuration
     if args.config_show:
-        console.print(json.dumps(load_config(), indent=2))
+        console.print(json.dumps(ConfigManager.get_instance().get_config(), indent=2))
         return True
 
     # Reset configuration to defaults
     if args.config_reset:
-        reset_config()
+        ConfigManager.get_instance().reset()
         console.print("[green]Configuration reset to defaults[/]")
         return True
 
     # Save current settings as new defaults
-    if args.config:  # This if statement was missing
-        new_config = load_config()
+    if args.config:
+        config_manager = ConfigManager.get_instance()
+        new_config = config_manager.get_config().copy()
         new_config.update(
             {
                 "model": args.model,
@@ -297,7 +288,8 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
                 "auto_dump": args.auto_dump,
             }
         )
-        save_config(new_config)
+        for key, value in new_config.items():
+            config_manager.set_value(key, value)
         console.print("[green]Configuration saved successfully[/]")
         return True
 
@@ -370,7 +362,12 @@ def main() -> None:
     # Get the system prompt
     system_prompt = get_main_system_prompt()
 
-    # Create the agent
+    # Create and register services
+    service_registry = ServiceRegistry.get_instance()
+    config_manager = ConfigManager.get_instance()
+    service_registry.register("config_manager", config_manager)
+
+    # Create the agent with service registry
     agent = Agent(
         model_client=model_client,
         client_type=client_type,
@@ -379,6 +376,7 @@ def main() -> None:
         verbose=args.verbose,
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
+        service_registry=service_registry
     )
 
     # Set debug options

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 from rich.table import Table
 
-from code_ally.config import load_config, save_config
+from code_ally.config import ConfigManager
 from code_ally.prompts import get_system_message
 from code_ally.trust import TrustManager
 
@@ -135,7 +135,8 @@ class CommandHandler:
         Returns:
             Tuple (handled, updated_messages)
         """
-        config = load_config()
+        config_manager = ConfigManager.get_instance()
+        config = config_manager.get_config()
 
         # Show current config if no arguments
         if not arg:
@@ -316,7 +317,7 @@ class CommandHandler:
 
             else:
                 # For other settings, just update the config file
-                config[key] = value
+                config_manager.set_value(key, value)
                 self.ui.print_success(
                     f"Configuration {key}={value} will apply on restart"
                 )
@@ -326,7 +327,7 @@ class CommandHandler:
             return True, messages
 
         # Save to config file
-        save_config(config)
+        config_manager.set_value(key, value)
         self.ui.print_success(f"Configuration updated and saved: {key}={value}")
         return True, messages
 
@@ -467,7 +468,7 @@ class CommandHandler:
             messages: Current message list
             filename: Filename to use (or auto-generate if empty)
         """
-        config = load_config()
+        config = ConfigManager.get_instance().get_config()
         dump_dir = config.get("dump_dir", "ally")
         os.makedirs(dump_dir, exist_ok=True)
 

@@ -20,6 +20,8 @@ from code_ally.agent.task_planner import TaskPlanner
 from code_ally.agent.command_handler import CommandHandler
 from code_ally.agent.error_handler import display_error
 from code_ally.config import load_config
+from code_ally.service_registry import ServiceRegistry
+from code_ally.agent.permission_manager import PermissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ class Agent:
         parallel_tools: bool = True,
         check_context_msg: bool = True,
         auto_dump: bool = True,
+        service_registry: Optional[ServiceRegistry] = None,
     ):
         """Initialize the agent.
 
@@ -49,56 +52,81 @@ class Agent:
             parallel_tools: Whether to enable parallel tool execution
             check_context_msg: Encourage LLM to check context to prevent redundant calls
             auto_dump: Automatically dump conversation on exit
+            service_registry: Optional service registry instance
         """
+        # Use provided service registry or create one
+        self.service_registry = service_registry or ServiceRegistry.get_instance()
+        
+        # Store basic configuration
         self.model_client = model_client
-        self.trust_manager = TrustManager()
-        self.messages: List[Dict[str, Any]] = []
+        self.messages = []
         self.check_context_msg = check_context_msg
         self.parallel_tools = parallel_tools
         self.auto_dump = auto_dump
-        self.request_in_progress = False  # Flag to track if an API request is in progress
-
-        # Initialize UI
+        self.request_in_progress = False
+        
+        # Determine client type
+        self.client_type = client_type or "ollama"
+        
+        # Create and register components
+        self._initialize_components(tools, verbose)
+        
+        # Optionally add an initial system prompt
+        if system_prompt:
+            self.messages.append({"role": "system", "content": system_prompt})
+            self.token_manager.update_token_count(self.messages)
+        
+    def _initialize_components(self, tools, verbose):
+        """Initialize and register all agent components.
+        
+        Args:
+            tools: List of available tools
+            verbose: Whether to enable verbose mode
+        """
+        # Create UI Manager
         self.ui = UIManager()
         self.ui.set_verbose(verbose)
-        self.ui.agent = self  # Provide a reference to the agent
-
-        # Initialize Token Manager
-        self.token_manager = TokenManager(model_client.context_size)
+        self.ui.agent = self
+        self.service_registry.register("ui_manager", self.ui)
+        
+        # Create Trust Manager
+        self.trust_manager = TrustManager()
+        self.service_registry.register("trust_manager", self.trust_manager)
+        
+        # Create Permission Manager
+        self.permission_manager = PermissionManager(self.trust_manager)
+        self.service_registry.register("permission_manager", self.permission_manager)
+        
+        # Create Token Manager
+        self.token_manager = TokenManager(self.model_client.context_size)
         self.token_manager.ui = self.ui
-
-        # Initialize Tool Manager
+        self.service_registry.register("token_manager", self.token_manager)
+        
+        # Create Tool Manager
         self.tool_manager = ToolManager(tools, self.trust_manager)
         self.tool_manager.ui = self.ui
-
-        # Initialize Task Planner
+        self.tool_manager.client_type = self.client_type
+        self.service_registry.register("tool_manager", self.tool_manager)
+        
+        # Create Task Planner
         self.task_planner = TaskPlanner(self.tool_manager)
         self.task_planner.ui = self.ui
         self.task_planner.set_verbose(verbose)
+        self.service_registry.register("task_planner", self.task_planner)
         
         # Find and configure task plan tool if available
         for tool in tools:
             if tool.name == "task_plan":
                 tool.set_task_planner(self.task_planner)
                 break
-
-        # Initialize Command Handler
+        
+        # Create Command Handler
         self.command_handler = CommandHandler(
             self.ui, self.token_manager, self.trust_manager
         )
         self.command_handler.set_verbose(verbose)
         self.command_handler.agent = self
-
-        # Determine client type
-        if client_type is None:
-            client_type = "ollama"
-        self.client_type = client_type
-        self.tool_manager.client_type = self.client_type
-
-        # Optionally add an initial system prompt
-        if system_prompt:
-            self.messages.append({"role": "system", "content": system_prompt})
-            self.token_manager.update_token_count(self.messages)
+        self.service_registry.register("command_handler", self.command_handler)
 
     def process_llm_response(self, response: Dict[str, Any]) -> None:
         """Process the LLM's response and execute any tool calls if present.

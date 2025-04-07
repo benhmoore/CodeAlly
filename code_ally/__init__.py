@@ -10,5 +10,3 @@ __version__ = "0.4.1"
 __author__ = "Ben H Moore"
 __email__ = "ben@benhmoore.com"
 
-# Import common configuration functions for easier access
-from code_ally.config import load_config, reset_config, save_config

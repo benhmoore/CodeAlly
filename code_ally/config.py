@@ -159,6 +159,59 @@ def save_config(config: Dict[str, Any]) -> None:
         raise
 
 
+class ConfigManager:
+    """Singleton manager for configuration settings."""
+    _instance = None
+    _config = None
+
+    @classmethod
+    def get_instance(cls):
+        """Get the singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        """Initialize the configuration manager."""
+        # Only load config once
+        if ConfigManager._config is None:
+            ConfigManager._config = load_config()
+
+    def get_config(self):
+        """Get the complete configuration dictionary."""
+        return ConfigManager._config
+
+    def get_value(self, key, default=None):
+        """Get a specific configuration value."""
+        if default is None:
+            default = DEFAULT_CONFIG.get(key)
+        return ConfigManager._config.get(key, default)
+
+    def set_value(self, key, value):
+        """Set a specific configuration value."""
+        # Validate the value type
+        if key in CONFIG_TYPES:
+            expected_type = CONFIG_TYPES[key]
+
+            # For booleans, accept string representations
+            if expected_type == bool and isinstance(value, str):
+                value = value.lower() in ("true", "yes", "y", "1")
+            elif not isinstance(value, expected_type):
+                try:
+                    value = expected_type(value)
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        f"Invalid type for config key '{key}': "
+                        f"expected {expected_type.__name__}, got {type(value).__name__}"
+                    )
+
+        # Update the config
+        ConfigManager._config[key] = value
+        save_config(ConfigManager._config)
+
+        logger.debug(f"Config value updated: {key} = {value}")
+
+
 def get_config_value(key: str, default: Any = None) -> Any:
     """Get a specific configuration value.
 
@@ -170,12 +223,8 @@ def get_config_value(key: str, default: Any = None) -> Any:
     Returns:
         The value for the specified key
     """
-    config = load_config()
-
-    if default is None:
-        default = DEFAULT_CONFIG.get(key)
-
-    return config.get(key, default)
+    config_manager = ConfigManager.get_instance()
+    return config_manager.get_value(key, default)
 
 
 def set_config_value(key: str, value: Any) -> None:
@@ -188,28 +237,8 @@ def set_config_value(key: str, value: Any) -> None:
     Raises:
         ValueError: If the value has an invalid type for the key
     """
-    # Validate the value type
-    if key in CONFIG_TYPES:
-        expected_type = CONFIG_TYPES[key]
-
-        # For booleans, accept string representations
-        if expected_type == bool and isinstance(value, str):
-            value = value.lower() in ("true", "yes", "y", "1")
-        elif not isinstance(value, expected_type):
-            try:
-                value = expected_type(value)
-            except (ValueError, TypeError):
-                raise ValueError(
-                    f"Invalid type for config key '{key}': "
-                    f"expected {expected_type.__name__}, got {type(value).__name__}"
-                )
-
-    # Load, update, and save the config
-    config = load_config()
-    config[key] = value
-    save_config(config)
-
-    logger.debug(f"Config value updated: {key} = {value}")
+    config_manager = ConfigManager.get_instance()
+    config_manager.set_value(key, value)
 
 
 def reset_config() -> None:

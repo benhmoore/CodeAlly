@@ -361,141 +361,151 @@ class OllamaClient(ModelClient):
 
         return content.strip()
 
-    def send(
-        self,
-        messages: List[Dict[str, Any]],
-        functions: Optional[List[Dict[str, Any]]] = None,
-        tools: Optional[List[Callable]] = None,
-        stream: bool = False,
-        include_reasoning: bool = False,
-    ) -> Dict[str, Any]:
+    def send(self, messages, functions=None, tools=None, stream=False, include_reasoning=False):
         """Send a request to Ollama with messages and function definitions.
-
+        
         Args:
             messages: List of message objects with role and content
             functions: List of function definitions in JSON schema format
             tools: List of Python functions to expose as tools
             stream: Whether to stream the response
             include_reasoning: Whether to include reasoning in the response
-
+        
         Returns:
             The LLM's response
         """
-        # Create a copy of messages to avoid modifying the original
         messages_copy = messages.copy()
+        payload = self._prepare_payload(messages_copy, functions, tools, stream, include_reasoning)
+        
+        try:
+            return self._execute_request(payload, stream)
+        except KeyboardInterrupt:
+            return self._handle_interrupt()
+        except requests.RequestException as e:
+            return self._handle_request_error(e)
+        except json.JSONDecodeError as e:
+            return self._handle_json_error(e)
 
-        # Format the request for Ollama's API
+    def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+        """Prepare the request payload.
+        
+        Args:
+            messages: List of message objects with role and content
+            functions: List of function definitions in JSON schema format
+            tools: List of Python functions to expose as tools
+            stream: Whether to stream the response
+            include_reasoning: Whether to include reasoning in the response
+        
+        Returns:
+            The formatted payload dictionary
+        """
         payload = {
             "model": self.model_name,
-            "messages": messages_copy,
+            "messages": messages,
             "stream": stream,
             "options": {
                 "temperature": self.temperature,
                 "num_ctx": self.context_size,
                 "num_predict": self.max_tokens,
-                # Add keep_alive if specified
                 **({"keep_alive": self.keep_alive} if self.keep_alive is not None else {}),
-                # Add Qwen-specific template options for function calling
-                **self._get_qwen_template_options(messages_copy, tools),
-            },
+                **self._get_qwen_template_options(messages, tools),
+            }
         }
-
-        payload["options"][
-            "tool_choice"
-        ] = "auto"  # Allow model to decide when to use tools
-
-        # For verbose mode, ask the model to include its reasoning
+        
+        payload["options"]["tool_choice"] = "auto"
+        
         if include_reasoning:
-            # Add a system message requesting reasoning
             reasoning_request = {
                 "role": "system",
                 "content": get_system_message("verbose_thinking"),
             }
-
-            # Insert before the last user message
-            for i in range(len(messages_copy) - 1, -1, -1):
-                if messages_copy[i]["role"] == "user":
-                    messages_copy.insert(i, reasoning_request)
+            
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "user":
+                    messages.insert(i, reasoning_request)
                     break
-
-        # Add tool/function definitions if available
+        
         if functions or tools:
             if functions:
                 payload["tools"] = functions
             elif tools:
-                # Generate tool schemas from Python functions
                 payload["tools"] = self._convert_tools_to_schemas(tools)
-
-            # Set parallel function calling if using Qwen
+            
             if self.is_qwen_model:
                 payload["options"]["parallel_function_calls"] = True
+        
+        return payload
 
-        response = None
-        session = None
-        try:
-            # Log the request if in debug mode
-            logger.debug(f"Sending request to Ollama: {self.api_url}")
-
-            # Use a session for better cleanup on interruption
-            session = requests.Session()
-            response = session.post(
-                self.api_url, 
-                json=payload, 
-                timeout=240,
-                stream=True  # Always use stream mode to allow proper cancellation
-            )
-            response.raise_for_status()
+    def _execute_request(self, payload, stream):
+        """Execute the request to the Ollama API.
+        
+        Args:
+            payload: The request payload
+            stream: Whether to stream the response
+        
+        Returns:
+            The API response
+        """
+        logger.debug(f"Sending request to Ollama: {self.api_url}")
+        
+        session = requests.Session()
+        response = session.post(
+            self.api_url, 
+            json=payload, 
+            timeout=240,
+            stream=True
+        )
+        response.raise_for_status()
+        
+        if not stream:
+            result = response.json()
+            message = result.get("message", {})
+            self._normalize_tool_calls_in_message(message)
             
-            # Only process the response if not streaming
-            if not stream:
-                result = response.json()
-                
-                # Extract the message from the response
-                message = result.get("message", {})
-                
-                # Add robust parsing for tool calls in different formats
-                self._normalize_tool_calls_in_message(message)
-                
-                if "message" in result:
-                    return message
-                return result
-            return response
+            if "message" in result:
+                return message
+            return result
+        return response
 
-        except KeyboardInterrupt:
-            # User interrupted the request
-            logger.info("Request interrupted by user")
-            # Return a special message that indicates the user interrupted the request
-            # NOTE: This is a key part of making sure Ctrl+C doesn't exit the program
-            # The interrupted flag is checked in multiple places to ensure proper handling
-            try:
-                # Clean up resources to ensure the request is cancelled
-                if response is not None:
-                    response.close()
-                if session is not None:
-                    session.close()
-            except Exception as e:
-                logger.error(f"Error cancelling request: {e}")
-            
-            return {
-                "role": "assistant",
-                "content": "[Request interrupted by user]",
-                "interrupted": True
-            }
-        except requests.RequestException as e:
-            # Log the error
-            logger.error(f"Error communicating with Ollama: {str(e)}")
+    def _handle_interrupt(self):
+        """Handle keyboard interruption during a request.
+        
+        Returns:
+            A response indicating the request was interrupted
+        """
+        logger.info("Request interrupted by user")
+        return {
+            "role": "assistant",
+            "content": "[Request interrupted by user]",
+            "interrupted": True
+        }
 
-            # Handle API errors (connection issues, etc.)
-            return {
-                "role": "assistant",
-                "content": f"Error communicating with Ollama: {str(e)}",
-            }
-        except json.JSONDecodeError as e:
-            # Log the error
-            logger.error(f"Invalid JSON response from Ollama API: {str(e)}")
+    def _handle_request_error(self, e):
+        """Handle request exceptions.
+        
+        Args:
+            e: The exception that occurred
+        
+        Returns:
+            An error response
+        """
+        logger.error(f"Error communicating with Ollama: {str(e)}")
+        return {
+            "role": "assistant",
+            "content": f"Error communicating with Ollama: {str(e)}",
+        }
 
-            # Handle invalid JSON responses
-            return {
-                "role": "assistant",
-                "content": f"Error: Received invalid response from Ollama API",
-            }
+    def _handle_json_error(self, e):
+        """Handle JSON decoding errors.
+        
+        Args:
+            e: The exception that occurred
+        
+        Returns:
+            An error response
+        """
+        logger.error(f"Invalid JSON response from Ollama API: {str(e)}")
+        return {
+            "role": "assistant",
+            "content": f"Error: Received invalid response from Ollama API",
+        }

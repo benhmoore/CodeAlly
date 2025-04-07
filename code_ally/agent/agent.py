@@ -7,7 +7,6 @@ import json
 import logging
 import re
 import time
-import threading
 import concurrent.futures
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -447,26 +446,6 @@ class Agent:
                         f"Error processing parallel tool call {tool_name}: {e}"
                     )
 
-        self.token_manager.update_token_count(self.messages)
-
-    def _cleanup_contextual_guidance(self) -> None:
-        """Remove any 'Based on the user's request...' system messages."""
-        i = len(self.messages) - 1
-        removed = False
-        while i >= 0:
-            msg = self.messages[i]
-            if msg.get("role") == "system" and msg.get("content", "").startswith(
-                "Based on the user's request, consider using these tools:"
-            ):
-                self.messages.pop(i)
-                removed = True
-                break
-            i -= 1
-
-        if removed and self.ui.verbose:
-            self.ui.console.print(
-                "[dim cyan][Verbose] Removed follow-up contextual tool guidance from conversation history[/]"
-            )
         self.token_manager.update_token_count(self.messages)
 
     def _format_tool_result_as_natural_language(

@@ -26,8 +26,12 @@ DEFAULT_CONFIG = {
     "check_context_msg": True,
     "parallel_tools": True,
     "qwen_template": "qwen2.5_function_calling",
+    "qwen_parallel_calls": True,
+    "qwen_parallel_calls_explicit": False,  # Whether explicitly set by user
+    "qwen_chinese": False, 
+    "qwen_chinese_explicit": False,  # Whether explicitly set by user
     "dump_dir": "ally",
-    "auto_dump": False,  # Whether to automatically dump conversations on exit
+    "auto_dump": False,
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,
@@ -45,8 +49,12 @@ CONFIG_TYPES = {
     "check_context_msg": bool,
     "parallel_tools": bool,
     "qwen_template": str,
-    "dump_dir": str,  # Type for dump directory
-    "auto_dump": bool,  # Type for auto dump option
+    "qwen_parallel_calls": bool,
+    "qwen_parallel_calls_explicit": bool,
+    "qwen_chinese": bool,
+    "qwen_chinese_explicit": bool,
+    "dump_dir": str,
+    "auto_dump": bool,
     "theme": str,
     "compact_threshold": int,
     "show_token_usage": bool,

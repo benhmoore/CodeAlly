@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Union
 
 from code_ally.tools.base import BaseTool
-from code_ally.trust import TrustManager
+from code_ally.trust import PermissionDeniedError, TrustManager
 from code_ally.agent.permission_manager import PermissionManager
 
 logger = logging.getLogger(__name__)
@@ -228,19 +228,8 @@ class ToolManager:
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
-    def execute_tool(self, tool_name, arguments, check_context_msg=True, client_type=None, batch_id=None):
-        """Execute a tool with the given arguments after checking trust.
-        
-        Args:
-            tool_name: The name of the tool to execute
-            arguments: The arguments to pass to the tool
-            check_context_msg: Whether to add context check message for redundant calls
-            client_type: The client type to use for formatting the result
-            batch_id: The batch ID for parallel tool calls
-            
-        Returns:
-            The result of the tool execution
-        """
+    def execute_tool(self, tool_name, arguments, check_context_msg=True, client_type=None, pre_approved=False):
+        """Execute a tool with the given arguments after checking trust."""
         import time
         
         start_time = time.time()
@@ -263,9 +252,23 @@ class ToolManager:
         # Record this call
         self._record_tool_call(tool_name, arguments)
         
-        # Check permissions
-        if not self._check_permissions(tool_name, arguments, batch_id):
-            return self._create_error_result(f"Permission denied for {tool_name}")
+        # Check permissions if not pre-approved
+        tool = self.tools[tool_name]
+        if tool.requires_confirmation and not pre_approved:
+            # Get permission path based on the tool and arguments
+            permission_path = self._get_permission_path(tool_name, arguments)
+            
+            try:
+                # Check if already trusted
+                if not self.trust_manager.is_trusted(tool_name, permission_path):
+                    logger.info(f"Requesting permission for {tool_name}")
+                    
+                    # Prompt for permission (this may raise PermissionDeniedError)
+                    if not self.trust_manager.prompt_for_permission(tool_name, permission_path):
+                        return self._create_error_result(f"Permission denied for {tool_name}")
+            except PermissionDeniedError:
+                # Let exceptions propagate upward
+                raise
         
         # Execute the tool
         return self._perform_tool_execution(tool_name, arguments)
@@ -369,22 +372,14 @@ class ToolManager:
             raise
         
     def _get_permission_path(self, tool_name, arguments):
-        """Get the permission path for a tool.
-        
-        Args:
-            tool_name: The name of the tool
-            arguments: The arguments for the tool
-            
-        Returns:
-            The permission path or None
-        """
+        """Get the permission path for a tool."""
         # For bash tool, pass arguments.command as the path
         if tool_name == "bash" and "command" in arguments:
             return arguments
         
         # Use the first string argument as the path, if any
         for arg_name, arg_value in arguments.items():
-            if isinstance(arg_value, str) and arg_name in ("path", "file_path"):
+            if isinstance(arg_value, str) and arg_name in ("path", "file_path", "directory"):
                 return arg_value
         
         return None

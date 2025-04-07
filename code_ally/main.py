@@ -35,25 +35,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger("code_ally")
 
-# Global reference to the agent for signal handling
-_global_agent = None
+# Global reference to the agent for signal handling - needed to differentiate
+# Ctrl+C during requests vs. Ctrl+C when idle.
+_global_agent: Optional[Agent] = None
 
 def handle_interrupt(signum, frame):
     """Handle keyboard interrupt (SIGINT) signals.
-    
-    If a request is in progress, just let the agent handle it internally.
-    Otherwise, exit the program.
+
+    - If an LLM request is in progress, do nothing here; the exception
+      will be caught closer to the request call.
+    - Otherwise (idle or during user input), exit gracefully.
     """
     global _global_agent
-    
-    if _global_agent and _global_agent.request_in_progress:
+
+    # Check if an agent exists and if its request_in_progress flag is set
+    if (_global_agent and getattr(_global_agent, 'request_in_progress', False)):
         # If a request is in progress, let the agent handle it
-        # by doing nothing here (not propagating the signal)
-        logger.debug("Keyboard interrupt caught, but request in progress - letting agent handle it")
+        # by doing nothing in this top-level handler. The interrupt
+        # should be caught within the thread making the request.
+        logger.debug("SIGINT caught by main handler, but request in progress. Allowing agent/client to handle.")
         return
     else:
-        # Otherwise, exit like normal
-        logger.debug("Keyboard interrupt caught with no request in progress - exiting")
+        logger.debug("SIGINT caught by main handler (no request active). Exiting.")
         console = Console()
         console.print("\n[bold]Goodbye![/]")
         sys.exit(0)
@@ -387,20 +390,22 @@ def main() -> None:
     if args.yes_to_all:
         agent.trust_manager.set_auto_confirm(True)
         logger.warning("Auto-confirm mode enabled - will skip all confirmation prompts")
-        
-    # Set up the global agent reference for signal handling
-    global _global_agent
+
+    # Set up the global agent reference for the signal handler
+    global _global_agent # Use global scope for the signal handler's access
     _global_agent = agent
-    
+
     # Install signal handler for SIGINT (Ctrl+C)
     signal.signal(signal.SIGINT, handle_interrupt)
-    
+
     try:
-        # Run the conversation loop
         agent.run_conversation()
     except KeyboardInterrupt:
-        # This should only happen if our signal handler didn't catch it
-        # or if it happens during agent initialization - handle it gracefully
+        # This catches KeyboardInterrupt raised when the user cancels the input prompt
+        # or if the signal handler decided to exit (i.e., no request was active).
+        logger.debug(
+            "KeyboardInterrupt caught in main execution block (likely prompt cancellation or idle interrupt)."
+        )
         if agent.auto_dump:
             try:
                 agent.command_handler.dump_conversation(agent.messages, "")

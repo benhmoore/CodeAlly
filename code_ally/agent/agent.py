@@ -181,22 +181,43 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
-            try:
-                self.request_in_progress = True  # Set flag before sending request
-                follow_up_response = self.model_client.send(
-                    self.messages,
-                    functions=self.tool_manager.get_function_definitions(),
-                    include_reasoning=self.ui.verbose,
-                )
-                self.request_in_progress = False  # Clear flag after response received
+            follow_up_response = None 
+            was_interrupted = False
 
-                # Special handling for interrupted requests
-                if (follow_up_response.get("content", "").strip() == "[Request interrupted by user]" or
-                    follow_up_response.get("content", "").strip() == "[Request interrupted by user for tool use]" or
-                    follow_up_response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
-                    follow_up_response.get("interrupted", False)):
-                    # Make absolutely sure the flag is cleared
-                    self.request_in_progress = False
+            try:
+                self.request_in_progress = True # Signal that a request is starting
+                try:
+                    follow_up_response = self.model_client.send(
+                        self.messages,
+                        functions=self.tool_manager.get_function_definitions(),
+                        include_reasoning=self.ui.verbose,
+                    )
+                except KeyboardInterrupt:
+                    logger.warning("KeyboardInterrupt caught during model_client.send call.")
+                    was_interrupted = True
+                except Exception as e:
+                    logger.error(f"Error during model_client.send: {e}", exc_info=True)
+                    self.ui.print_error(f"Failed to get response from model: {e}")
+            finally:
+                self.request_in_progress = False # Ensure flag is always reset
+
+            if was_interrupted:
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+                self.ui.print_content("[yellow]Request interrupted by user[/]")
+                return # Stop processing this response, go back to user input loop
+
+            if follow_up_response:
+                # Define the interruption marker message
+                interruption_markers = [
+                    "[Request interrupted by user]",
+                    "[Request interrupted by user for tool use]",
+                    "[Request interrupted by user due to permission denial]",
+                ]
+
+                response_content = follow_up_response.get("content", "").strip()
+                was_interrupted = follow_up_response.get("interrupted", False) or response_content in interruption_markers
+                if was_interrupted:
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
@@ -224,11 +245,9 @@ class Agent:
 
                 # Recursively process the follow-up
                 self.process_llm_response(follow_up_response)
-            except KeyboardInterrupt:
+            else:
                 self.ui.stop_thinking_animation()
                 animation_thread.join(timeout=1.0)
-                self.ui.print_content("[yellow]Request interrupted by user[/]")
-                return  # Exit without processing response
 
         else:
             # Normal text response
@@ -354,7 +373,6 @@ class Agent:
 
         # Collect all protected tools that require permission
         protected_tools = []
-        batch_id = f"parallel-{int(time.time())}"
         for _, tool_name, arguments in normalized_calls:
             if (
                 tool_name in self.tool_manager.tools
@@ -371,25 +389,30 @@ class Agent:
                         ):
                             permission_path = arg_value
                             break
-                protected_tools.append((tool_name, permission_path))
+
+                # Also include a description for better user information
+                description = f"{tool_name} on {permission_path}" if permission_path else f"{tool_name} operation"
+                protected_tools.append((tool_name, permission_path, description))
 
         # Single permission for all protected calls
+        operations_pre_approved = False
         if protected_tools:
-            permission_text = "Permission required for the following operations:\n"
-            for i, (tname, ppath) in enumerate(protected_tools, 1):
-                if tname == "bash":
-                    permission_text += (
-                        f"{i}. Execute command: {ppath.get('command', 'unknown')}\n"
-                    )
-                elif ppath:
-                    permission_text += f"{i}. {tname} on path: {ppath}\n"
-                else:
-                    permission_text += f"{i}. {tname} operation\n"
+            # Use the trust manager to request all permissions at once
+            try:
+                # Get just the tool_name and path for the trust manager
+                trust_operations = [(tool_name, path) for tool_name, path, _ in protected_tools]
 
-            # Pass the batch_id when prompting
-            if not self.trust_manager.prompt_for_parallel_operations(
-                protected_tools, permission_text, batch_id
-            ):
+                # Format the permission text
+                operations_text = "Permission required for the following operations:\n"
+                for i, (_, _, description) in enumerate(protected_tools, 1):
+                    operations_text += f"{i}. {description}\n"
+
+                if self.trust_manager.prompt_for_parallel_operations(trust_operations, operations_text):
+                    operations_pre_approved = True
+                else:
+                    self.ui.print_warning("Permission denied for parallel operations")
+                    return
+            except PermissionDeniedError:
                 self.ui.print_warning("Permission denied for parallel operations")
                 return
 
@@ -403,7 +426,7 @@ class Agent:
                     arguments,
                     self.check_context_msg,
                     self.client_type,
-                    batch_id,
+                    operations_pre_approved,  # Pass pre_approved flag
                 ): (call_id, tool_name)
                 for (call_id, tool_name, arguments) in normalized_calls
             }
@@ -412,18 +435,18 @@ class Agent:
                 call_id, tool_name = future_to_call[future]
                 try:
                     raw_result = future.result()
-                    
+
                     # Check for errors and provide acknowledgement if needed
                     if not raw_result.get("success", False):
                         error_msg = raw_result.get("error", "Unknown error")
-                        
+
                         # Get arguments for this tool call
                         for _, t_name, args in normalized_calls:
                             if t_name == tool_name and call_id == future_to_call[future][0]:
                                 # Display formatted error with suggestions
                                 display_error(self.ui, error_msg, tool_name, args)
                                 break
-                    
+
                     result = self.tool_manager.format_tool_result(
                         raw_result, self.client_type
                     )
@@ -447,6 +470,10 @@ class Agent:
                     )
 
         self.token_manager.update_token_count(self.messages)
+
+        # Clear pre-approved operations after all tasks are completed
+        if operations_pre_approved:
+            self.trust_manager.clear_approved_operations()
 
     def _format_tool_result_as_natural_language(
         self, tool_name: str, result: Any
@@ -556,27 +583,49 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
+            response = None 
+            was_interrupted = False
+
             try:
-                self.request_in_progress = True  # Set flag before sending request
-                response = self.model_client.send(
-                    self.messages,
-                    functions=self.tool_manager.get_function_definitions(),
-                    include_reasoning=self.ui.verbose,
-                )
-                self.request_in_progress = False  # Clear flag after response received
-                
-                # Special handling for interrupted requests
-                if (response.get("content", "").strip() == "[Request interrupted by user]" or
-                    response.get("content", "").strip() == "[Request interrupted by user for tool use]" or 
-                    response.get("content", "").strip() == "[Request interrupted by user due to permission denial]" or
-                    response.get("interrupted", False)):
-                    # Make absolutely sure the flag is cleared
-                    self.request_in_progress = False
+                self.request_in_progress = True # Signal that a request is starting
+                try:
+                    response = self.model_client.send(
+                        self.messages,
+                        functions=self.tool_manager.get_function_definitions(),
+                        include_reasoning=self.ui.verbose,
+                    )
+                except KeyboardInterrupt:
+                    logger.warning("KeyboardInterrupt caught during model_client.send call.")
+                    was_interrupted = True
+                except Exception as e:
+                    logger.error(f"Error during model_client.send: {e}", exc_info=True)
+                    self.ui.print_error(f"Failed to get response from model: {e}")
+            finally:
+                self.request_in_progress = False # Ensure flag is always reset
+
+            if was_interrupted:
+                self.ui.stop_thinking_animation()
+                animation_thread.join(timeout=1.0)
+                self.ui.print_content("[yellow]Request interrupted by user[/]")
+                continue # Go back to waiting for user input
+
+            if response:
+                # Define the interruption marker message
+                interruption_markers = [
+                    "[Request interrupted by user]",
+                    "[Request interrupted by user for tool use]",
+                    "[Request interrupted by user due to permission denial]",
+                ]
+
+                response_content = response.get("content", "").strip()
+                was_interrupted = response.get("interrupted", False) or response_content in interruption_markers
+
+                if was_interrupted:
                     self.ui.stop_thinking_animation()
                     animation_thread.join(timeout=1.0)
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
-                    return  # Get new user input
-                
+                    continue # Go back to waiting for user input
+
                 if self.ui.verbose:
                     has_tool_calls = "tool_calls" in response and response["tool_calls"]
                     tool_names = []
@@ -594,10 +643,6 @@ class Agent:
                 animation_thread.join(timeout=1.0)
 
                 self.process_llm_response(response)
-            except KeyboardInterrupt:
-                # Make absolutely sure the flag is cleared
-                self.request_in_progress = False
+            else:
                 self.ui.stop_thinking_animation()
                 animation_thread.join(timeout=1.0)
-                self.ui.print_content("[yellow]Request interrupted by user[/]")
-                # Continue the conversation loop without processing this response

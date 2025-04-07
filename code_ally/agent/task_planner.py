@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from code_ally.agent.tool_manager import ToolManager
 from code_ally.agent.error_handler import display_error
 from code_ally.tools.base import BaseTool
+from code_ally.trust import PermissionDeniedError
 
 logger = logging.getLogger(__name__)
 
@@ -160,17 +161,42 @@ class TaskPlanner:
             self._display_plan_summary(plan)
         
         # Pre-check all permissions needed for the plan
-        batch_id = f"task-plan-{int(time.time())}"
         permission_operations = self._collect_permission_operations(plan)
-        if permission_operations and not self._request_plan_permissions(permission_operations, plan["name"], batch_id):
-            return {
-                "success": False,
-                "error": "Permission denied for task plan operations",
-                "plan_name": plan.get("name", "unknown"),
-                "results": {},
-                "completed_tasks": [],
-                "failed_tasks": []
-            }
+        operations_pre_approved = False
+
+        if permission_operations:
+            # Format the permission text
+            operations_text = f"The task plan '{plan['name']}' requires permission for the following operations:\n"
+            for i, (tool_name, path, description) in enumerate(permission_operations, 1):
+                operations_text += f"{i}. {description}\n"
+
+            # Request permissions for all operations at once
+            try:
+                # Get just the tool_name and path for the trust manager
+                trust_operations = [(tool_name, path) for tool_name, path, _ in permission_operations]
+
+                # Use the trust manager to request all permissions at once
+                if self.tool_manager.trust_manager.prompt_for_parallel_operations(trust_operations, operations_text):
+                    operations_pre_approved = True
+                else:
+                    return {
+                        "success": False,
+                        "error": "Permission denied for task plan operations",
+                        "plan_name": plan.get("name", "unknown"),
+                        "results": {},
+                        "completed_tasks": [],
+                        "failed_tasks": []
+                    }
+            except PermissionDeniedError:
+                # Permission denied, return gracefully
+                return {
+                    "success": False,
+                    "error": "Permission denied for task plan operations",
+                    "plan_name": plan.get("name", "unknown"),
+                    "results": {},
+                    "completed_tasks": [],
+                    "failed_tasks": []
+                }
             
         start_time = time.time()
         
@@ -282,10 +308,25 @@ class TaskPlanner:
                 
                 # Execute the tool - pass the batch_id for permission tracking
                 # Log to help debug the permission issue
+                batch_id = plan.get("batch_id", "default_batch")  # Define batch_id with a default value
                 logger.info(f"Executing task '{task_id}' with tool '{tool_name}' using batch_id: {batch_id}")
-                raw_result = self.tool_manager.execute_tool(
-                    tool_name, arguments, True, client_type, batch_id
-                )
+                try:
+                    raw_result = self.tool_manager.execute_tool(
+                        tool_name, 
+                        arguments, 
+                        True,  # check_context_msg
+                        client_type, 
+                        operations_pre_approved  # Pass pre_approved flag
+                    )
+                except PermissionDeniedError:
+                    # User denied permission, add a special message to history
+                    failed_tasks.append(task_id)
+                    results[task_id] = {
+                        "success": False,
+                        "error": "Permission denied",
+                        "skipped": True
+                    }
+                    continue
                 
                 # Store the result
                 results[task_id] = raw_result
@@ -423,6 +464,10 @@ class TaskPlanner:
                 "completed_tasks": completed_tasks if 'completed_tasks' in locals() else [],
                 "failed_tasks": failed_tasks if 'failed_tasks' in locals() else []
             }
+        finally:
+            # Clear pre-approved operations after plan execution
+            if operations_pre_approved:
+                self.tool_manager.trust_manager.clear_approved_operations()
     
     def _evaluate_condition(self, condition: Dict[str, Any], results: Dict[str, Any]) -> bool:
         """Evaluate a condition to determine if a task should be executed.

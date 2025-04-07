@@ -21,6 +21,29 @@ class TaskPlanTool(BaseTool):
 
     name = "task_plan"
     description = """Execute a multi-step task plan with dependencies and conditions.
+
+    <tool_call>
+    {"name": "task_plan", "arguments": {"plan": {
+      "name": "Task Name",
+      "description": "Task description",
+      "stop_on_failure": true,
+      "tasks": [
+        {
+          "id": "task1",
+          "tool_name": "bash",
+          "description": "First step",
+          "arguments": {"command": "command_here"}
+        },
+        {
+          "id": "task2",
+          "tool_name": "file_write",
+          "description": "Second step",
+          "depends_on": ["task1"],
+          "arguments": {"path": "path_here", "content": "content_here"}
+        }
+      ]
+    }}}
+    </tool_call>
     
     Supports:
     - Sequential and conditional execution of multiple tools

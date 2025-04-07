@@ -27,9 +27,10 @@ class OllamaClient(ModelClient):
         self,
         endpoint: str = "http://localhost:11434",
         model_name: str = "llama3",
-        temperature: float = 0.7,
-        context_size: int = 32000,
+        temperature: float = 0.3,
+        context_size: int = 16000,
         max_tokens: int = 5000,
+        keep_alive: Optional[int] = None,  # Time in seconds to keep model in memory
     ):
         """Initialize the Ollama client.
 
@@ -39,12 +40,14 @@ class OllamaClient(ModelClient):
             temperature: Temperature for text generation (higher = more creative)
             context_size: Context size in tokens
             max_tokens: Maximum tokens to generate
+            keep_alive: Duration in seconds to keep model loaded in memory (None = use Ollama default)
         """
         self._endpoint = endpoint
         self._model_name = model_name
         self.temperature = temperature
         self.context_size = context_size
         self.max_tokens = max_tokens
+        self.keep_alive = keep_alive
         self.api_url = f"{endpoint}/api/chat"
         self.is_qwen_model = "qwen" in model_name.lower()
 
@@ -390,6 +393,8 @@ class OllamaClient(ModelClient):
                 "temperature": self.temperature,
                 "num_ctx": self.context_size,
                 "num_predict": self.max_tokens,
+                # Add keep_alive if specified
+                **({"keep_alive": self.keep_alive} if self.keep_alive is not None else {}),
                 # Add Qwen-specific template options for function calling
                 **self._get_qwen_template_options(messages_copy, tools),
             },

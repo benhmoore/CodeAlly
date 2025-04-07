@@ -13,7 +13,11 @@ from code_ally.tools.registry import register_tool
 class FileWriteTool(BaseTool):
     name = "file_write"
     description = """Write content to a file with enhanced options.
-    
+
+    <tool_call>
+    {"name": "file_write", "arguments": {"path": "/absolute/path/to/file.txt", "content": "File content here", "append": false, "create_backup": true}}
+    </tool_call>
+
     Supports:
     - Standard overwrite mode
     - Append/prepend modes

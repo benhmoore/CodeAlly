@@ -19,6 +19,10 @@ class BatchOperationTool(BaseTool):
 
     name = "batch"
     description = """Execute operations on multiple files with filtering and pattern matching.
+
+    <tool_call>
+    {"name": "batch", "arguments": {"operation": "replace", "path": "/path/to/dir", "file_pattern": "*.py", "find": "old_text", "replace": "new_text"}}
+    </tool_call>
     
     Supports:
     - Search and replace across multiple files

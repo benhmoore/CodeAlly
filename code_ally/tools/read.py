@@ -10,6 +10,10 @@ from code_ally.tools.registry import register_tool
 class FileReadTool(BaseTool):
     name = "file_read"
     description = """Read the contents of a file with context-efficient options.
+
+    <tool_call>
+    {"name": "file_read", "arguments": {"path": "/path/to/file.txt", "start_line": 0, "max_lines": 100}}
+    </tool_call>
     
     Supports:
     - Reading specific line ranges (start_line, max_lines)

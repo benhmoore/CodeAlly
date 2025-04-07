@@ -361,6 +361,7 @@ def main() -> None:
         temperature=args.temperature,
         context_size=args.context_size,
         max_tokens=args.max_tokens,
+        keep_alive=60 # seconds
     )
 
     # Get tools from the registry

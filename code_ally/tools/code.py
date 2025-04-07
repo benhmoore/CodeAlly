@@ -12,6 +12,10 @@ from code_ally.tools.registry import register_tool
 class CodeStructureAnalyzerTool(BaseTool):
     name = "code_structure"
     description = """Analyze code structure in files or directories.
+
+    <tool_call>
+    {"name": "code_structure", "arguments": {"path": "/path/to/code", "language": "python", "include_functions": true, "include_classes": true}}
+    </tool_call>
     
     Supports:
     - Function/method analysis (signatures, docstrings)

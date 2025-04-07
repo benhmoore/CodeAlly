@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
     "model": "qwen2.5-coder:latest",
     "endpoint": "http://localhost:11434",
     "context_size": 16384,
-    "temperature": 0.7,
+    "temperature": 0.4,
     "max_tokens": 7000,
     "bash_timeout": 30,
     "auto_confirm": False,

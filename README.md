@@ -21,9 +21,10 @@ A local LLM-powered pair programming assistant using function calling capabiliti
     -   Command filtering to prevent dangerous operations
 -   **Excellent Developer Experience:**
     -   Rich terminal UI with color-coded feedback and clear formatting
-    -   Multi-step tool usage for complex tasks
     -   Function-calling interface with Ollama LLMs
     -   Flexible configuration via command line, slash commands, or config file
+-   **Multi-Step Planning:**
+    -   Ability to plan and execute multi-step tasks interactively
 
 ## 📋 Prerequisites
 

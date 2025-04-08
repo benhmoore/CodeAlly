@@ -54,12 +54,12 @@ class TaskPlanTool(BaseTool):
     TOOL RESPONSE: [Plan started successfully]
 
     ASSISTANT: [SECOND TURN - ONLY adds first task]
-    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "directory", "description": "Create project structure", "arguments": {"operation": "create", "path": "/path/to/site", "structure": {"css": {}, "html": {}, "images": {}}}}}}</tool_call>
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "directory", "description": "Create project structure", "arguments": {"operation": "create", "path": "/path/to/site", "structure": {"css": {}, "images": {}}}}}}</tool_call>
 
     TOOL RESPONSE: [Task added successfully]
 
     ASSISTANT: [THIRD TURN - ONLY adds second task]
-    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "file_write", "description": "Create index.html", "arguments": {"path": "/path/to/site/html/index.html", "content": "<!DOCTYPE html>..."}}}}</tool_call>
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "file_write", "description": "Create index.html", "arguments": {"path": "/path/to/site/index.html", "content": "<!DOCTYPE html>..."}}}}</tool_call>
 
     [CONTINUE ADDING TASKS ONE BY ONE]
 

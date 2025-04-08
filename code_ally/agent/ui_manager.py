@@ -64,6 +64,8 @@ class UIManager:
         self.plan_panel = None  # Store the entire panel
         self.plan_tasks_table = None
         self.plan_panel_group = None  # This is important
+        self._thinking_thread = None
+        self._stop_thinking_flag = False
 
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -325,31 +327,50 @@ Use up/down arrow keys to navigate through command history.
         self.active_live_display = live
         live.start()
 
-    def display_interactive_plan_task_added(self, task_index: int, task_id: str, description: str) -> None:
-        """Update the plan panel with a new task."""
-        self.current_interactive_plan_tasks.append(
-            {
-                "index": task_index,
-                "id": task_id,
-                "description": description
-            }
-        )
+    def update_plan_panel_title(self, new_title: str) -> None:
+        """Update the title of the plan panel if active."""
+        if self.plan_panel:
+            from rich.text import Text
+            self.plan_panel.title = Text(new_title, style="bold blue")
+        if self.active_live_display:
+            # Force a refresh so the user sees the new title immediately
+            self.active_live_display.update(self.plan_panel)
 
-        # We'll rely on the 'tmp_tool', 'tmp_depends', 'tmp_cond' that we store in the TaskPlanner
-        # In a more ideal design, you'd pass them in as direct arguments to this function.
-        tool_name = getattr(self, "tmp_tool", "???")
-        depends_on = getattr(self, "tmp_depends", [])
-        condition_str = getattr(self, "tmp_cond", "No")
+    def display_interactive_plan_task_added(
+        self,
+        task_index: int,
+        task_id: str,
+        tool_name: str,
+        description: str,
+        depends_on: list,
+        condition: dict
+    ) -> None:
+        self.current_interactive_plan_tasks.append({
+            "index": task_index,
+            "id": task_id,
+            "description": description
+        })
 
-        depends_txt = ", ".join(depends_on) if depends_on else "—"
+        depends_txt   = ", ".join(depends_on) if depends_on else "—"
+        condition_str = "No"
+        if condition:
+            ctype = condition.get("type", "")
+            if ctype == "task_result":
+                field = condition.get("field", "success")
+                oper  = condition.get("operator", "equals")
+                val   = condition.get("value", True)
+                cond_id = condition.get("task_id", "")
+                condition_str = f"Yes ({cond_id}.{field} {oper} {val})"
+            else:
+                condition_str = "Yes (custom)"
 
         self.plan_tasks_table.add_row(
             str(task_index),
             task_id,
-            tool_name,
+            tool_name or "???",
             description,
             depends_txt,
-            condition_str,
+            condition_str
         )
 
         if self.active_live_display:
@@ -357,10 +378,83 @@ Use up/down arrow keys to navigate through command history.
 
     def confirm_interactive_plan(self, plan_name: str) -> bool:
         """Finalize the plan display and ask for confirmation."""
-        # Stop the live display
+        # If there's an active live panel, update the title to "TASK PLAN"
+        self.update_plan_panel_title(f"TASK PLAN: {plan_name}")
         if self.active_live_display:
             self.active_live_display.stop()
             self.active_live_display = None
-        
-        # Ask for confirmation
         return self.confirm(f"Execute the task plan '{plan_name}'?", default=True)
+
+    def start_plan_thinking(self) -> None:
+        """
+        Start a small background thread that updates the plan panel title to show
+        a rotating spinner or a 'Thinking...' note. This is only relevant if
+        we're in an interactive plan.
+        """
+        if not self.active_live_display or not self.plan_panel:
+            return  # No plan panel currently displayed
+
+        # If a thinking thread is already active, skip
+        if self._thinking_thread and self._thinking_thread.is_alive():
+            return
+
+        self._stop_thinking_flag = False
+        self._thinking_thread = threading.Thread(
+            target=self._plan_spinner_loop, daemon=True
+        )
+        self._thinking_thread.start()
+
+    def stop_plan_thinking(self) -> None:
+        """
+        Stop the plan spinner thread, restore the title back to normal.
+        """
+        self._stop_thinking_flag = True
+        if self._thinking_thread and self._thinking_thread.is_alive():
+            self._thinking_thread.join(timeout=2.0)
+        self._thinking_thread = None
+
+        # Restore the original title if we still have the plan panel
+        if self.plan_panel:
+            from rich.text import Text
+            if "Creating Task Plan" in str(self.plan_panel.title):
+                self.plan_panel.title = Text("📋 Creating Task Plan", style="bold blue")
+            elif "TASK PLAN:" in str(self.plan_panel.title):
+                # If it's already been finalized, keep it as "TASK PLAN", but remove spinner
+                old_str = str(self.plan_panel.title)
+                # strip out everything after the colon
+                prefix = old_str.split(" (", 1)[0]
+                self.plan_panel.title = Text(prefix, style="bold blue")
+
+            if self.active_live_display:
+                self.active_live_display.update(self.plan_panel)
+
+    def _plan_spinner_loop(self) -> None:
+        """
+        Background loop that updates the plan panel title with a spinner or
+        'Thinking...' suffix so the user can see the model is busy.
+        """
+        spinner_frames = ["|", "/", "-", "\\"]
+        index = 0
+
+        # We'll try to detect if the panel title is "📋 Creating Task Plan"
+        # or "TASK PLAN: Whatever"
+        base_title_str = str(self.plan_panel.title)
+
+        while not self._stop_thinking_flag:
+            from rich.text import Text
+            frame = spinner_frames[index % len(spinner_frames)]
+            index += 1
+
+            # Show something like: "📋 Creating Task Plan (| Thinking...)"
+            new_title_str = f"{base_title_str} ({frame} Thinking...)"
+            self.plan_panel.title = Text(new_title_str, style="bold blue")
+
+            if self.active_live_display:
+                self.active_live_display.update(self.plan_panel)
+
+            time.sleep(0.3)
+
+        # Once we exit, revert to the original base_title_str
+        self.plan_panel.title = Text(base_title_str, style="bold blue")
+        if self.active_live_display:
+            self.active_live_display.update(self.plan_panel)

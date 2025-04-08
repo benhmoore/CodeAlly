@@ -308,7 +308,7 @@ class ToolManager:
             return True
         
         # Check if this exact call has been made recently
-        return current_call in self.recent_tool_calls
+        # return current_call in self.recent_tool_calls
         
     def _handle_redundant_call(self, tool_name, check_context_msg):
         """Handle a redundant tool call.

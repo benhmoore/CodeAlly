@@ -508,10 +508,16 @@ class TaskPlanner:
         
         if self.ui:
             task_index = len(self.interactive_plan_tasks)
+            tool_name = task.get("tool_name", "???")
+            depends_on = task.get("depends_on", [])
+            condition_dict = task.get("condition", {})
             self.ui.display_interactive_plan_task_added(
-                task_index, 
-                task["id"], 
-                task.get("description", f"Execute {task['tool_name']}")
+                task_index,
+                task["id"],
+                tool_name,
+                task.get("description", f"Execute {tool_name}"),
+                depends_on,
+                condition_dict
             )
         
         return {
@@ -540,30 +546,24 @@ class TaskPlanner:
             }
             
         self.interactive_plan["tasks"] = self.interactive_plan_tasks
-        
         is_valid, error = self.validate_plan(self.interactive_plan)
         if not is_valid:
             return {
                 "success": False,
                 "error": f"Invalid plan: {error}"
             }
-            
+
         self.interactive_plan_finalized = True
-        
-        if self.ui:
-            self._display_plan_summary(self.interactive_plan)
-            confirmed = self.ui.confirm_interactive_plan(self.interactive_plan["name"])
-            
-            if not confirmed:
-                self.interactive_plan = None
-                self.interactive_plan_tasks = []
-                self.interactive_plan_finalized = False
-                
-                return {
-                    "success": False,
-                    "error": "Plan rejected by user",
-                    "user_action": "rejected"
-                }
+        confirmed = self.ui.confirm_interactive_plan(self.interactive_plan["name"]) if self.ui else True
+        if not confirmed:
+            self.interactive_plan = None
+            self.interactive_plan_tasks = []
+            self.interactive_plan_finalized = False
+            return {
+                "success": False,
+                "error": "Plan rejected by user",
+                "user_action": "rejected"
+            }
         
         return {
             "success": True,

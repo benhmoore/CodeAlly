@@ -174,19 +174,12 @@ class Agent:
                     # Permission was denied by user; return to main conversation loop
                     return
 
-            # Get a follow-up response
-            animation_thread = self.ui.start_thinking_animation(
-                self.token_manager.get_token_percentage()
-            )
+            # If we're in interactive planning, skip spinner so the live "plan panel" stays active
+            skip_spinner = self.in_interactive_planning
 
-            if self.ui.verbose:
-                functions_count = len(self.tool_manager.get_function_definitions())
-                message_count = len(self.messages)
-                tokens = self.token_manager.estimated_tokens
-                self.ui.console.print(
-                    f"[dim blue][Verbose] Sending follow-up request to LLM with {message_count} messages, "
-                    f"{tokens} tokens, {functions_count} available functions[/]"
-                )
+            # Get a follow-up response
+            if self.in_interactive_planning:
+                self.ui.start_plan_thinking()
 
             follow_up_response = None 
             was_interrupted = False
@@ -211,8 +204,10 @@ class Agent:
                 self.request_in_progress = False # Ensure flag is always reset
 
             if was_interrupted:
-                self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if self.in_interactive_planning:
+                    self.ui.stop_plan_thinking()
+                else:
+                    self.ui.stop_thinking_animation()
                 self.ui.print_content("[yellow]Request interrupted by user[/]")
                 return # Stop processing this response, go back to user input loop
 
@@ -227,8 +222,10 @@ class Agent:
                 response_content = follow_up_response.get("content", "").strip()
                 was_interrupted = follow_up_response.get("interrupted", False) or response_content in interruption_markers
                 if was_interrupted:
-                    self.ui.stop_thinking_animation()
-                    animation_thread.join(timeout=1.0)
+                    if self.in_interactive_planning:
+                        self.ui.stop_plan_thinking()
+                    else:
+                        self.ui.stop_thinking_animation()
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
                     return  # Exit without processing response
                     
@@ -249,14 +246,18 @@ class Agent:
                         f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]"
                     )
 
-                self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if self.in_interactive_planning:
+                    self.ui.stop_plan_thinking()
+                else:
+                    self.ui.stop_thinking_animation()
 
                 # Recursively process the follow-up
                 self.process_llm_response(follow_up_response)
             else:
-                self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if self.in_interactive_planning:
+                    self.ui.stop_plan_thinking()
+                else:
+                    self.ui.stop_thinking_animation()
 
         else:
             # Normal text response
@@ -470,22 +471,30 @@ class Agent:
                             permission_path = arg_value
                             break
 
-                # Also include a description for better user information
-                description = f"{tool_name} on {permission_path}" if permission_path else f"{tool_name} operation"
-                protected_tools.append((tool_name, permission_path, description))
+                # Show the actual bash command if available
+                if tool_name == "bash" and "command" in arguments:
+                    description = f"BASH command: {arguments['command']}"
+                else:
+                    description = f"{tool_name} on {permission_path}" if permission_path else f"{tool_name} operation"
+
+                # Store the entire arguments as well:
+                protected_tools.append((tool_name, permission_path, description, arguments))
 
         # Single permission for all protected calls
         operations_pre_approved = False
         if protected_tools:
-            # Use the trust manager to request all permissions at once
             try:
-                # Get just the tool_name and path for the trust manager
-                trust_operations = [(tool_name, path) for tool_name, path, _ in protected_tools]
+                # Get just the (tool_name, path) for the trust manager
+                trust_operations = [(tool_name, path) for (tool_name, path, _, _) in protected_tools]
 
                 # Format the permission text
                 operations_text = "Permission required for the following operations:\n"
-                for i, (_, _, description) in enumerate(protected_tools, 1):
-                    operations_text += f"{i}. {description}\n"
+                for i, (tool_name, path, description, arguments) in enumerate(protected_tools, 1):
+                    # If it's a bash command, show the actual command
+                    if tool_name == "bash" and "command" in arguments:
+                        operations_text += f"{i}. BASH: {arguments['command']}\n"
+                    else:
+                        operations_text += f"{i}. {description}\n"
 
                 if self.trust_manager.prompt_for_parallel_operations(trust_operations, operations_text):
                     operations_pre_approved = True

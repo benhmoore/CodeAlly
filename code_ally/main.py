@@ -20,10 +20,11 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 
 from code_ally.agent import Agent
-from code_ally.config import DEFAULT_CONFIG, load_config, reset_config, save_config
+from code_ally.config import DEFAULT_CONFIG, ConfigManager
 from code_ally.llm_client import OllamaClient
 from code_ally.prompts import get_main_system_prompt
 from code_ally.tools import ToolRegistry
+from code_ally.service_registry import ServiceRegistry
 
 # Configure logging
 logging.basicConfig(
@@ -34,29 +35,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger("code_ally")
 
-# Global reference to the agent for signal handling
-_global_agent = None
+# Global reference to the agent for signal handling - needed to differentiate
+# Ctrl+C during requests vs. Ctrl+C when idle.
+_global_agent: Optional[Agent] = None
 
 def handle_interrupt(signum, frame):
     """Handle keyboard interrupt (SIGINT) signals.
-    
-    If a request is in progress, just let the agent handle it internally.
-    Otherwise, exit the program.
+
+    - If an LLM request is in progress, let the exception propagate to the OllamaClient
+      which will handle interrupting the request properly.
+    - Otherwise (idle or during user input), exit gracefully.
     """
     global _global_agent
-    
-    if _global_agent and _global_agent.request_in_progress:
-        # If a request is in progress, let the agent handle it
-        # by doing nothing here (not propagating the signal)
-        logger.debug("Keyboard interrupt caught, but request in progress - letting agent handle it")
-        return
+
+    # Check if an agent exists and if its request_in_progress flag is set
+    if (_global_agent and getattr(_global_agent, 'request_in_progress', False)):
+        # If a request is in progress, we now want to propagate the signal
+        # to the OllamaClient which will handle it properly
+        logger.debug("SIGINT caught by main handler during request. Propagating to client...")
+        # We don't return here - let the signal propagate to the client
     else:
-        # Otherwise, exit like normal
-        logger.debug("Keyboard interrupt caught with no request in progress - exiting")
+        # If no request is active, exit gracefully
+        logger.debug("SIGINT caught by main handler (no request active). Exiting.")
         console = Console()
         console.print("\n[bold]Goodbye![/]")
         sys.exit(0)
-
 
 def configure_logging(verbose: bool) -> None:
     """Configure logging level based on verbose flag.
@@ -161,12 +164,9 @@ Current error: {error_message}
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command line arguments.
-
-    Returns:
-        The parsed arguments
-    """
-    config = load_config()
+    """Parse command line arguments."""
+    config_manager = ConfigManager.get_instance()
+    config = config_manager.get_config()
 
     parser = argparse.ArgumentParser(
         description="Code Ally - Local LLM-powered pair programming assistant",
@@ -260,31 +260,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def handle_config_commands(args: argparse.Namespace) -> bool:
-    """Handle configuration-related commands.
-
-    Args:
-        args: The parsed command line arguments
-
-    Returns:
-        True if a config command was handled and the program should exit,
-        False otherwise
-    """
+    """Handle configuration-related commands."""
     console = Console()
 
     # Show current configuration
     if args.config_show:
-        console.print(json.dumps(load_config(), indent=2))
+        console.print(json.dumps(ConfigManager.get_instance().get_config(), indent=2))
         return True
 
     # Reset configuration to defaults
     if args.config_reset:
-        reset_config()
+        ConfigManager.get_instance().reset()
         console.print("[green]Configuration reset to defaults[/]")
         return True
 
     # Save current settings as new defaults
-    if args.config:  # This if statement was missing
-        new_config = load_config()
+    if args.config:
+        config_manager = ConfigManager.get_instance()
+        new_config = config_manager.get_config().copy()
         new_config.update(
             {
                 "model": args.model,
@@ -297,7 +290,8 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
                 "auto_dump": args.auto_dump,
             }
         )
-        save_config(new_config)
+        for key, value in new_config.items():
+            config_manager.set_value(key, value)
         console.print("[green]Configuration saved successfully[/]")
         return True
 
@@ -361,6 +355,7 @@ def main() -> None:
         temperature=args.temperature,
         context_size=args.context_size,
         max_tokens=args.max_tokens,
+        keep_alive=60 # seconds
     )
 
     # Get tools from the registry
@@ -369,7 +364,12 @@ def main() -> None:
     # Get the system prompt
     system_prompt = get_main_system_prompt()
 
-    # Create the agent
+    # Create and register services
+    service_registry = ServiceRegistry.get_instance()
+    config_manager = ConfigManager.get_instance()
+    service_registry.register("config_manager", config_manager)
+
+    # Create the agent with service registry
     agent = Agent(
         model_client=model_client,
         client_type=client_type,
@@ -378,6 +378,7 @@ def main() -> None:
         verbose=args.verbose,
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
+        service_registry=service_registry
     )
 
     # Set debug options
@@ -388,20 +389,22 @@ def main() -> None:
     if args.yes_to_all:
         agent.trust_manager.set_auto_confirm(True)
         logger.warning("Auto-confirm mode enabled - will skip all confirmation prompts")
-        
-    # Set up the global agent reference for signal handling
-    global _global_agent
+
+    # Set up the global agent reference for the signal handler
+    global _global_agent # Use global scope for the signal handler's access
     _global_agent = agent
-    
+
     # Install signal handler for SIGINT (Ctrl+C)
     signal.signal(signal.SIGINT, handle_interrupt)
-    
+
     try:
-        # Run the conversation loop
         agent.run_conversation()
     except KeyboardInterrupt:
-        # This should only happen if our signal handler didn't catch it
-        # or if it happens during agent initialization - handle it gracefully
+        # This catches KeyboardInterrupt raised when the user cancels the input prompt
+        # or if the signal handler decided to exit (i.e., no request was active).
+        logger.debug(
+            "KeyboardInterrupt caught in main execution block (likely prompt cancellation or idle interrupt)."
+        )
         if agent.auto_dump:
             try:
                 agent.command_handler.dump_conversation(agent.messages, "")

@@ -10,7 +10,11 @@ from code_ally.tools.registry import register_tool
 class FileEditTool(BaseTool):
     name = "file_edit"
     description = """Edit an existing file with multiple editing modes.
-    
+
+    <tool_call>
+    {"name": "file_edit", "arguments": {"path": "/path/to/file.txt", "old_text": "text to replace", "new_text": "replacement text"}}
+    </tool_call>
+
     Supports:
     - String replacement (old_text, new_text)
     - Line range editing (line_range)

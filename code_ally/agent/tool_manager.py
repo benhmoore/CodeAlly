@@ -9,7 +9,8 @@ import logging
 from typing import Any, Dict, List, Tuple, Union
 
 from code_ally.tools.base import BaseTool
-from code_ally.trust import TrustManager, PermissionDeniedError
+from code_ally.trust import PermissionDeniedError, TrustManager
+from code_ally.agent.permission_manager import PermissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +18,18 @@ logger = logging.getLogger(__name__)
 class ToolManager:
     """Manages tool registration, validation, and execution."""
 
-    def __init__(self, tools: List[BaseTool], trust_manager: TrustManager):
+    def __init__(self, tools: List[BaseTool], trust_manager: TrustManager, permission_manager: PermissionManager = None):
         """Initialize the tool manager.
 
         Args:
             tools: List of available tools
             trust_manager: Trust manager for permissions
+            permission_manager: Permission manager for permissions
         """
         self.tools = {tool.name: tool for tool in tools}
         self.trust_manager = trust_manager
+        # Create PermissionManager if not provided
+        self.permission_manager = permission_manager or PermissionManager(trust_manager)
         self.ui = None  # Will be set by the Agent class
         self.client_type = None  # Will be set by the Agent when initialized
 
@@ -224,150 +228,219 @@ class ToolManager:
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
-    def execute_tool(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        check_context_msg: bool = True,
-        client_type: str = None,
-        batch_id: str = None,
-    ) -> Dict[str, Any]:
-        """Execute a tool with the given arguments after checking trust.
-
-        Args:
-            tool_name: The name of the tool to execute
-            arguments: The arguments to pass to the tool
-            check_context_msg: Whether to add context check message for redundant calls
-            client_type: The client type to use for formatting the result
-            batch_id: The batch ID for parallel tool calls
-
-        Returns:
-            The result of the tool execution
-        """
+    def execute_tool(self, tool_name, arguments, check_context_msg=True, client_type=None, pre_approved=False):
+        """Execute a tool with the given arguments after checking trust."""
         import time
-
+        
         start_time = time.time()
         verbose_mode = self.ui and getattr(self.ui, "verbose", False)
-
+        
         if verbose_mode:
             args_str = ", ".join(f"{k}={repr(v)}" for k, v in arguments.items())
             self.ui.console.print(
                 f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]"
             )
+        
+        # Validate tool existence
+        if not self._is_valid_tool(tool_name):
+            return self._create_error_result(f"Unknown tool: {tool_name}")
+        
+        # Check for redundancy
+        if self._is_redundant_call(tool_name, arguments):
+            return self._handle_redundant_call(tool_name, check_context_msg)
+        
+        # Record this call
+        self._record_tool_call(tool_name, arguments)
+        
+        # Check permissions if not pre-approved
+        tool = self.tools[tool_name]
+        if tool.requires_confirmation and not pre_approved:
+            # Get permission path based on the tool and arguments
+            permission_path = self._get_permission_path(tool_name, arguments)
+            
+            try:
+                # Check if already trusted
+                if not self.trust_manager.is_trusted(tool_name, permission_path):
+                    logger.info(f"Requesting permission for {tool_name}")
+                    
+                    # Prompt for permission (this may raise PermissionDeniedError)
+                    if not self.trust_manager.prompt_for_permission(tool_name, permission_path):
+                        return self._create_error_result(f"Permission denied for {tool_name}")
+            except PermissionDeniedError:
+                # Let exceptions propagate upward
+                raise
+        
+        # Execute the tool
+        return self._perform_tool_execution(tool_name, arguments)
 
-        if tool_name not in self.tools:
-            if verbose_mode:
-                self.ui.console.print(
-                    f"[dim red][Verbose] Tool not found: {tool_name}[/]"
-                )
-            return {
-                "success": False,
-                "error": f"Unknown tool: {tool_name}",
-            }
-
+    def _is_valid_tool(self, tool_name):
+        """Check if a tool exists.
+        
+        Args:
+            tool_name: The name of the tool to check
+            
+        Returns:
+            Whether the tool exists
+        """
+        valid = tool_name in self.tools
+        
+        if not valid and self.ui and getattr(self.ui, "verbose", False):
+            self.ui.console.print(
+                f"[dim red][Verbose] Tool not found: {tool_name}[/]"
+            )
+        
+        return valid
+        
+    def _is_redundant_call(self, tool_name, arguments):
+        """Check if a tool call is redundant.
+        
+        Args:
+            tool_name: The name of the tool
+            arguments: The arguments for the tool
+            
+        Returns:
+            Whether the call is redundant
+        """
+        current_call = (tool_name, tuple(sorted(arguments.items())))
+        
+        # For LS tool, be even more strict
+        if tool_name == "ls" and any(call[0] == "ls" for call in self.recent_tool_calls):
+            return True
+        
+        # Check if this exact call has been made recently
+        # return current_call in self.recent_tool_calls
+        
+    def _handle_redundant_call(self, tool_name, check_context_msg):
+        """Handle a redundant tool call.
+        
+        Args:
+            tool_name: The name of the tool
+            check_context_msg: Whether to include context check message
+            
+        Returns:
+            Error result for redundant call
+        """
+        error_msg = f"Redundant call to {tool_name}. Directory was already shown."
+        if check_context_msg:
+            error_msg += " Please check your context for the previous result."
+        
+        if self.ui and getattr(self.ui, "verbose", False):
+            self.ui.console.print(
+                f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]"
+            )
+        
+        return {
+            "success": False,
+            "error": error_msg,
+        }
+        
+    def _record_tool_call(self, tool_name, arguments):
+        """Record a tool call to avoid redundancy.
+        
+        Args:
+            tool_name: The name of the tool
+            arguments: The arguments for the tool
+        """
+        current_call = (tool_name, tuple(sorted(arguments.items())))
+        self.recent_tool_calls.append(current_call)
+        
+        # Keep only the most recent calls
+        if len(self.recent_tool_calls) > self.max_recent_calls:
+            self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls:]
+            
+    def _check_permissions(self, tool_name, arguments, batch_id):
+        """Check if a tool has permission to execute.
+        
+        Args:
+            tool_name: The name of the tool
+            arguments: The arguments for the tool
+            batch_id: The batch ID for parallel tool calls
+            
+        Returns:
+            Whether permission is granted
+        """
         tool = self.tools[tool_name]
 
-        # Check for redundant calls
-        if self.is_redundant_call(tool_name, arguments):
-            if tool_name == "ls":
-                error_msg = (
-                    f"Redundant call to {tool_name}. Directory was already shown."
-                )
-                if check_context_msg:
-                    error_msg += " Please check your context for the previous result."
+        if not tool.requires_confirmation:
+            return True
 
-                if verbose_mode:
-                    self.ui.console.print(
-                        f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]"
-                    )
-
-                return {
-                    "success": False,
-                    "error": error_msg,
-                }
-
-        # Record this call
-        self.record_tool_call(tool_name, arguments)
-
-        # Check permissions if tool requires confirmation
-        if tool.requires_confirmation:
-            if verbose_mode:
-                self.ui.console.print(
-                    f"[dim blue][Verbose] Tool {tool_name} requires confirmation[/]"
-                )
-
-            # Log batch_id for debugging
-            if batch_id:
-                logger.info(f"Checking permission for {tool_name} with batch_id: {batch_id}")
-            else:
-                logger.info(f"Checking permission for {tool_name} WITHOUT batch_id")
-
-            # For bash tool, pass arguments.command as the path
-            if tool_name == "bash" and "command" in arguments:
-                permission_path = arguments
-            else:
-                # Use the first string argument as the path, if any
-                permission_path = None
-                for arg_name, arg_value in arguments.items():
-                    if isinstance(arg_value, str) and arg_name in ("path", "file_path"):
-                        permission_path = arg_value
-                        break
-
-            # Check if this is trusted based on the batch_id
-            is_trusted = self.trust_manager.is_trusted(tool_name, permission_path, batch_id)
-            if not is_trusted:
-                logger.info(f"Tool {tool_name} is NOT trusted with batch_id: {batch_id}")
-                try:
-                    permission_granted = self.trust_manager.prompt_for_permission(tool_name, permission_path, batch_id)
-                    if not permission_granted:
-                        if verbose_mode:
-                            self.ui.console.print(
-                                f"[dim red][Verbose] Permission denied for {tool_name}[/]"
-                            )
-                        return {
-                            "success": False,
-                            "error": f"Permission denied for {tool_name}",
-                        }
-                except Exception as e:
-                    # If prompt_for_permission throws an exception (likely PermissionDeniedError)
-                    # let it propagate upward to interrupt the process
-                    raise
-            else:
-                logger.info(f"Tool {tool_name} is already trusted with batch_id: {batch_id}")
-
-        # Execute the tool
+        # Delegate to PermissionManager
+        try:
+            return self.permission_manager.check_permission(tool_name, arguments, batch_id)
+        except Exception:
+            # Let exceptions propagate upward
+            raise
+        
+    def _get_permission_path(self, tool_name, arguments):
+        """Get the permission path for a tool."""
+        # For bash tool, pass arguments.command as the path
+        if tool_name == "bash" and "command" in arguments:
+            return arguments
+        
+        # Use the first string argument as the path, if any
+        for arg_name, arg_value in arguments.items():
+            if isinstance(arg_value, str) and arg_name in ("path", "file_path", "directory"):
+                return arg_value
+        
+        return None
+        
+    def _perform_tool_execution(self, tool_name, arguments):
+        """Execute a tool with the given arguments.
+        
+        Args:
+            tool_name: The name of the tool
+            arguments: The arguments for the tool
+            
+        Returns:
+            The result of the tool execution
+        """
+        import time
+        
+        tool = self.tools[tool_name]
+        verbose_mode = self.ui and getattr(self.ui, "verbose", False)
+        start_time = time.time()
+        
         try:
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim green][Verbose] Executing tool: {tool_name}[/]"
                 )
+            
             result = tool.execute(**arguments)
             execution_time = time.time() - start_time
-
+            
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim green][Verbose] Tool {tool_name} executed in {execution_time:.2f}s "
                     f"(success: {result.get('success', False)})[/]"
                 )
-
+            
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
             return result
         except json.JSONDecodeError as json_exc:
             logger.exception("Error parsing JSON in tool execution for %s", tool_name)
-            return {
-                "success": False,
-                "error": f"JSON Error executing {tool_name}: {str(json_exc)}",
-            }
+            return self._create_error_result(f"JSON Error executing {tool_name}: {str(json_exc)}")
         except Exception as exc:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]"
                 )
-            return {
-                "success": False,
-                "error": f"Error executing {tool_name}: {str(exc)}",
-            }
+            return self._create_error_result(f"Error executing {tool_name}: {str(exc)}")
+        
+    def _create_error_result(self, error_message):
+        """Create a standardized error result.
+        
+        Args:
+            error_message: The error message
+            
+        Returns:
+            Error result dictionary
+        """
+        return {
+            "success": False,
+            "error": error_message,
+        }
 
     def format_tool_result(
         self, result: Dict[str, Any], client_type: str = None

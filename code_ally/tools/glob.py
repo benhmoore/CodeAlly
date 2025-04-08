@@ -9,7 +9,20 @@ from code_ally.tools.registry import register_tool
 @register_tool
 class GlobTool(BaseTool):
     name = "glob"
-    description = "Find files matching a glob pattern with improved context efficiency"
+    description = """Find files matching a glob pattern with improved context efficiency.
+
+    <tool_call>
+    {"name": "glob", "arguments": {"pattern": "*.py", "path": "/search/directory", "show_content": true, "limit": 20}}
+    </tool_call>
+
+    Supports:
+    - File searching with glob patterns
+    - Directory traversal
+    - Content preview for context efficiency
+    - File sorting by modification time
+    - Limiting results to a specified number
+    - Error handling for non-existent directories
+    """
     requires_confirmation = False
 
     # pylint: disable=arguments-differ,too-many-arguments,too-many-locals,too-many-branches

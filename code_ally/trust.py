@@ -161,162 +161,124 @@ def is_command_allowed(command: str) -> bool:
 
 
 class TrustManager:
-    """Manages trust for tools that need user confirmation.
-
-    This class handles permission decisions for security-sensitive operations,
-    allowing the user to grant permissions at various scopes (one-time, session,
-    directory, etc.) and persisting those decisions as appropriate.
-    """
+    """Manages trust for tools that need user confirmation."""
 
     def __init__(self):
         """Initialize the trust manager."""
         # Track trusted tools by name and path
         self.trusted_tools: Dict[str, Set[str]] = {}
-
         # Auto-confirm flag (dangerous, but useful for scripting)
         self.auto_confirm = False
-
-        # Track approved batch operations
-        self.approved_operations: Dict[str, Set[str]] = {}
-
+        # Track pre-approved operations (simpler implementation)
+        self.pre_approved_operations: Set[str] = set()
+        
         logger.debug("TrustManager initialized")
 
     def set_auto_confirm(self, value: bool) -> None:
-        """Set the auto-confirm flag.
-
-        Args:
-            value: Whether to automatically confirm all actions
-        """
+        """Set the auto-confirm flag."""
         previous = self.auto_confirm
         self.auto_confirm = value
         logger.info(f"Auto-confirm changed from {previous} to {value}")
 
-    def is_trusted(
-        self,
-        tool_name: str,
-        path: Optional[str] = None,
-        operation_id: Optional[str] = None,  # This is the batch_id
-    ) -> bool:
-        """Check if a tool is trusted for the given path or operation ID.
+    def get_operation_key(self, tool_name: str, path: Optional[Any] = None) -> str:
+        """Generate a unique key for a tool and path combination."""
+        # Special handling for bash commands (simplified)
+        if tool_name == "bash":
+            if isinstance(path, dict) and "command" in path:
+                command = path["command"]
+                return f"{tool_name}:{command[:50]}"  # Truncate long commands
+            elif isinstance(path, str):
+                return f"{tool_name}:{path[:50]}"  # Truncate long commands
+        
+        # If path is None, just use the tool name
+        if path is None:
+            return tool_name
+            
+        # If path is a string, normalize it
+        if isinstance(path, str):
+            try:
+                return f"{tool_name}:{os.path.abspath(path)}"
+            except (TypeError, ValueError):
+                return f"{tool_name}:{path}"
+        
+        # For other types, just return the tool name
+        return tool_name
 
-        Args:
-            tool_name: The name of the tool
-            path: The path being accessed (if applicable)
-            operation_id: The unique identifier for batch operations
-
-        Returns:
-            Whether the tool is trusted for the path or operation
-        """
+    def is_trusted(self, tool_name: str, path: Optional[Any] = None) -> bool:
+        """Check if a tool is trusted for the given path."""
         # Always trust in auto-confirm mode
         if self.auto_confirm:
             return True
 
-        logger.debug(
-            f"Checking trust for {tool_name} at path: {path} (Op ID: {operation_id})"
-        )  # Added Op ID to log
+        logger.debug(f"Checking trust for {tool_name} at path: {path}")
 
-        # PRIORITY 1: Check if the specific operation was approved in a batch
-        if operation_id and operation_id in self.approved_operations:
-            tool_path_key = self._get_tool_path_key(tool_name, path)
-            # Add more debugging to troubleshoot the issue
-            logger.debug(f"Checking batch approval for {tool_path_key} in batch {operation_id}")
-            logger.debug(f"Approved operations in batch: {self.approved_operations[operation_id]}")
-            
-            # Check for the specific key
-            if tool_path_key in self.approved_operations[operation_id]:
-                logger.debug(f"Found exact match: Operation {operation_id} is approved for {tool_path_key}")
-                return True
-            
-            # Also check if the tool itself is approved for all paths in this batch
-            if tool_name in self.approved_operations[operation_id]:
-                logger.debug(f"Tool {tool_name} is generally approved in batch {operation_id}")
-                return True
+        # Check if this specific operation has been pre-approved
+        operation_key = self.get_operation_key(tool_name, path)
+        if operation_key in self.pre_approved_operations:
+            logger.debug(f"Operation {operation_key} is pre-approved")
+            return True
 
         # Check if the tool is in the globally trusted dictionary
         if tool_name not in self.trusted_tools:
             logger.debug(f"Tool {tool_name} is not generally trusted")
             return False
 
-        # At this point, the tool *might* be generally trusted for some paths
+        # Check for global trust (all paths)
         trusted_paths = self.trusted_tools[tool_name]
-
-        # Global trust (all paths)?
         if "*" in trusted_paths:
             logger.debug(f"Tool {tool_name} has global trust")
             return True
 
-        # If no path provided, and no global trust, then not trusted for session
+        # If no path provided, and no global trust, then not trusted
         if path is None:
             logger.debug(f"Tool {tool_name} has no global trust and no path specified")
             return False
 
-        # Check for the specific path trust
+        # Check for specific path trust
         if isinstance(path, (str, bytes, os.PathLike)):
-            normalized_path = os.path.abspath(path)
-            if normalized_path in trusted_paths:
-                logger.debug(f"Found exact path match for {normalized_path}")
-                return True
-
-            # Check for parent directories
-            path_parts = normalized_path.split(os.sep)
-            current_check_path = ""
-            for part in path_parts:
-                if not part:  # Handles leading '/'
-                    current_check_path = os.sep
-                    continue
-                if current_check_path.endswith(os.sep):
-                    current_check_path += part
-                else:
-                    current_check_path = os.path.join(current_check_path, part)
-
-                if current_check_path and current_check_path in trusted_paths:
-                    logger.debug(f"Found parent directory match: {current_check_path}")
+            try:
+                normalized_path = os.path.abspath(path)
+                if normalized_path in trusted_paths:
+                    logger.debug(f"Found exact path match for {normalized_path}")
                     return True
+
+                # Check for parent directories
+                path_parts = normalized_path.split(os.sep)
+                current_check_path = ""
+                for part in path_parts:
+                    if not part:  # Handles leading '/'
+                        current_check_path = os.sep
+                        continue
+                    if current_check_path.endswith(os.sep):
+                        current_check_path += part
+                    else:
+                        current_check_path = os.path.join(current_check_path, part)
+
+                    if current_check_path and current_check_path in trusted_paths:
+                        logger.debug(f"Found parent directory match: {current_check_path}")
+                        return True
+            except (TypeError, ValueError):
+                logger.debug(f"Could not normalize path: {path}")
+                return False
         else:
             logger.debug(f"Path for {tool_name} is not a string, skipping path checks.")
 
         logger.debug(f"No specific trust found for {tool_name} at path {path}")
         return False
 
-    def _get_tool_path_key(self, tool_name: str, path: Optional[Any] = None) -> str:
-        """Generate a unique key for a tool and path combination.
+    def mark_operation_as_approved(self, tool_name: str, path: Optional[Any] = None) -> None:
+        """Mark a specific operation as pre-approved."""
+        operation_key = self.get_operation_key(tool_name, path)
+        self.pre_approved_operations.add(operation_key)
+        logger.debug(f"Marked operation as pre-approved: {operation_key}")
 
-        Args:
-            tool_name: The name of the tool
-            path: The path being accessed (if applicable, could be dict for bash)
-
-        Returns:
-            A unique key representing the tool and path combination
-        """
-        # Special handling for bash commands
-        if tool_name == "bash" and isinstance(path, dict) and "command" in path:
-            # Create a unique hash of the command
-            import hashlib
-            cmd_hash = hashlib.md5(path["command"].encode()).hexdigest()[:8]
-            return f"{tool_name}:cmd:{cmd_hash}"
-        
-        # If path is None, just use the tool name
-        if path is None:
-            return tool_name
-            
-        # If path is a string, try to normalize it
-        if isinstance(path, str):
-            try:
-                return f"{tool_name}:{os.path.abspath(path)}"
-            except (TypeError, ValueError):
-                # If path can't be normalized, use as is
-                return f"{tool_name}:{path}"
-        
-        # For other types, just return the tool name
-        return tool_name
+    def clear_approved_operations(self) -> None:
+        """Clear all pre-approved operations."""
+        self.pre_approved_operations.clear()
+        logger.debug("Cleared all pre-approved operations")
 
     def trust_tool(self, tool_name: str, path: Optional[str] = None) -> None:
-        """Mark a tool as trusted for the given path.
-
-        Args:
-            tool_name: The name of the tool
-            path: The path to trust (if None, trust for the session)
-        """
+        """Mark a tool as trusted for the given path."""
         if tool_name not in self.trusted_tools:
             self.trusted_tools[tool_name] = set()
 
@@ -324,41 +286,38 @@ class TrustManager:
             logger.info(f"Trusting {tool_name} for all paths (session scope)")
             self.trusted_tools[tool_name].add("*")  # Trust for all paths
         else:
-            normalized_path = os.path.abspath(path)
-            logger.info(f"Trusting {tool_name} for path: {normalized_path}")
-            self.trusted_tools[tool_name].add(normalized_path)
+            try:
+                normalized_path = os.path.abspath(path)
+                logger.info(f"Trusting {tool_name} for path: {normalized_path}")
+                self.trusted_tools[tool_name].add(normalized_path)
+            except (TypeError, ValueError):
+                logger.warning(f"Could not normalize path for trusting: {path}")
 
-    def prompt_for_permission(self, tool_name: str, path: Optional[str] = None, batch_id: Optional[str] = None) -> bool:
+    def prompt_for_permission(self, tool_name: str, path: Optional[Any] = None) -> bool:
         """Prompt the user for permission to use a tool.
-
-        Args:
-            tool_name: The name of the tool
-            path: The path being accessed (if applicable)
-            batch_id: Optional batch operation ID for group permissions
-
-        Returns:
-            Whether permission was granted
+        
+        Returns whether permission was granted. Default is now NO for safety.
+        
+        Raises PermissionDeniedError if permission is denied
         """
         # If auto-confirm is enabled or tool is already trusted, skip the prompt
         if self.auto_confirm:
             logger.info(f"Auto-confirming {tool_name} for {path}")
             return True
 
-        # Check if this tool+path is already trusted via any method (including batch ID)
-        if self.is_trusted(tool_name, path, batch_id):
-            logger.info(f"Tool {tool_name} is already trusted for {path} (batch ID: {batch_id})")
+        # Check if this tool+path is already trusted
+        if self.is_trusted(tool_name, path):
+            logger.info(f"Tool {tool_name} is already trusted for {path}")
             return True
 
-        # Build the prompt message with visual emphasis and special handling for bash
+        # Build the prompt message
         path_display = path if path else "unknown path"
 
-        # For bash tool, we handle it differently
+        # For bash tool, handle differently
         if tool_name == "bash" and isinstance(path, dict) and "command" in path:
-            # Extract the command from the path (which is actually a dict for bash)
             command = path["command"]
             prompt = f"Allow {tool_name} to execute command:\n\n{command}"
         elif tool_name == "bash" and isinstance(path, str) and path.strip():
-            # For backwards compatibility, sometimes path is the command directly
             command = path
             prompt = f"Allow {tool_name} to execute command:\n\n{command}"
         elif path:
@@ -370,19 +329,17 @@ class TrustManager:
 
         # Show a visually distinct prompt
         import sys
-
         from rich.console import Console
         from rich.panel import Panel
         from rich.text import Text
 
         console = Console()
-
-        # Create a visually distinct panel for the permission prompt
         panel_text = Text()
 
         # Different styling for bash commands
         if tool_name == "bash":
             from rich.syntax import Syntax
+            from rich.console import Group
 
             panel_text.append(
                 f"🔐 PERMISSION REQUIRED - BASH COMMAND\n\n", style="bold yellow"
@@ -399,16 +356,12 @@ class TrustManager:
             # Format command with syntax highlighting
             command_syntax = Syntax(command, "bash", theme="monokai", word_wrap=True)
 
-            # Create the panel with the command highlighted
-            # Rich expects specific renderable types, we need to create a Group
-            from rich.console import Group
-
             # Create a prompt text component
             prompt_text = Text()
             prompt_text.append("Press ", style="dim")
-            prompt_text.append("ENTER", style="bold green")
+            prompt_text.append("y", style="bold green")
             prompt_text.append(" for YES, ", style="dim")
-            prompt_text.append("n", style="bold red")
+            prompt_text.append("ENTER or n", style="bold red")
             prompt_text.append(" for NO, ", style="dim")
             prompt_text.append("a", style="bold blue")
             prompt_text.append(" for ALWAYS ALLOW", style="dim")
@@ -434,19 +387,14 @@ class TrustManager:
                 )
             )
 
-            # Return after this panel since we already displayed custom formatting
-            # Read input with default to yes (just pressing enter)
+            # Read input with default to no (just pressing enter)
             sys.stdout.write("> ")
             sys.stdout.flush()
             permission = input().lower()
 
-            if permission == "" or permission == "y" or permission == "yes":
+            if permission == "y" or permission == "yes":
                 logger.info(f"User granted one-time permission for {tool_name}")
                 return True
-            elif permission == "n" or permission == "no":
-                logger.info(f"User denied permission for {tool_name}")
-                console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
-                raise PermissionDeniedError(f"User denied permission for {tool_name}")
             elif permission == "a" or permission == "always":
                 logger.info(f"User granted permanent permission for {tool_name}")
                 # For bash command, just trust the tool itself rather than the specific command
@@ -456,144 +404,93 @@ class TrustManager:
                     self.trust_tool(tool_name, path)
                 return True
             else:
-                console.print("[yellow]Invalid response. Using default (yes).[/]")
-                logger.warning(
-                    f"Invalid response to permission prompt, using default (yes)"
-                )
-                return True
+                # Default to no for empty or invalid response
+                logger.info(f"User denied permission for {tool_name}")
+                console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+                raise PermissionDeniedError(f"User denied permission for {tool_name}")
         else:
             # Standard permission panel for other tools
             panel_text.append(f"🔐 PERMISSION REQUIRED\n\n", style="bold yellow")
             panel_text.append(f"{prompt}\n\n", style="bold white")
             panel_text.append("Press ", style="dim")
-            panel_text.append("ENTER", style="bold green")
+            panel_text.append("y", style="bold green")
             panel_text.append(" for YES, ", style="dim")
-            panel_text.append("n", style="bold red")
+            panel_text.append("ENTER or n", style="bold red")
             panel_text.append(" for NO, ", style="dim")
             panel_text.append("a", style="bold blue")
             panel_text.append(" for ALWAYS ALLOW", style="dim")
 
             console.print(Panel(panel_text, border_style="yellow", expand=False))
 
-        # Read input with default to yes (just pressing enter)
+        # Read input with default to no (just pressing enter)
         sys.stdout.write("> ")
         sys.stdout.flush()
         permission = input().lower()
 
-        if permission == "" or permission == "y" or permission == "yes":
+        if permission == "y" or permission == "yes":
             logger.info(f"User granted one-time permission for {tool_name}")
             return True
-        elif permission == "n" or permission == "no":
-            logger.info(f"User denied permission for {tool_name}")
-            # Raise a special exception to interrupt processing
-            from rich.console import Console
-            console = Console()
-            console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
-            raise PermissionDeniedError(f"User denied permission for {tool_name}")
         elif permission == "a" or permission == "always":
             logger.info(f"User granted permanent permission for {tool_name}")
-            # Just trust the tool itself rather than the specific path
             self.trust_tool(tool_name)
             return True
         else:
-            console.print("[yellow]Invalid response. Using default (yes).[/]")
-            logger.warning(
-                f"Invalid response to permission prompt, using default (yes)"
-            )
-            return True
+            # Default to no for empty or invalid response
+            logger.info(f"User denied permission for {tool_name}")
+            console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+            raise PermissionDeniedError(f"User denied permission for {tool_name}")
 
     def prompt_for_parallel_operations(
-        self, operations: List[Tuple[str, Any]], operations_text: str, batch_id: str
+        self, operations: List[Tuple[str, Any]], operations_text: str
     ) -> bool:
-        """Prompt the user for permission to perform multiple operations at once.
-
-        Args:
-            operations: List of tuples containing tool names and paths
-            operations_text: Description of all operations that need permission
-            batch_id: The unique identifier for this batch of operations
-
-        Returns:
-            Whether permission was granted
-        """
+        """Prompt for permission to perform multiple operations at once."""
         # If auto-confirm is enabled, skip the prompt
         if self.auto_confirm:
-            logger.info(
-                f"Auto-confirming {len(operations)} parallel operations (ID: {batch_id})"
-            )
-            # Still need to populate the approved cache even in auto-confirm mode
-            self.approved_operations[batch_id] = set()
+            logger.info(f"Auto-confirming {len(operations)} parallel operations")
+            # Mark operations as approved
             for tool_name, path in operations:
-                # Add the specific tool-path combination
-                tool_path_key = self._get_tool_path_key(tool_name, path)
-                self.approved_operations[batch_id].add(tool_path_key)
-                
-                # Also add just the tool name to handle cases where path formatting might differ
-                self.approved_operations[batch_id].add(tool_name)
-                
-                # For debugging purposes
-                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
-                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
+                self.mark_operation_as_approved(tool_name, path)
             return True
 
         # Create a visually distinct panel for the permission prompt
         from rich.console import Console
         from rich.panel import Panel
         from rich.text import Text
+        import sys
 
         console = Console()
-
         panel_text = Text()
         panel_text.append(
             f"🔐 PARALLEL OPERATIONS - PERMISSION REQUIRED\n\n", style="bold yellow"
         )
         panel_text.append(f"{operations_text}\n\n", style="bold white")
         panel_text.append("Press ", style="dim")
-        panel_text.append("ENTER", style="bold green")
+        panel_text.append("y", style="bold green")
         panel_text.append(" for YES, ", style="dim")
-        panel_text.append("n", style="bold red")
+        panel_text.append("ENTER or n", style="bold red")
         panel_text.append(" for NO", style="dim")
 
         console.print(Panel(panel_text, border_style="yellow", expand=False))
 
-        # Read input with default to yes (just pressing enter)
-        import sys
-
+        # Read input with default to no (just pressing enter)
         sys.stdout.write("> ")
         sys.stdout.flush()
         permission = input().lower()
 
-        if permission == "" or permission == "y" or permission == "yes":
-            logger.info(
-                f"User granted permission for {len(operations)} parallel operations (ID: {batch_id})"
-            )
-            self.approved_operations[batch_id] = set()
+        if permission == "y" or permission == "yes":
+            logger.info(f"User granted permission for {len(operations)} parallel operations")
+            # Mark all operations as approved
             for tool_name, path in operations:
-                # Add the specific tool-path combination
-                tool_path_key = self._get_tool_path_key(tool_name, path)
-                self.approved_operations[batch_id].add(tool_path_key)
-                
-                # Also add just the tool name to handle cases where path formatting might differ
-                self.approved_operations[batch_id].add(tool_name)
-                
-                # For debugging purposes
-                logger.debug(f"Added approval for {tool_path_key} in batch {batch_id}")
-                logger.debug(f"Also added general approval for tool {tool_name} in batch {batch_id}")
+                self.mark_operation_as_approved(tool_name, path)
             return True
         else:
-            logger.info(
-                f"User denied permission for {len(operations)} parallel operations (ID: {batch_id})"
-            )
-            return False
+            # Default to no for empty or invalid response
+            logger.info(f"User denied permission for {len(operations)} parallel operations")
+            console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+            raise PermissionDeniedError("User denied permission for parallel operations")
 
     def get_permission_description(self, tool_name: str) -> str:
-        """Get a human-readable description of the permissions for a tool.
-
-        Args:
-            tool_name: The name of the tool
-
-        Returns:
-            A string describing the trust status of the tool
-        """
+        """Get a human-readable description of the permissions for a tool."""
         if self.auto_confirm:
             return f"Tool '{tool_name}' has auto-confirm enabled (all actions allowed)"
 

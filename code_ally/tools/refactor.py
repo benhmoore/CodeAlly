@@ -20,6 +20,10 @@ class RefactorTool(BaseTool):
 
     name = "refactor"
     description = """Perform code refactoring operations across multiple files.
+
+    <tool_call>
+    {"name": "refactor", "arguments": {"operation": "rename", "target": "old_symbol", "new_value": "new_symbol", "scope": "/code/directory", "preview": true}}
+    </tool_call>
     
     Supports:
     - Rename symbol (variables, functions, classes) across files

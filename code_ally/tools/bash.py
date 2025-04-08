@@ -26,6 +26,10 @@ class BashTool(BaseTool):
 
     name = "bash"
     description = """Execute a shell command and return its output.
+
+    <tool_call>
+    {"name": "bash", "arguments": {"command": "ls -la", "working_dir": "/path/to/dir", "timeout": 10}}
+    </tool_call>
     
     Supports:
     - Working directory selection (working_dir)

@@ -7,11 +7,13 @@ Enables the agent to define, validate, and execute multi-step plans.
 import json
 import logging
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from code_ally.agent.tool_manager import ToolManager
 from code_ally.agent.error_handler import display_error
 from code_ally.tools.base import BaseTool
+from code_ally.trust import PermissionDeniedError
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ class TaskPlanner:
     3. Parallel or sequential execution
     4. Error handling and recovery
     5. Result tracking for each step
+    6. Interactive plan creation with user confirmation
     """
 
     def __init__(self, tool_manager: ToolManager):
@@ -39,6 +42,11 @@ class TaskPlanner:
         self.execution_history: List[Dict[str, Any]] = []
         self.ui = None  # Will be set by the Agent class
         self.verbose = False
+        
+        # Interactive planning state
+        self.interactive_plan: Optional[Dict[str, Any]] = None
+        self.interactive_plan_tasks: List[Dict[str, Any]] = []
+        self.interactive_plan_finalized = False
     
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -57,7 +65,6 @@ class TaskPlanner:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Check required fields
         if "name" not in plan:
             return False, "Plan missing 'name' field"
         
@@ -70,28 +77,22 @@ class TaskPlanner:
         if not plan["tasks"]:
             return False, "Plan contains no tasks"
             
-        # Check task structure
         tasks_by_id = {}
         for i, task in enumerate(plan["tasks"]):
-            # Each task needs an id and tool_name
             if "id" not in task:
                 return False, f"Task at index {i} missing 'id' field"
                 
             if "tool_name" not in task:
                 return False, f"Task at index {i} missing 'tool_name' field"
                 
-            # Arguments must be a dictionary if present
             if "arguments" in task and not isinstance(task["arguments"], dict):
                 return False, f"Task '{task['id']}' has invalid 'arguments' (must be a dictionary)"
                 
-            # Store for dependency validation
             tasks_by_id[task["id"]] = task
                 
-            # Check that tool exists
             if task["tool_name"] not in self.tool_manager.tools:
                 return False, f"Task '{task['id']}' references unknown tool '{task['tool_name']}'"
         
-        # Validate dependencies
         for task in plan["tasks"]:
             if "depends_on" in task:
                 if not isinstance(task["depends_on"], list):
@@ -101,7 +102,6 @@ class TaskPlanner:
                     if dep_id not in tasks_by_id:
                         return False, f"Task '{task['id']}' depends on unknown task '{dep_id}'"
                         
-        # Validate conditional execution
         for task in plan["tasks"]:
             if "condition" in task:
                 if not isinstance(task["condition"], dict):
@@ -120,7 +120,6 @@ class TaskPlanner:
                     if task["condition"]["task_id"] not in tasks_by_id:
                         return False, f"Task '{task['id']}' condition references unknown task '{task['condition']['task_id']}'"
                         
-        # Check for dependency cycles (TODO: Implement more thorough cycle detection)
         for task in plan["tasks"]:
             if "depends_on" in task:
                 for dep_id in task["depends_on"]:
@@ -128,6 +127,26 @@ class TaskPlanner:
                     if "depends_on" in dep_task and task["id"] in dep_task["depends_on"]:
                         return False, f"Circular dependency detected between tasks '{task['id']}' and '{dep_id}'"
         
+        return True, None
+    
+    def validate_task(self, task: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """Validate a single task for structural correctness.
+        
+        Args:
+            task: The task to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if "tool_name" not in task:
+            return False, "Task missing 'tool_name' field"
+            
+        if task["tool_name"] not in self.tool_manager.tools:
+            return False, f"Task references unknown tool '{task['tool_name']}'"
+            
+        if "arguments" in task and not isinstance(task["arguments"], dict):
+            return False, f"Task has invalid 'arguments' (must be a dictionary)"
+            
         return True, None
         
     def execute_plan(self, plan: Dict[str, Any], client_type: str = None) -> Dict[str, Any]:
@@ -140,10 +159,11 @@ class TaskPlanner:
         Returns:
             Dict containing execution results for the entire plan
         """
-        # Reset execution history
         self.execution_history = []
         
-        # Validate plan structure
+        if self.ui and plan is not self.interactive_plan:
+            self._display_plan_summary(plan)
+
         is_valid, error = self.validate_plan(plan)
         if not is_valid:
             return {
@@ -155,43 +175,54 @@ class TaskPlanner:
                 "failed_tasks": []
             }
             
-        # Display plan summary to the user (informational only, no confirmation)
-        if self.ui:
-            self._display_plan_summary(plan)
-        
-        # Pre-check all permissions needed for the plan
-        batch_id = f"task-plan-{int(time.time())}"
         permission_operations = self._collect_permission_operations(plan)
-        if permission_operations and not self._request_plan_permissions(permission_operations, plan["name"], batch_id):
-            return {
-                "success": False,
-                "error": "Permission denied for task plan operations",
-                "plan_name": plan.get("name", "unknown"),
-                "results": {},
-                "completed_tasks": [],
-                "failed_tasks": []
-            }
+        operations_pre_approved = False
+
+        if permission_operations:
+            operations_text = f"The task plan '{plan['name']}' requires permission for the following operations:\n"
+            for i, (tool_name, path, description) in enumerate(permission_operations, 1):
+                operations_text += f"{i}. {description}\n"
+
+            try:
+                trust_operations = [(tool_name, path) for tool_name, path, _ in permission_operations]
+
+                if self.tool_manager.trust_manager.prompt_for_parallel_operations(trust_operations, operations_text):
+                    operations_pre_approved = True
+                else:
+                    return {
+                        "success": False,
+                        "error": "Permission denied for task plan operations",
+                        "plan_name": plan.get("name", "unknown"),
+                        "results": {},
+                        "completed_tasks": [],
+                        "failed_tasks": []
+                    }
+            except PermissionDeniedError:
+                return {
+                    "success": False,
+                    "error": "Permission denied for task plan operations",
+                    "plan_name": plan.get("name", "unknown"),
+                    "results": {},
+                    "completed_tasks": [],
+                    "failed_tasks": []
+                }
             
         start_time = time.time()
         
         try:
-            # Log plan execution start
             if self.verbose and self.ui:
                 self.ui.console.print(
                     f"[dim cyan][Verbose] Starting execution of plan: {plan['name']}[/]"
                 )
             
-            # Create task lookup and execution mapping
             tasks_by_id = {task["id"]: task for task in plan["tasks"]}
             results = {}
             completed_tasks = []
             failed_tasks = []
             
-            # Display task execution progress overview
             if self.ui:
                 from rich.table import Table
                 
-                # Create a progress overview
                 progress_table = Table(title="Task Execution Plan", box=None, pad_edge=False)
                 progress_table.add_column("#", style="dim", width=3)
                 progress_table.add_column("Status", width=8)
@@ -209,13 +240,11 @@ class TaskPlanner:
                     )
                 
                 self.ui.console.print(progress_table)
-                self.ui.console.print("")  # Add a blank line
+                self.ui.console.print("")
             
-            # Process tasks in order (we'll handle dependencies)
             for task in plan["tasks"]:
                 task_id = task["id"]
                 
-                # Check dependencies
                 if "depends_on" in task:
                     dependencies_met = True
                     for dep_id in task["depends_on"]:
@@ -236,7 +265,6 @@ class TaskPlanner:
                         }
                         continue
                 
-                # Check conditions
                 if "condition" in task:
                     condition = task["condition"]
                     condition_met = self._evaluate_condition(condition, results)
@@ -246,7 +274,6 @@ class TaskPlanner:
                             self.ui.console.print(
                                 f"[dim yellow][Verbose] Skipping task '{task_id}' as condition not met[/]"
                             )
-                        # This isn't a failure, just conditional skipping
                         results[task_id] = {
                             "success": True, 
                             "skipped": True,
@@ -255,9 +282,7 @@ class TaskPlanner:
                         completed_tasks.append(task_id)
                         continue
                 
-                # Execute the task
                 if self.ui:
-                    # Show task execution status
                     task_desc = task.get("description", f"Execute {task['tool_name']}")
                     self.ui.print_content(
                         f"[cyan]⏳ Task {len(completed_tasks) + 1}/{len(plan['tasks'])}: {task_desc}[/]",
@@ -272,25 +297,33 @@ class TaskPlanner:
                 tool_name = task["tool_name"]
                 arguments = task.get("arguments", {})
                 
-                # Process any template variables in arguments
                 if "template_vars" in task:
                     arguments = self._process_template_vars(arguments, task["template_vars"], results)
                 
-                # Display that the call is happening
                 if self.ui:
                     self.ui.print_tool_call(tool_name, arguments)
                 
-                # Execute the tool - pass the batch_id for permission tracking
-                # Log to help debug the permission issue
+                batch_id = plan.get("batch_id", "default_batch")
                 logger.info(f"Executing task '{task_id}' with tool '{tool_name}' using batch_id: {batch_id}")
-                raw_result = self.tool_manager.execute_tool(
-                    tool_name, arguments, True, client_type, batch_id
-                )
+                try:
+                    raw_result = self.tool_manager.execute_tool(
+                        tool_name, 
+                        arguments, 
+                        True,  
+                        client_type, 
+                        operations_pre_approved  
+                    )
+                except PermissionDeniedError:
+                    failed_tasks.append(task_id)
+                    results[task_id] = {
+                        "success": False,
+                        "error": "Permission denied",
+                        "skipped": True
+                    }
+                    continue
                 
-                # Store the result
                 results[task_id] = raw_result
                 
-                # Record in execution history
                 history_entry = {
                     "task_id": task_id,
                     "tool_name": tool_name,
@@ -300,7 +333,6 @@ class TaskPlanner:
                 }
                 self.execution_history.append(history_entry)
                 
-                # Update tracking and show result status
                 if raw_result.get("success", False):
                     completed_tasks.append(task_id)
                     if self.ui:
@@ -312,17 +344,14 @@ class TaskPlanner:
                     failed_tasks.append(task_id)
                     error_msg = raw_result.get("error", "Unknown error")
                     
-                    # Get task details for error context
                     tool_name = task.get("tool_name", "unknown")
                     task_desc = task.get("description", f"Execute {tool_name}")
                     
                     if self.ui:
-                        # Print the error status
                         self.ui.print_content(
                             f"[red]✗ Task '{task_id}' failed: {error_msg}[/]"
                         )
                         
-                        # Display formatted error with suggestions
                         display_error(
                             self.ui, 
                             error_msg, 
@@ -332,7 +361,6 @@ class TaskPlanner:
                             task_desc
                         )
                     
-                    # Check if we should stop on failure
                     if plan.get("stop_on_failure", False):
                         if self.ui:
                             self.ui.print_content(
@@ -346,9 +374,7 @@ class TaskPlanner:
             
             execution_time = time.time() - start_time
             
-            # Display final summary
             if self.ui:
-                # Create a summary message
                 if len(failed_tasks) == 0:
                     color = "green"
                     icon = "✓"
@@ -370,7 +396,6 @@ class TaskPlanner:
                     f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]"
                 )
                 
-                # Add guidance for error recovery if needed
                 if recovery_needed and failed_tasks:
                     failed_tasks_info = []
                     for task_id in failed_tasks:
@@ -382,7 +407,6 @@ class TaskPlanner:
                             failed_tasks_info.append(f"- Task '{task_id}' ({task_desc}): {error}")
                     
                     if failed_tasks_info:
-                        # Create error summary without rich formatting in text
                         failed_summary = "\n".join(failed_tasks_info)
                         self.ui.print_content(
                             f"[yellow bold]Error Summary:[/]\n{failed_summary}\n\n"
@@ -396,7 +420,6 @@ class TaskPlanner:
                     f"Completed: {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]"
                 )
             
-            # Generate plan summary
             return {
                 "success": len(failed_tasks) == 0,
                 "error": "" if len(failed_tasks) == 0 else f"Failed tasks: {', '.join(failed_tasks)}",
@@ -423,6 +446,155 @@ class TaskPlanner:
                 "completed_tasks": completed_tasks if 'completed_tasks' in locals() else [],
                 "failed_tasks": failed_tasks if 'failed_tasks' in locals() else []
             }
+        finally:
+            if operations_pre_approved:
+                self.tool_manager.trust_manager.clear_approved_operations()
+
+    def start_interactive_plan(self, name: str, description: str) -> Dict[str, Any]:
+        """Start an interactive planning session.
+        
+        Args:
+            name: The name of the plan
+            description: The description of the plan
+            
+        Returns:
+            Dict with the result of starting the plan
+        """
+        self.interactive_plan = {
+            "name": name,
+            "description": description,
+            "stop_on_failure": True,  
+            "tasks": []
+        }
+        self.interactive_plan_tasks = []
+        self.interactive_plan_finalized = False
+        
+        if self.ui:
+            self.ui.display_interactive_plan_started(name, description)
+        
+        return {
+            "success": True,
+            "plan_name": name,
+            "message": f"Started creating plan: {name}",
+            "task_count": 0
+        }
+    
+    def add_task_to_interactive_plan(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Add a task to the interactive plan.
+        
+        Args:
+            task: The task to add
+            
+        Returns:
+            Dict with the result of adding the task
+        """
+        if not self.interactive_plan:
+            return {
+                "success": False,
+                "error": "No active plan. Start a plan first with mode='start_plan'."
+            }
+            
+        is_valid, error = self.validate_task(task)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Invalid task: {error}"
+            }
+            
+        if "id" not in task:
+            task["id"] = f"task{len(self.interactive_plan_tasks) + 1}"
+        
+        self.interactive_plan_tasks.append(task)
+        
+        if self.ui:
+            task_index = len(self.interactive_plan_tasks)
+            tool_name = task.get("tool_name", "???")
+            depends_on = task.get("depends_on", [])
+            condition_dict = task.get("condition", {})
+            self.ui.display_interactive_plan_task_added(
+                task_index,
+                task["id"],
+                tool_name,
+                task.get("description", f"Execute {tool_name}"),
+                depends_on,
+                condition_dict
+            )
+        
+        return {
+            "success": True,
+            "task_id": task["id"],
+            "task_index": len(self.interactive_plan_tasks),
+            "message": f"Added task {task['id']} to plan"
+        }
+    
+    def finalize_interactive_plan(self) -> Dict[str, Any]:
+        """Finalize the interactive plan, preparing it for execution.
+        
+        Returns:
+            Dict with the result of finalizing the plan
+        """
+        if not self.interactive_plan:
+            return {
+                "success": False,
+                "error": "No active plan. Start a plan first with mode='start_plan'."
+            }
+            
+        if not self.interactive_plan_tasks:
+            return {
+                "success": False,
+                "error": "Plan has no tasks. Add tasks first with mode='add_task'."
+            }
+            
+        self.interactive_plan["tasks"] = self.interactive_plan_tasks
+        is_valid, error = self.validate_plan(self.interactive_plan)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Invalid plan: {error}"
+            }
+
+        self.interactive_plan_finalized = True
+        confirmed = self.ui.confirm_interactive_plan(self.interactive_plan["name"]) if self.ui else True
+        if not confirmed:
+            self.interactive_plan = None
+            self.interactive_plan_tasks = []
+            self.interactive_plan_finalized = False
+            return {
+                "success": False,
+                "error": "Plan rejected by user",
+                "user_action": "rejected"
+            }
+        
+        return {
+            "success": True,
+            "plan_name": self.interactive_plan["name"],
+            "task_count": len(self.interactive_plan_tasks),
+            "message": "Plan finalized and ready for execution",
+            "user_action": "confirmed"
+        }
+    
+    def execute_interactive_plan(self, client_type: str = None) -> Dict[str, Any]:
+        """Execute the finalized interactive plan.
+        
+        Args:
+            client_type: The client type to use for result formatting
+            
+        Returns:
+            Dict with execution results
+        """
+        if not self.interactive_plan or not self.interactive_plan_finalized:
+            return {
+                "success": False,
+                "error": "No finalized plan. Finalize a plan first with mode='finalize_plan'."
+            }
+            
+        result = self.execute_plan(self.interactive_plan, client_type)
+        
+        self.interactive_plan = None
+        self.interactive_plan_tasks = []
+        self.interactive_plan_finalized = False
+        
+        return result
     
     def _evaluate_condition(self, condition: Dict[str, Any], results: Dict[str, Any]) -> bool:
         """Evaluate a condition to determine if a task should be executed.
@@ -437,7 +609,6 @@ class TaskPlanner:
         condition_type = condition["type"]
         
         if condition_type == "task_result":
-            # Check a previous task's success status
             task_id = condition["task_id"]
             if task_id not in results:
                 return False
@@ -446,18 +617,14 @@ class TaskPlanner:
             field = condition.get("field", "success")
             expected_value = condition.get("value", True)
             
-            # Get the actual value from the task result
             actual_value = task_result.get(field)
             
-            # Check if the condition is met
             if condition.get("operator") == "not_equals":
                 return actual_value != expected_value
-            else:  # Default to equals
+            else:
                 return actual_value == expected_value
                 
         elif condition_type == "expression":
-            # TODO: Implement expression evaluation if needed
-            # This would allow for more complex conditions
             return True
             
         return False
@@ -482,23 +649,19 @@ class TaskPlanner:
         
         for key, value in arguments.items():
             if isinstance(value, str):
-                # Process string templates
                 processed_value = value
                 for var_name, var_def in template_vars.items():
                     placeholder = f"${{{var_name}}}"
                     if placeholder in processed_value:
                         if var_def.get("type") == "task_result":
-                            # Get value from a previous task result
                             task_id = var_def["task_id"]
                             if task_id in results:
                                 result_value = results[task_id]
                                 
-                                # Extract specific field if provided
                                 if "field" in var_def:
                                     field_path = var_def["field"].split(".")
                                     field_value = result_value
                                     
-                                    # Navigate nested fields
                                     for field in field_path:
                                         if isinstance(field_value, dict) and field in field_value:
                                             field_value = field_value[field]
@@ -506,10 +669,8 @@ class TaskPlanner:
                                             field_value = var_def.get("default", "")
                                             break
                                     
-                                    # Clean up the value - replace newlines with empty string to handle paths properly
                                     replacement_value = str(field_value).replace("\n", "")
                                 else:
-                                    # Use the whole result (as JSON if it's a dict)
                                     if isinstance(result_value, dict):
                                         replacement_value = json.dumps(result_value)
                                     else:
@@ -517,20 +678,16 @@ class TaskPlanner:
                                 
                                 processed_value = processed_value.replace(placeholder, replacement_value)
                             else:
-                                # Use default if provided
                                 default_value = var_def.get("default", "")
                                 processed_value = processed_value.replace(placeholder, str(default_value))
                         elif var_def.get("type") == "static":
-                            # Use static value
                             static_value = var_def.get("value", "")
                             processed_value = processed_value.replace(placeholder, str(static_value))
                 
                 processed_args[key] = processed_value
             elif isinstance(value, dict):
-                # Recursively process nested dictionaries
                 processed_args[key] = self._process_template_vars(value, template_vars, results)
             elif isinstance(value, list):
-                # Process list items if they're strings or dicts
                 processed_list = []
                 for item in value:
                     if isinstance(item, str):
@@ -538,7 +695,6 @@ class TaskPlanner:
                         for var_name, var_def in template_vars.items():
                             placeholder = f"${{{var_name}}}"
                             if placeholder in processed_item:
-                                # Same logic as above, but simplified for brevity
                                 replacement = str(var_def.get("value", var_def.get("default", "")))
                                 processed_item = processed_item.replace(placeholder, replacement)
                         processed_list.append(processed_item)
@@ -548,7 +704,6 @@ class TaskPlanner:
                         processed_list.append(item)
                 processed_args[key] = processed_list
             else:
-                # Pass through other value types unchanged
                 processed_args[key] = value
                 
         return processed_args
@@ -565,7 +720,6 @@ class TaskPlanner:
         from rich.text import Text
         import time
         
-        # Create a formatted table of tasks
         table = Table(show_header=True, header_style="bold")
         table.add_column("#", style="dim")
         table.add_column("Task ID", style="cyan")
@@ -579,12 +733,10 @@ class TaskPlanner:
             tool_name = task.get("tool_name", "unknown")
             description = task.get("description", f"Execute {tool_name}")
             
-            # Format dependencies if present
             dependencies = ""
             if "depends_on" in task:
                 dependencies = ", ".join(task["depends_on"])
             
-            # Check if this task has conditions
             conditional = "No"
             if "condition" in task:
                 condition = task["condition"]
@@ -606,7 +758,6 @@ class TaskPlanner:
                 conditional
             )
         
-        # Create a summary panel content
         panel_content = []
         panel_content.append(Text("🔄 TASK PLAN: ", style="bold blue"))
         panel_content.append(Text(plan.get('name', 'Unnamed Plan'), style="bold white"))
@@ -623,20 +774,16 @@ class TaskPlanner:
         panel_content.append(Text("Stop on Failure: ", style="bold"))
         panel_content.append(Text("Yes" if plan.get("stop_on_failure", False) else "No"))
         
-        # Combine all text segments
         panel_text = Text.assemble(*panel_content)
         
-        # Create the panel
         panel = Panel(panel_text, border_style="blue", expand=False)
         
-        # Display the plan to the user
         if self.ui:
             self.ui.console.print("\n")
             self.ui.console.print(panel)
             self.ui.console.print(table)
             self.ui.console.print("\n")
             
-            # Display execution message
             execution_msg = Text.assemble(
                 Text("Starting execution", style="bold green"),
                 Text("..."), 
@@ -655,25 +802,21 @@ class TaskPlanner:
         """
         permission_operations = []
         
-        # Find all tools that require confirmation
         tools_requiring_permission = {}
         for tool_name, tool in self.tool_manager.tools.items():
             if tool.requires_confirmation:
                 tools_requiring_permission[tool_name] = tool
         
-        # Process all tasks in the plan
         for task in plan.get("tasks", []):
             tool_name = task.get("tool_name")
             
             if tool_name in tools_requiring_permission:
                 arguments = task.get("arguments", {})
                 
-                # For bash tool, pass arguments.command as the path
                 if tool_name == "bash" and "command" in arguments:
                     permission_path = arguments
                     task_desc = task.get("description", f"Execute command: {arguments.get('command')}")
                 else:
-                    # Use the first string argument as the path, if any
                     permission_path = None
                     for arg_name, arg_value in arguments.items():
                         if isinstance(arg_value, str) and arg_name in ("path", "file_path"):
@@ -682,41 +825,9 @@ class TaskPlanner:
                     
                     task_desc = task.get("description", f"Execute {tool_name}")
                 
-                # Add to the list with a detailed description
                 permission_operations.append((tool_name, permission_path, task_desc))
         
         return permission_operations
-    
-    def _request_plan_permissions(self, operations: List[Tuple[str, Any, str]], plan_name: str, batch_id: str) -> bool:
-        """Request permission for all operations in a plan at once.
-        
-        Args:
-            operations: List of (tool_name, path, description) tuples requiring permission
-            plan_name: Name of the task plan
-            batch_id: Unique ID for this batch of operations
-            
-        Returns:
-            Whether all permissions were granted
-        """
-        if not operations:
-            return True
-            
-        if not self.tool_manager.trust_manager:
-            logger.warning("Trust manager not initialized, can't request permissions")
-            return False
-            
-        # Format the permission text
-        operations_text = f"The task plan '{plan_name}' requires permission for the following operations:\n"
-        for i, (tool_name, path, description) in enumerate(operations, 1):
-            operations_text += f"{i}. {description}\n"
-        
-        # Strip out the description for the actual trust manager call
-        trust_operations = [(tool_name, path) for tool_name, path, _ in operations]
-            
-        # Use the trust manager to request all permissions at once
-        return self.tool_manager.trust_manager.prompt_for_parallel_operations(
-            trust_operations, operations_text, batch_id
-        )
     
     def get_plan_schema(self) -> Dict[str, Any]:
         """Get the JSON schema for task plans.

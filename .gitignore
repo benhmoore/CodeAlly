@@ -43,6 +43,7 @@ venv.bak/
 # Local configuration
 .env.local
 .env.*.local
+code_ally/config.json
 
 # Coverage reports
 htmlcov/

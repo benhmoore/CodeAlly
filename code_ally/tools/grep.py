@@ -11,6 +11,10 @@ from code_ally.tools.registry import register_tool
 class GrepTool(BaseTool):
     name = "grep"
     description = """Search for a pattern in files with sophisticated filtering.
+
+    <tool_call>
+    {"name": "grep", "arguments": {"pattern": "search_term", "path": "/search/directory", "include": "*.py", "case_sensitive": false}}
+    </tool_call>
     
     Supports:
     - Regular expression pattern searching

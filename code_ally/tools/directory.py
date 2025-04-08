@@ -20,6 +20,10 @@ class DirectoryTool(BaseTool):
 
     name = "directory"
     description = """Perform directory-level operations for project organization.
+
+    <tool_call>
+    {"name": "directory", "arguments": {"operation": "create", "path": "/target/path", "structure": {"src": {}, "tests": {}, "docs": {}}}}
+    </tool_call>
     
     Supports:
     - Reorganizing project directories

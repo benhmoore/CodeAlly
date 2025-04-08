@@ -45,6 +45,32 @@ class TaskPlanTool(BaseTool):
     d) Execute the finalized plan:
     <tool_call>{"name": "task_plan", "arguments": {"mode": "execute_plan"}}</tool_call>
 
+    ## Example Planning Conversation Flow
+    USER: "Create a Spider-Man fan site"
+
+    ASSISTANT: [FIRST TURN - ONLY starts the plan]
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "start_plan", "name": "Create Spider-Man Fan Site", "description": "Create a simple Spider-Man themed website"}}</tool_call>
+
+    TOOL RESPONSE: [Plan started successfully]
+
+    ASSISTANT: [SECOND TURN - ONLY adds first task]
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "directory", "description": "Create project structure", "arguments": {"operation": "create", "path": "/path/to/site", "structure": {"css": {}, "html": {}, "images": {}}}}}}</tool_call>
+
+    TOOL RESPONSE: [Task added successfully]
+
+    ASSISTANT: [THIRD TURN - ONLY adds second task]
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "add_task", "task": {"tool_name": "file_write", "description": "Create index.html", "arguments": {"path": "/path/to/site/html/index.html", "content": "<!DOCTYPE html>..."}}}}</tool_call>
+
+    [CONTINUE ADDING TASKS ONE BY ONE]
+
+    ASSISTANT: [AFTER ALL TASKS - ONLY finalizes plan]
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "finalize_plan"}}</tool_call>
+
+    TOOL RESPONSE: [Plan finalized, user confirmed]
+
+    ASSISTANT: [FINAL TURN - ONLY executes plan]
+    <tool_call>{"name": "task_plan", "arguments": {"mode": "execute_plan"}}</tool_call>
+
     Supports:
     - Sequential and conditional execution of multiple tools
     - Dependencies between tasks

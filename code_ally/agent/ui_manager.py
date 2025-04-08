@@ -27,6 +27,7 @@ class UIManager:
         self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
         self.thinking_event = threading.Event()
         self.verbose = False
+        self.active_live_display = None  # Track the current active Live display
 
         # Create history directory if it doesn't exist
         history_dir = os.path.expanduser("~/.ally")
@@ -57,6 +58,12 @@ class UIManager:
         # Interactive planning state
         self.current_interactive_plan = None
         self.current_interactive_plan_tasks = []
+        
+        # Add these attributes
+        self.active_live_display = None
+        self.plan_panel = None  # Store the entire panel
+        self.plan_tasks_table = None
+        self.plan_panel_group = None  # This is important
 
     def set_verbose(self, verbose: bool) -> None:
         """Set verbose mode.
@@ -68,6 +75,11 @@ class UIManager:
 
     def start_thinking_animation(self, token_percentage: int = 0) -> threading.Thread:
         """Start the thinking animation."""
+        # Make sure any existing live display is stopped
+        if self.active_live_display:
+            self.active_live_display.stop()
+            self.active_live_display = None
+
         self.thinking_event.clear()
 
         def animate():
@@ -91,20 +103,26 @@ class UIManager:
                 )
 
             start_time = time.time()
-            with Live(
-                self.thinking_spinner, refresh_per_second=10, console=self.console
-            ) as live:
-                while not self.thinking_event.is_set():
-                    elapsed_seconds = int(time.time() - start_time)
-                    if token_percentage > 0:
-                        context_info = f"({token_percentage}% context used)"
-                        thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
-                    else:
-                        thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
+            try:
+                with Live(
+                    self.thinking_spinner, refresh_per_second=10, console=self.console
+                ) as live:
+                    self.active_live_display = live  # Store reference to current live display
+                    while not self.thinking_event.is_set():
+                        elapsed_seconds = int(time.time() - start_time)
+                        if token_percentage > 0:
+                            context_info = f"({token_percentage}% context used)"
+                            thinking_text = f"[cyan]Thinking[/] [dim {color}]{context_info}[/] [{elapsed_seconds}s]"
+                        else:
+                            thinking_text = f"[cyan]Thinking[/] [{elapsed_seconds}s]"
 
-                    spinner = Spinner("dots2", text=thinking_text)
-                    live.update(spinner)
-                    time.sleep(0.1)
+                        spinner = Spinner("dots2", text=thinking_text)
+                        live.update(spinner)
+                        time.sleep(0.1)
+            finally:
+                # Clear the reference when done
+                if self.active_live_display:
+                    self.active_live_display = None
 
         thread = threading.Thread(target=animate, daemon=True)
         thread.start()
@@ -113,6 +131,7 @@ class UIManager:
     def stop_thinking_animation(self) -> None:
         """Stop the thinking animation."""
         self.thinking_event.set()
+        # Make sure the live display reference is cleared in the animation thread
 
     def get_user_input(self) -> str:
         """Get user input with history navigation support.
@@ -250,86 +269,98 @@ Use up/down arrow keys to navigate through command history.
     # ----- Interactive Planning UI Methods -----
     
     def display_interactive_plan_started(self, name: str, description: str) -> None:
-        """Display that a new interactive plan has been started.
-        
-        Args:
-            name: The name of the plan
-            description: The description of the plan
-        """
-        # Save the current interactive plan info
+        """Start displaying an interactive plan with a live-updating panel."""
+        # Make sure any existing live display is stopped
+        if self.active_live_display:
+            self.active_live_display.stop()
+            self.active_live_display = None
+
+        # Save plan info
         self.current_interactive_plan = {
             "name": name,
             "description": description
         }
         self.current_interactive_plan_tasks = []
+
         
-        # Create and display the panel
-        from rich.panel import Panel
+        # Create the initial table for tasks
+        from rich.table import Table
+        self.plan_tasks_table = Table(box=None, expand=False, show_header=True)
+        
+        # We'll show a full set of columns so the single panel can carry
+        # everything from creation to finalization:
+        self.plan_tasks_table.add_column("#", style="dim", width=3)
+        self.plan_tasks_table.add_column("Task ID", style="cyan")
+        self.plan_tasks_table.add_column("Tool", style="green")
+        self.plan_tasks_table.add_column("Description", style="yellow")
+        self.plan_tasks_table.add_column("Dependencies", style="blue")
+        self.plan_tasks_table.add_column("Conditional", style="magenta")
+        
+        # Create the header text
         from rich.text import Text
+        from rich.console import Group
         
-        title_text = Text("📋 Creating Task Plan", style="bold blue")
-        content = Text.assemble(
+        header_content = Text.assemble(
             Text(f"Name: ", style="bold"), Text(name), Text("\n"),
             Text(f"Description: ", style="bold"), Text(description), Text("\n\n"),
-            Text("Creating tasks for this plan...", style="dim cyan")
+            Text("Tasks:", style="bold cyan")
         )
         
-        panel = Panel(
-            content,
+        # Group the header and tasks table - store this separately
+        self.plan_panel_group = Group(header_content, self.plan_tasks_table)
+        
+        # Create the panel - use the group
+        from rich.panel import Panel
+        title_text = Text("📋 Creating Task Plan", style="bold blue")
+        self.plan_panel = Panel(
+            self.plan_panel_group,
             title=title_text,
             border_style="blue",
             expand=False
         )
         
-        self.console.print("\n")
-        self.console.print(panel)
-        self.console.print("\n")
-    
+        # Start the live display with the panel
+        from rich.live import Live
+        live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
+        self.active_live_display = live
+        live.start()
+
     def display_interactive_plan_task_added(self, task_index: int, task_id: str, description: str) -> None:
-        """Display that a task has been added to the interactive plan.
-        
-        Args:
-            task_index: The index of the task (1-based)
-            task_id: The ID of the task
-            description: The description of the task
-        """
-        # Add to the list of tasks
-        self.current_interactive_plan_tasks.append({
-            "index": task_index,
-            "id": task_id,
-            "description": description
-        })
-        
-        # Display the task
-        self.print_content(
-            f"[cyan]📌 Task {task_index}:[/] {description}",
-            style=None
+        """Update the plan panel with a new task."""
+        self.current_interactive_plan_tasks.append(
+            {
+                "index": task_index,
+                "id": task_id,
+                "description": description
+            }
         )
-    
+
+        # We'll rely on the 'tmp_tool', 'tmp_depends', 'tmp_cond' that we store in the TaskPlanner
+        # In a more ideal design, you'd pass them in as direct arguments to this function.
+        tool_name = getattr(self, "tmp_tool", "???")
+        depends_on = getattr(self, "tmp_depends", [])
+        condition_str = getattr(self, "tmp_cond", "No")
+
+        depends_txt = ", ".join(depends_on) if depends_on else "—"
+
+        self.plan_tasks_table.add_row(
+            str(task_index),
+            task_id,
+            tool_name,
+            description,
+            depends_txt,
+            condition_str,
+        )
+
+        if self.active_live_display:
+            self.active_live_display.update(self.plan_panel)
+
     def confirm_interactive_plan(self, plan_name: str) -> bool:
-        """Ask the user to confirm execution of the interactive plan.
-        
-        Args:
-            plan_name: The name of the plan
-            
-        Returns:
-            Whether the user confirmed the plan
-        """
-        # Display a summary of tasks
-        if self.current_interactive_plan_tasks:
-            from rich.table import Table
-            
-            table = Table(title="Tasks to Execute", show_header=True, box=None)
-            table.add_column("#", style="dim")
-            table.add_column("Task", style="cyan")
-            
-            for task in self.current_interactive_plan_tasks:
-                table.add_row(
-                    str(task["index"]),
-                    task["description"]
-                )
-            
-            self.console.print(table)
+        """Finalize the plan display and ask for confirmation."""
+        # Stop the live display
+        if self.active_live_display:
+            self.active_live_display.stop()
+            self.active_live_display = None
         
         # Ask for confirmation
         return self.confirm(f"Execute the task plan '{plan_name}'?", default=True)

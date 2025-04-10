@@ -355,7 +355,7 @@ class OllamaClient(ModelClient):
             original_sigint_handler = signal.getsignal(signal.SIGINT)
 
             def sigint_handler(
-                sig: int, frame: FrameType
+                sig: int, frame: FrameType,
             ) -> NoReturn:  # Use FrameType from types
                 logger.warning(
                     "SIGINT received during request. Interrupting Ollama request.",

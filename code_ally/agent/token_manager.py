@@ -5,7 +5,8 @@ Manages token counting and context window utilization.
 
 import time
 import json
-from typing import Any, Dict, List
+import hashlib
+from typing import Any, Dict, List, Optional, Set
 
 
 class TokenManager:
@@ -28,6 +29,9 @@ class TokenManager:
         self.ui = None  # Will be set by the Agent class
         # Cache for token counts to avoid re-estimation
         self._token_cache = {}
+        # Track file content hashes to avoid duplicate reads
+        self._file_content_hashes = {}  # Maps file path to content hash
+        self._file_message_ids = {}  # Maps file path to message id containing its content
 
     def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
@@ -109,6 +113,66 @@ class TokenManager:
     def clear_cache(self) -> None:
         """Clear the token count cache."""
         self._token_cache = {}
+        
+    def compute_file_hash(self, file_path: str, content: str) -> str:
+        """Compute a hash for a file's content.
+        
+        Args:
+            file_path: Path to the file
+            content: Content of the file
+            
+        Returns:
+            Hash string representing the content
+        """
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+        
+    def register_file_read(self, file_path: str, content: str, message_id: str) -> Optional[str]:
+        """Register a file that has been read and track its hash.
+        
+        Args:
+            file_path: Path to the file
+            content: Content of the file
+            message_id: ID of the message containing this file's content
+            
+        Returns:
+            Previous message ID that contained this file if a duplicate is detected, None otherwise
+        """
+        content_hash = self.compute_file_hash(file_path, content)
+        
+        # Check if we've seen this file before with a different hash
+        if file_path in self._file_content_hashes:
+            previous_hash = self._file_content_hashes[file_path]
+            previous_message_id = self._file_message_ids.get(file_path)
+            
+            # If content has changed, update the hash and message ID
+            if previous_hash != content_hash:
+                self._file_content_hashes[file_path] = content_hash
+                self._file_message_ids[file_path] = message_id
+                return previous_message_id
+        
+        # If we haven't seen this file before, register it
+        self._file_content_hashes[file_path] = content_hash
+        self._file_message_ids[file_path] = message_id
+        return None
+        
+    def get_existing_file_message_id(self, file_path: str, content: str) -> Optional[str]:
+        """Check if a file has been previously read with same content.
+        
+        Args:
+            file_path: Path to the file
+            content: Content of the file
+            
+        Returns:
+            Message ID of the message containing this file's content if it exists, None otherwise
+        """
+        if file_path not in self._file_content_hashes:
+            return None
+            
+        content_hash = self.compute_file_hash(file_path, content)
+        if self._file_content_hashes[file_path] == content_hash:
+            return self._file_message_ids.get(file_path)
+        
+        return None
 
     def update_token_count(self, messages: List[Dict[str, Any]]) -> None:
         """Update the token count for the current messages.

@@ -43,3 +43,14 @@ class ServiceRegistry:
             The service instance or None if not found
         """
         return self._services.get(name)
+        
+    def has_service(self, name):
+        """Check if a service exists in the registry.
+        
+        Args:
+            name: The name of the service to check
+            
+        Returns:
+            bool: True if the service exists, False otherwise
+        """
+        return name in self._services

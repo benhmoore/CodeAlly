@@ -2,8 +2,43 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# Using setup.py for metadata instead of the [project] table
-# This avoids conflicts between setup.py and pyproject.toml
+[project]
+name = "code-ally"
+version = "0.4.4"
+description = "A local LLM-powered pair programming assistant"
+readme = "README.md"
+authors = [
+    {name = "Ben H Moore", email = "ben@benhmoore.com"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "requests>=2.32.0",
+    "rich>=13.0.0",
+    "prompt_toolkit>=3.0.0",
+]
+keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
+
+[project.urls]
+"Homepage" = "https://github.com/benhmoore/code-ally"
+"Bug Tracker" = "https://github.com/benhmoore/code-ally/issues"
+
+[project.scripts]
+ally = "code_ally.main:main"
+
+# Keeping original setup.py for backward compatibility
+# but the metadata above will take precedence
 
 [tool.black]
 line-length = 88

@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "code_ally"
+version = "0.4.4"
 description = "A local LLM-powered pair programming assistant"
 readme = "README.md"
 authors = [
@@ -28,17 +29,33 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
-dynamic = ["version", "optional-dependencies"]
+
+[tool.setuptools]
+packages = ["code_ally", "code_ally.agent", "code_ally.llm_client", "code_ally.prompts", "code_ally.tools"]
 
 [project.urls]
 "Homepage" = "https://github.com/benhmoore/CodeAlly"
 "Bug Tracker" = "https://github.com/benhmoore/CodeAlly/issues"
+"Documentation" = "https://github.com/benhmoore/CodeAlly/blob/main/README.md"
+"Source Code" = "https://github.com/benhmoore/CodeAlly"
 
 [project.scripts]
 ally = "code_ally.main:main"
 
-# Keeping original setup.py for backward compatibility
-# but the metadata above will take precedence
+[project.optional-dependencies]
+dev = [
+    "black==25.1.0",
+    "isort==6.0.1",
+    "mypy==1.15.0",
+    "pytest==8.3.5",
+    "pytest-cov==6.1.0",
+    "pylint==3.3.6", 
+    "pre-commit==4.2.0",
+    "build==1.0.3",
+    "twine==6.1.0",
+    "setuptools>=78.1.0",
+    "bump2version==1.0.1",
+]
 
 [tool.black]
 line-length = 88

@@ -95,6 +95,6 @@ jobs:
     - name: Build package
       if: ${{ inputs.build-package }}
       run: |
-        pip install build twine
+        pip install build twine>=6.0.0
         python -m build
         twine check dist/*

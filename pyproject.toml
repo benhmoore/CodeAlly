@@ -2,8 +2,60 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# Using setup.py for metadata instead of the [project] table
-# This avoids conflicts between setup.py and pyproject.toml
+[project]
+name = "code_ally"
+version = "0.4.4"
+description = "A local LLM-powered pair programming assistant"
+readme = "README.md"
+authors = [
+    {name = "Ben H Moore", email = "ben@benhmoore.com"}
+]
+license = "MIT"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "requests>=2.32.0",
+    "rich>=13.0.0",
+    "prompt_toolkit>=3.0.0",
+]
+keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
+
+[tool.setuptools]
+packages = ["code_ally", "code_ally.agent", "code_ally.llm_client", "code_ally.prompts", "code_ally.tools"]
+
+[project.urls]
+"Homepage" = "https://github.com/benhmoore/CodeAlly"
+"Bug Tracker" = "https://github.com/benhmoore/CodeAlly/issues"
+"Documentation" = "https://github.com/benhmoore/CodeAlly/blob/main/README.md"
+"Source Code" = "https://github.com/benhmoore/CodeAlly"
+
+[project.scripts]
+ally = "code_ally.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "black==25.1.0",
+    "isort==6.0.1",
+    "mypy==1.15.0",
+    "pytest==8.3.5",
+    "pytest-cov==6.1.0",
+    "pylint==3.3.6", 
+    "pre-commit==4.2.0",
+    "build==1.0.3",
+    "twine==6.1.0",
+    "setuptools>=78.1.0",
+    "bump2version==1.0.1",
+]
 
 [tool.black]
 line-length = 88

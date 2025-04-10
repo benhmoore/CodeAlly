@@ -32,7 +32,7 @@ install_requires = read_requirements("requirements.txt")
 dev_requires = read_requirements("requirements-dev.txt")
 
 setup(
-    name="code-ally",
+    name="code_ally",
     # Read version, author, email from code_ally/code_ally/__init__.py
     version=get_meta("version"),
     author=get_meta("author"),

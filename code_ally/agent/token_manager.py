@@ -1,4 +1,4 @@
-"""File: token_manager.py
+"""File: token_manager.py.
 
 Manages token counting and context window utilization.
 """
@@ -12,7 +12,7 @@ from typing import Any
 class TokenManager:
     """Manages token counting and context window utilization."""
 
-    def __init__(self, context_size: int):
+    def __init__(self, context_size: int) -> None:
         """Initialize the token manager.
 
         Args:
@@ -193,8 +193,7 @@ class TokenManager:
         self.estimated_tokens = self.estimate_tokens(messages)
 
         # Log in verbose mode if there's a significant change
-        if self.ui and hasattr(self.ui, "verbose") and self.ui.verbose:
-            if abs(self.estimated_tokens - previous_tokens) > 100:
+        if self.ui and hasattr(self.ui, "verbose") and self.ui.verbose and abs(self.estimated_tokens - previous_tokens) > 100:
                 token_percentage = self.get_token_percentage()
                 change = self.estimated_tokens - previous_tokens
                 change_sign = "+" if change > 0 else ""

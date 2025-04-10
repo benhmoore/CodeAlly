@@ -1,3 +1,8 @@
+"""Glob tool for finding files by pattern.
+
+Provides file pattern matching functionality to locate files by name patterns.
+"""
+
 import glob
 import os
 from typing import Any
@@ -8,6 +13,7 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class GlobTool(BaseTool):
+    """Tool for finding files that match specific patterns with glob syntax."""
     name = "glob"
     description = """Find files matching a glob pattern with improved context efficiency.
 

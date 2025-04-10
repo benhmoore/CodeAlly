@@ -1,4 +1,4 @@
-"""File: error_handler.py
+"""File: error_handler.py.
 
 Provides error handling and formatting utilities for agents.
 """
@@ -60,7 +60,7 @@ def format_error_message(
 
 
 def display_error(
-    ui_manager,
+    ui_manager: Any,
     error_msg: str,
     tool_name: str,
     arguments: dict[str, Any],

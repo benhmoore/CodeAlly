@@ -89,11 +89,13 @@ python_classes = "Test*"
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I", "N", "ANN", "D", "UP", "C4", "COM", "SIM"]
 ignore = ["ANN101", "D107", "D203", "D212", "D205", "E501"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN001", "ANN201", "ANN202", "ANN204"]
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"

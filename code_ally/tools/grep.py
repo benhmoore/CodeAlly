@@ -1,3 +1,8 @@
+"""Grep tool for searching file contents.
+
+Provides pattern-based search functionality across files with filtering capabilities.
+"""
+
 import fnmatch
 import os
 import re
@@ -9,6 +14,7 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class GrepTool(BaseTool):
+    """Tool for searching file contents with pattern matching and filtering capabilities."""
     name = "grep"
     description = """Search for a pattern in files with sophisticated filtering.
 
@@ -212,9 +218,7 @@ class GrepTool(BaseTool):
                         matched_files.add(file_path)
 
                         # Handle search and replace
-                        if replace or preview_replace:
-                            # Check if we have any matches to replace
-                            if file_matches:
+                        if (replace or preview_replace) and file_matches:
                                 new_content = regex.sub(replace, content)
                                 # Only add to replacements if content actually changed
                                 if new_content != content:

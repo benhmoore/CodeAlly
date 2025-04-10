@@ -1,4 +1,4 @@
-"""File: tool_manager.py
+"""File: tool_manager.py.
 
 Manages tool registration, validation, and execution.
 """
@@ -22,7 +22,7 @@ class ToolManager:
         tools: list[BaseTool],
         trust_manager: TrustManager,
         permission_manager: PermissionManager = None,
-    ):
+    ) -> None:
         """Initialize the tool manager.
 
         Args:
@@ -57,7 +57,8 @@ class ToolManager:
 
             # Extract information from the method
             sig = inspect.signature(execute_method)
-            doc = inspect.getdoc(execute_method) or ""
+            # get docstring but not used here
+            _ = inspect.getdoc(execute_method) or ""
 
             # Build parameter schema
             parameters = {"type": "object", "properties": {}, "required": []}
@@ -70,42 +71,42 @@ class ToolManager:
                 param_type = "string"
 
                 # Try to determine type from annotation
-                if param.annotation != inspect.Parameter.empty:
-                    if param.annotation == str:
+                if param.annotation is not inspect.Parameter.empty:
+                    if param.annotation is str:
                         param_type = "string"
-                    elif param.annotation == int:
+                    elif param.annotation is int:
                         param_type = "integer"
-                    elif param.annotation == float:
+                    elif param.annotation is float:
                         param_type = "number"
-                    elif param.annotation == bool:
+                    elif param.annotation is bool:
                         param_type = "boolean"
                     elif (
-                        param.annotation == list
+                        param.annotation is list
                         or hasattr(param.annotation, "__origin__")
-                        and param.annotation.__origin__ == list
+                        and param.annotation.__origin__ is list
                     ):
                         param_type = "array"
                     # Handle Optional/Union types
                     elif (
                         hasattr(param.annotation, "__origin__")
-                        and param.annotation.__origin__ == Union
+                        and param.annotation.__origin__ is Union
                     ):
                         args = param.annotation.__args__
                         if type(None) in args:  # This is an Optional
                             for arg in args:
-                                if arg != type(None):
-                                    if arg == str:
+                                if arg is not type(None):
+                                    if arg is str:
                                         param_type = "string"
-                                    elif arg == int:
+                                    elif arg is int:
                                         param_type = "integer"
-                                    elif arg == float:
+                                    elif arg is float:
                                         param_type = "number"
-                                    elif arg == bool:
+                                    elif arg is bool:
                                         param_type = "boolean"
                                     elif (
-                                        arg == list
+                                        arg is list
                                         or hasattr(arg, "__origin__")
-                                        and arg.__origin__ == list
+                                        and arg.__origin__ is list
                                     ):
                                         param_type = "array"
 
@@ -119,7 +120,7 @@ class ToolManager:
                 }
 
                 # If the parameter has no default value, it's required
-                if param.default == inspect.Parameter.empty:
+                if param.default is inspect.Parameter.empty:
                     parameters["required"].append(param_name)
 
             # Create the function definition
@@ -137,12 +138,12 @@ class ToolManager:
 
     def execute_tool(
         self,
-        tool_name,
-        arguments,
-        check_context_msg=True,
-        client_type=None,
-        pre_approved=False,
-    ):
+        tool_name: str,
+        arguments: dict[str, Any],
+        check_context_msg: bool = True,
+        client_type: str | None = None,
+        pre_approved: bool = False,
+    ) -> dict[str, Any]:
         """Execute a tool with the given arguments after checking trust.
 
         Args:
@@ -203,7 +204,7 @@ class ToolManager:
         # Execute the tool
         return self._perform_tool_execution(tool_name, arguments)
 
-    def _is_valid_tool(self, tool_name):
+    def _is_valid_tool(self, tool_name: str) -> bool:
         """Check if a tool exists."""
         valid = tool_name in self.tools
 
@@ -212,7 +213,7 @@ class ToolManager:
 
         return valid
 
-    def _is_redundant_call(self, tool_name, arguments):
+    def _is_redundant_call(self, tool_name: str, arguments: dict[str, Any]) -> bool:
         """Check if a tool call is redundant.
 
         Only considers calls made in the current conversation turn as redundant.
@@ -223,7 +224,7 @@ class ToolManager:
         # Only check for redundancy within the current conversation turn
         return current_call in self.current_turn_tool_calls
 
-    def _handle_redundant_call(self, tool_name, check_context_msg):
+    def _handle_redundant_call(self, tool_name: str, check_context_msg: bool) -> dict[str, Any]:
         """Handle a redundant tool call."""
         # Simple consistent message for redundancy
         error_msg = f"Identical {tool_name} call was already executed in this conversation turn."
@@ -242,7 +243,7 @@ class ToolManager:
             "error": error_msg,
         }
 
-    def _record_tool_call(self, tool_name, arguments):
+    def _record_tool_call(self, tool_name: str, arguments: dict[str, Any]) -> None:
         """Record a tool call to avoid redundancy."""
         current_call = (tool_name, tuple(sorted(arguments.items())))
 
@@ -254,7 +255,7 @@ class ToolManager:
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
-    def _get_permission_path(self, tool_name, arguments):
+    def _get_permission_path(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
         """Get the permission path for a tool."""
         # For bash tool, pass arguments.command as the path
         if tool_name == "bash" and "command" in arguments:
@@ -271,7 +272,7 @@ class ToolManager:
 
         return None
 
-    def _perform_tool_execution(self, tool_name, arguments):
+    def _perform_tool_execution(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool with the given arguments."""
         import time
 
@@ -304,7 +305,7 @@ class ToolManager:
                 )
             return self._create_error_result(f"Error executing {tool_name}: {str(exc)}")
 
-    def _create_error_result(self, error_message):
+    def _create_error_result(self, error_message: str) -> dict[str, Any]:
         """Create a standardized error result."""
         return {
             "success": False,

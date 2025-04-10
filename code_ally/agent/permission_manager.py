@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class PermissionManager:
     """Manages permission checks for tools."""
 
-    def __init__(self, trust_manager: TrustManager):
+    def __init__(self, trust_manager: TrustManager) -> None:
         """Initialize the permission manager."""
         self.trust_manager = trust_manager
         # Store the starting directory at initialization time

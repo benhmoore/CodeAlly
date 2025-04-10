@@ -1,4 +1,4 @@
-"""File: command_handler.py
+"""File: command_handler.py.
 
 Handles special (slash) commands in the conversation.
 """
@@ -22,10 +22,10 @@ class CommandHandler:
 
     def __init__(
         self,
-        ui_manager,
-        token_manager,
+        ui_manager: Any,
+        token_manager: Any,
         trust_manager: TrustManager,
-    ):
+    ) -> None:
         """Initialize the command handler.
 
         Args:

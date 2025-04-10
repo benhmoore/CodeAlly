@@ -6,8 +6,6 @@ in the CodeAlly system.
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
-from typing import Union
 
 import pytest
 

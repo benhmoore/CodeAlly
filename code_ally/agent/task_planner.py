@@ -1,4 +1,4 @@
-"""File: task_planner.py
+"""File: task_planner.py.
 
 Provides task planning capabilities for the Code Ally agent.
 Enables the agent to define, validate, and execute multi-step plans.
@@ -33,7 +33,7 @@ class TaskPlanner:
     6. Interactive plan creation with user confirmation
     """
 
-    def __init__(self, tool_manager: Any):
+    def __init__(self, tool_manager: Any) -> None:
         """Initialize the task planner.
 
         Args:
@@ -215,7 +215,7 @@ class TaskPlanner:
 
         if permission_operations:
             operations_text = f"The task plan '{plan['name']}' requires permission for the following operations:\n"
-            for i, (tool_name, path, description) in enumerate(
+            for i, (_tool_name, _path, description) in enumerate(
                 permission_operations,
                 1,
             ):

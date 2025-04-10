@@ -1,4 +1,4 @@
-"""File: agent.py
+"""File: agent.py.
 
 The main Agent class that manages the conversation and handles tool execution.
 """
@@ -36,7 +36,7 @@ class Agent:
         check_context_msg: bool = True,
         auto_dump: bool = True,
         service_registry: ServiceRegistry | None = None,
-    ):
+    ) -> None:
         """Initialize the agent.
 
         Args:
@@ -70,7 +70,7 @@ class Agent:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
 
-    def _initialize_components(self, tools, verbose):
+    def _initialize_components(self, tools: list[Any], verbose: bool) -> None:
         """Initialize and register all agent components.
 
         Args:
@@ -131,11 +131,10 @@ class Agent:
         if "tool_calls" in response:
             # Standard multi-call format
             tool_calls = response.get("tool_calls", [])
-        elif "function_call" in response:
+        elif "function_call" in response and response["function_call"]:
             # Qwen-Agent style single call
-            if response["function_call"]:
-                tool_calls = [
-                    {
+            tool_calls = [
+                {
                         "id": f"manual-id-{int(time.time())}",
                         "type": "function",
                         "function": response["function_call"],

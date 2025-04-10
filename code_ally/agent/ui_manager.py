@@ -1,4 +1,4 @@
-"""File: ui_manager.py
+"""File: ui_manager.py.
 
 Manages UI rendering and user interaction.
 """
@@ -6,6 +6,7 @@ Manages UI rendering and user interaction.
 import os
 import threading
 import time
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -22,7 +23,7 @@ from rich.text import Text
 class UIManager:
     """Manages UI rendering and user interaction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the UI manager."""
         self.console = Console()
         self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
@@ -38,7 +39,7 @@ class UIManager:
         kb = KeyBindings()
 
         @kb.add("c-c")
-        def _(event):
+        def _(event: Any) -> None:
             """Custom Ctrl+C handler.
 
             Clear buffer if not empty, otherwise exit.
@@ -86,7 +87,7 @@ class UIManager:
 
         self.thinking_event.clear()
 
-        def animate():
+        def animate() -> None:
             # Determine display color based on token percentage
             if token_percentage > 80:
                 color = "red"

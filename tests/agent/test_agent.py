@@ -13,6 +13,7 @@ import pytest
 # Setup mocks FIRST before importing Agent
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from tests.test_helper import setup_mocks
+
 setup_mocks()
 
 # Now import after mocks are set up

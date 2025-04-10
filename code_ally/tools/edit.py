@@ -1,3 +1,8 @@
+"""File edit tool for modifying file contents.
+
+Provides functionality for editing, appending to, or prepending to file contents.
+"""
+
 import os
 import re
 from typing import Any
@@ -8,6 +13,7 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class FileEditTool(BaseTool):
+    """Tool for editing file contents with multiple editing modes."""
     name = "file_edit"
     description = """Edit an existing file with multiple editing modes.
 

@@ -7,8 +7,7 @@ and context window utilization in the CodeAlly system.
 import os
 import sys
 import time
-from unittest.mock import MagicMock, patch
-from typing import Union
+from unittest.mock import MagicMock
 
 import pytest
 

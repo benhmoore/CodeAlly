@@ -1,4 +1,4 @@
-"""File: plan.py
+"""File: plan.py.
 
 Task planning tool for the Code Ally agent.
 Allows the agent to execute complex multi-step operations.
@@ -80,7 +80,7 @@ class TaskPlanTool(BaseTool):
     """
     requires_confirmation = False
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the task plan tool."""
         super().__init__()
         self.task_planner: TaskPlanner | None = None
@@ -103,7 +103,7 @@ class TaskPlanTool(BaseTool):
         name: str = "",
         description: str = "",
         task: dict[str, Any] = None,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> dict[str, Any]:
         """
         Execute a task plan or perform an interactive planning operation.

@@ -405,7 +405,7 @@ class FileReadTool(BaseTool):
         context_lines: int,
         start_line: int,
         max_lines: int,
-    ) -> tuple[str, list[int], int]:
+    ) -> tuple[str, list[tuple[int, str]], int]:
         """Read a file and extract sections matching a pattern.
 
         Args:
@@ -448,7 +448,7 @@ class FileReadTool(BaseTool):
                     or pattern_re is None
                     and pattern in line
                 ):
-                    matches.append(i)
+                    matches.append((i, line))
                     match_count += 1
 
                 # Stop if we've reached max matches
@@ -460,7 +460,8 @@ class FileReadTool(BaseTool):
             return f"No matches found for pattern: {pattern}", [], total_lines
 
         # Second pass: build context blocks
-        for match_line in matches:
+        for match_tuple in matches:
+            match_line = match_tuple[0]  # Extract line number from tuple
             start = max(0, match_line - context_lines)
             end = min(len(lines) - 1, match_line + context_lines)
 
@@ -485,7 +486,7 @@ class FileReadTool(BaseTool):
             block_lines = []
             for j in range(start, end + 1):
                 line_num = j + 1  # Convert to 1-based numbering for display
-                if j in matches:
+                if any(match[0] == j for match in matches):
                     block_lines.append(f"{line_num}: >> {lines[j]}")
                 else:
                     block_lines.append(f"{line_num}:    {lines[j]}")

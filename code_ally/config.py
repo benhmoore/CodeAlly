@@ -220,7 +220,7 @@ class ConfigManager:
         # Handle type checking for expected return types
         if value is None:
             return default
-        elif isinstance(value, (str, int, float, bool)):
+        elif isinstance(value, str | int | float | bool):
             return value
         else:
             # Try to convert to appropriate type

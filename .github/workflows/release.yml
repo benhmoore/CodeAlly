@@ -1,71 +1,64 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+    push:
+        tags:
+            - "v*"
 
 jobs:
-  # First run CI checks
-  pre-release-checks:
-    uses: ./.github/workflows/ci-shared.yml
-    with:
-      python-version: '3.11'
-      run-tests: true
-      run-lint: true
-      upload-coverage: true
-      build-package: true
-  
-  # Then publish if checks pass
-  publish:
-    needs: pre-release-checks
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-    
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
-    
-    - name: Extract version from tag
-      id: get_version
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Releasing version $VERSION"
-    
-    - name: Build package
-      run: |
-        python -m build
-    
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
-    
-    - name: Extract release notes
-      id: extract_release_notes
-      run: |
-        VERSION="${{ steps.get_version.outputs.version }}"
-        # Extract the section for this version from CHANGELOG.md
-        sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '/## \[/,$d' > release_notes.md
-        cat release_notes.md  # For debugging
-        
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        body_path: release_notes.md
-        generate_release_notes: true
-        files: |
-          dist/*.tar.gz
-          dist/*.whl
+    test:
+        name: Test
+        uses: ./.github/workflows/ci.yml
+
+    release:
+        name: Create Release
+        needs: test
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: pip
+
+            - name: Install build dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install build twine
+
+            - name: Extract version from tag
+              id: get_version
+              run: |
+                  VERSION=${GITHUB_REF#refs/tags/v}
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Releasing version $VERSION"
+
+            - name: Build package
+              run: python -m build
+
+            - name: Publish to PyPI
+              uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                  password: ${{ secrets.PYPI_API_TOKEN }}
+
+            - name: Extract release notes
+              id: extract_release_notes
+              run: |
+                  VERSION="${{ steps.get_version.outputs.version }}"
+                  # Extract the section for this version from CHANGELOG.md
+                  sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '/## \[/,$d' > release_notes.md
+                  cat release_notes.md
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  body_path: release_notes.md
+                  generate_release_notes: true
+                  files: |
+                      dist/*.tar.gz
+                      dist/*.whl

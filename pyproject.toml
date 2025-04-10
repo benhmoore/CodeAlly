@@ -10,18 +10,18 @@ readme = "README.md"
 authors = [
     {name = "Ben H Moore", email = "ben@benhmoore.com"}
 ]
-license = "MIT"
-requires-python = ">=3.8"
+license = {text = "MIT"}
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Topic :: Software Development",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "requests>=2.32.0",
@@ -29,9 +29,6 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
-
-[tool.setuptools]
-packages = ["code_ally", "code_ally.agent", "code_ally.llm_client", "code_ally.prompts", "code_ally.tools"]
 
 [project.urls]
 "Homepage" = "https://github.com/benhmoore/CodeAlly"
@@ -42,24 +39,30 @@ packages = ["code_ally", "code_ally.agent", "code_ally.llm_client", "code_ally.p
 [project.scripts]
 ally = "code_ally.main:main"
 
+[tool.setuptools]
+packages = ["code_ally", "code_ally.agent", "code_ally.llm_client", "code_ally.prompts", "code_ally.tools"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "*.ini"]
+
 [project.optional-dependencies]
 dev = [
-    "black==25.1.0",
-    "isort==6.0.1",
-    "mypy==1.15.0",
-    "pytest==8.3.5",
-    "pytest-cov==6.1.0",
-    "pylint==3.3.6", 
-    "pre-commit==4.2.0",
-    "build==1.0.3",
-    "twine==6.1.0",
-    "setuptools>=78.1.0",
-    "bump2version==1.0.1",
+    "black>=24.3.0",
+    "isort>=5.13.2",
+    "mypy>=1.9.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.3.0", # Replaces pylint
+    "pre-commit>=3.6.0",
+    "build>=1.0.3",
+    "twine>=6.0.0",
+    "hatch>=1.8.0", # For simplified workflow
 ]
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py310"]
 include = '\.pyi?$'
 
 [tool.isort]
@@ -68,7 +71,7 @@ line_length = 88
 multi_line_output = 3
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -80,12 +83,11 @@ python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
 
-[tool.pylint.messages_control]
-disable = [
-    "missing-docstring",
-    "invalid-name",
-    "too-few-public-methods",
-]
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "B", "I", "N", "ANN", "D", "UP", "C4", "COM", "SIM"]
+ignore = ["ANN101", "D107", "D203", "D212"]
 
-[tool.pylint.format]
-max-line-length = 88
+[tool.ruff.pydocstyle]
+convention = "google"

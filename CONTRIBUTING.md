@@ -107,27 +107,26 @@ Our CI workflow will automatically run tests on your PR to ensure everything pas
 
 We follow [Semantic Versioning](https://semver.org/) for this project.
 
-1. Update the CHANGELOG.md file with a summary of the changes.
-2. Use bump2version to increment the version number:
+1. Use bump2version to increment the version number:
 
-   ```bash
-   # For a new patch release (bug fixes)
-   bump2version patch
-   
-   # For a new minor release (new features, backwards compatible)
-   bump2version minor
-   
-   # For a new major release (breaking changes)
-   bump2version major
-   ```
+    ```bash
+    # For a new patch release (bug fixes)
+    bump2version patch
 
-3. Push the new commit and tag to GitHub:
+    # For a new minor release (new features, backwards compatible)
+    bump2version minor
 
-   ```bash
-   git push origin main --tags
-   ```
+    # For a new major release (breaking changes)
+    bump2version major
+    ```
 
-4. The GitHub Actions workflow will automatically build and publish the new version to PyPI.
+2. Push the new commit and tag to GitHub:
+
+    ```bash
+    git push origin main --tags
+    ```
+
+3. The GitHub Actions workflow will automatically build and publish the new version to PyPI.
 
 ## Adding New Tools
 

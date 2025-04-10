@@ -27,7 +27,8 @@ def get_main_system_prompt() -> str:
 
 
 def generate_truncated_tree(
-    *args: tuple[object, ...], **kwargs: dict[str, object],
+    *args: tuple[object, ...],
+    **kwargs: dict[str, object],
 ) -> str:
     """Generate a truncated directory tree."""
     from code_ally.prompts.directory_utils import (
@@ -38,7 +39,8 @@ def generate_truncated_tree(
 
 
 def get_gitignore_patterns(
-    *args: tuple[object, ...], **kwargs: dict[str, object],
+    *args: tuple[object, ...],
+    **kwargs: dict[str, object],
 ) -> list[str]:
     """Extract patterns from .gitignore files."""
     from code_ally.prompts.directory_utils import (

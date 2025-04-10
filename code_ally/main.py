@@ -13,7 +13,7 @@ import signal
 import sys
 import types
 
-import requests
+import requests  # type: ignore
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
@@ -39,7 +39,7 @@ logger = logging.getLogger("code_ally")
 _global_agent: Agent | None = None
 
 
-def handle_interrupt(signum: int, frame: types.FrameType) -> None:
+def handle_interrupt(signum: int, frame: types.FrameType | None) -> None:
     """Handle keyboard interrupt (SIGINT) signals.
 
     - If an LLM request is in progress, let the exception propagate to the OllamaClient
@@ -338,8 +338,12 @@ def main() -> None:
         )
 
         if not is_running or not model_available:
-            console.print(f"[bold red]Error:[/] {error_message}")
-            print_ollama_instructions(args.endpoint, args.model, error_message)
+            console.print(f"[bold red]Error:[/] {error_message or 'Unknown error'}")
+            print_ollama_instructions(
+                args.endpoint,
+                args.model,
+                error_message or "Unknown error",
+            )
 
             # Ask user if they want to continue anyway
             continue_anyway = input("Do you want to continue anyway? (y/n): ").lower()
@@ -356,7 +360,7 @@ def main() -> None:
             )
 
     # Determine client type based on model name
-    client_type = None
+    client_type = "default"  # Assign a default string value
     if "qwen" in args.model.lower():
         # For Qwen models, detect if we're using Ollama
         if args.endpoint and "ollama" in args.endpoint.lower():

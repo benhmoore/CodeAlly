@@ -31,7 +31,9 @@ class TokenManager:
         self._token_cache = {}
         # Track file content hashes to avoid duplicate reads
         self._file_content_hashes = {}  # Maps file path to content hash
-        self._file_message_ids = {}  # Maps file path to message id containing its content
+        self._file_message_ids = (
+            {}
+        )  # Maps file path to message id containing its content
 
     def estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
@@ -193,14 +195,19 @@ class TokenManager:
         self.estimated_tokens = self.estimate_tokens(messages)
 
         # Log in verbose mode if there's a significant change
-        if self.ui and hasattr(self.ui, "verbose") and self.ui.verbose and abs(self.estimated_tokens - previous_tokens) > 100:
-                token_percentage = self.get_token_percentage()
-                change = self.estimated_tokens - previous_tokens
-                change_sign = "+" if change > 0 else ""
-                self.ui.console.print(
-                    f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} "
-                    f"({token_percentage}% of context) [{change_sign}{change} tokens][/]",
-                )
+        if (
+            self.ui
+            and hasattr(self.ui, "verbose")
+            and self.ui.verbose
+            and abs(self.estimated_tokens - previous_tokens) > 100
+        ):
+            token_percentage = self.get_token_percentage()
+            change = self.estimated_tokens - previous_tokens
+            change_sign = "+" if change > 0 else ""
+            self.ui.console.print(
+                f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} "
+                f"({token_percentage}% of context) [{change_sign}{change} tokens][/]",
+            )
 
     def should_compact(self) -> bool:
         """Check if the conversation should be compacted.

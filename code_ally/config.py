@@ -202,7 +202,9 @@ class ConfigManager:
         return ConfigManager._config
 
     def get_value(
-        self, key: str, default: str | int | float | bool | None = None,
+        self,
+        key: str,
+        default: str | int | float | bool | None = None,
     ) -> str | int | float | bool | None:
         """Get a specific configuration value."""
         if default is None:
@@ -236,6 +238,16 @@ class ConfigManager:
         save_config(ConfigManager._config)
 
         logger.debug(f"Config value updated: {key} = {value}")
+
+    def reset(self) -> None:
+        """Reset the configuration to default values."""
+        ConfigManager._config = DEFAULT_CONFIG.copy()
+        save_config(ConfigManager._config)
+        logger.info("Configuration reset to defaults")
+        return {
+            "success": True,
+            "error": "",
+        }
 
 
 def get_config_value(

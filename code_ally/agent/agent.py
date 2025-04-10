@@ -334,6 +334,15 @@ class Agent:
                 ):
                     # Check if we've seen this file before
                     file_path = raw_result.get("file_path")
+                    #  Try to convert to string or fail
+                    try:
+                        file_path = str(file_path)
+                    except Exception:
+                        raise ValueError(
+                            f"File path {file_path} is not a valid string.",
+                        ) from PermissionDeniedError
+
+                    # Get the file content
                     file_content = content
 
                     # If we register the file and it already exists, we'll get back the previous message ID
@@ -413,7 +422,7 @@ class Agent:
                 cleaned_result = self.model_client._extract_tool_response(result_str)
                 if isinstance(cleaned_result, dict):
                     return json.dumps(cleaned_result)
-                return cleaned_result
+                return str(cleaned_result)
             else:
                 # Fallback removal
                 result_str = re.sub(

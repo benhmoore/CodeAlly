@@ -34,9 +34,9 @@ def test_generate_truncated_tree_basic(sample_directory_structure):
 
     # Basic assertion checks
     assert tree, "Tree should not be empty"
-    assert os.path.basename(sample_directory_structure) in tree, (
-        "Root directory should be in the tree"
-    )
+    assert (
+        os.path.basename(sample_directory_structure) in tree
+    ), "Root directory should be in the tree"
     assert "dir1" in tree, "dir1 should be in the tree"
     assert "dir2" in tree, "dir2 should be in the tree"
     assert "file1.txt" in tree, "file1.txt should be in the tree"
@@ -79,12 +79,12 @@ def test_generate_truncated_tree_depth_limit():
         assert "..." in limited_tree, "Depth-limited tree should indicate truncation"
 
     # Verify root_only_tree is minimal
-    assert os.path.basename(test_dir) in root_only_tree, (
-        "Root should still be in the tree"
-    )
-    assert len(root_only_tree.strip().split("\n")) <= 2, (
-        "Root-only tree should be minimal"
-    )
+    assert (
+        os.path.basename(test_dir) in root_only_tree
+    ), "Root should still be in the tree"
+    assert (
+        len(root_only_tree.strip().split("\n")) <= 2
+    ), "Root-only tree should be minimal"
 
 
 def test_generate_truncated_tree_file_limit(sample_directory_structure):
@@ -102,9 +102,9 @@ def test_generate_truncated_tree_file_limit(sample_directory_structure):
 
     # The tree should either have at most max_files files or include a truncation
     # indicator
-    assert file_count <= 2 or "..." in tree, (
-        "Tree should respect file limit or indicate truncation"
-    )
+    assert (
+        file_count <= 2 or "..." in tree
+    ), "Tree should respect file limit or indicate truncation"
 
     # Since max_files=0 doesn't work as expected in the current implementation
     # (it should be fixed in the code), let's test with a different approach
@@ -130,9 +130,9 @@ def test_generate_truncated_tree_file_limit(sample_directory_structure):
     ]
 
     # Should either respect the limit or include truncation
-    assert len(file_entries) <= 3 or "..." in tree_limited, (
-        "Should limit files or indicate truncation"
-    )
+    assert (
+        len(file_entries) <= 3 or "..." in tree_limited
+    ), "Should limit files or indicate truncation"
 
     # Test with a high file limit (should include all files)
     tree_high_limit = generate_truncated_tree(
@@ -170,9 +170,9 @@ def test_generate_truncated_tree_exclude_patterns(sample_directory_structure):
         sample_directory_structure,
         exclude_patterns=["subdir*"],
     )
-    assert "subdir1" not in tree_no_subdir, (
-        "subdirectories matching the pattern should be excluded"
-    )
+    assert (
+        "subdir1" not in tree_no_subdir
+    ), "subdirectories matching the pattern should be excluded"
 
 
 def test_get_gitignore_patterns(sample_directory_structure):
@@ -182,9 +182,9 @@ def test_get_gitignore_patterns(sample_directory_structure):
 
     # Verify the patterns we added to the sample .gitignore
     assert "*.pyc" in patterns, "The pattern *.pyc should be extracted from .gitignore"
-    assert ".DS_Store" in patterns, (
-        "The pattern .DS_Store should be extracted from .gitignore"
-    )
+    assert (
+        ".DS_Store" in patterns
+    ), "The pattern .DS_Store should be extracted from .gitignore"
 
     # Check for __pycache__ with any possible format conversion
     pycache_found = any(p.startswith("__pycache__") for p in patterns)
@@ -197,9 +197,9 @@ def test_get_gitignore_patterns(sample_directory_structure):
         patterns,
         list,
     ), "Should return an empty list for directories without .gitignore"
-    assert len(patterns) == 0, (
-        "Should return an empty list for directories without .gitignore"
-    )
+    assert (
+        len(patterns) == 0
+    ), "Should return an empty list for directories without .gitignore"
 
     # Test with an empty .gitignore file
     empty_gitignore_path = os.path.join(
@@ -242,9 +242,9 @@ def test_generate_truncated_tree_edge_cases(temp_directory):
 
     # Test with empty directory
     tree = generate_truncated_tree(empty_dir)
-    assert tree.strip() == f"- {os.path.basename(empty_dir)}/", (
-        "Empty directory should only show the root"
-    )
+    assert (
+        tree.strip() == f"- {os.path.basename(empty_dir)}/"
+    ), "Empty directory should only show the root"
 
     # Test with a file instead of a directory - we don't know how this is handled
     # in the current implementation, so just ensure it doesn't crash

@@ -40,9 +40,9 @@ class ToolManager:
         # Track recent tool calls to avoid redundancy
         self.recent_tool_calls: list[tuple[str, tuple]] = []
         self.max_recent_calls = 5  # Remember last 5 calls
-        self.current_turn_tool_calls: list[
-            tuple[str, tuple]
-        ] = []  # For the current conversation turn only
+        self.current_turn_tool_calls: list[tuple[str, tuple]] = (
+            []
+        )  # For the current conversation turn only
 
     def get_function_definitions(self) -> list[dict[str, Any]]:
         """Create function definitions for tools in the format expected by the LLM.
@@ -224,7 +224,11 @@ class ToolManager:
         # Only check for redundancy within the current conversation turn
         return current_call in self.current_turn_tool_calls
 
-    def _handle_redundant_call(self, tool_name: str, check_context_msg: bool) -> dict[str, Any]:
+    def _handle_redundant_call(
+        self,
+        tool_name: str,
+        check_context_msg: bool,
+    ) -> dict[str, Any]:
         """Handle a redundant tool call."""
         # Simple consistent message for redundancy
         error_msg = f"Identical {tool_name} call was already executed in this conversation turn."
@@ -255,7 +259,11 @@ class ToolManager:
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
-    def _get_permission_path(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
+    def _get_permission_path(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> str | None:
         """Get the permission path for a tool."""
         # For bash tool, pass arguments.command as the path
         if tool_name == "bash" and "command" in arguments:
@@ -272,7 +280,11 @@ class ToolManager:
 
         return None
 
-    def _perform_tool_execution(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def _perform_tool_execution(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute a tool with the given arguments."""
         import time
 

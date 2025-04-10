@@ -3,6 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
+name = "code_ally"
 description = "A local LLM-powered pair programming assistant"
 readme = "README.md"
 authors = [
@@ -27,7 +28,7 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
-dynamic = ["name", "version", "optional-dependencies"]
+dynamic = ["version", "optional-dependencies"]
 
 [project.urls]
 "Homepage" = "https://github.com/benhmoore/CodeAlly"

@@ -226,8 +226,8 @@ class ConfigManager:
             # Try to convert to appropriate type
             if key in CONFIG_TYPES:
                 expected_type = CONFIG_TYPES[key]
-                try:
-                    typed_value: str | int | float | bool = expected_type(value)
+                try:  # type: ignore[misc]
+                    typed_value: str | int | float | bool | None = expected_type(value)
                     return typed_value
                 except (ValueError, TypeError):
                     return default

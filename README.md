@@ -263,6 +263,26 @@ pytest --cov=code_ally tests/
 
 The project uses GitHub Actions for continuous integration, which automatically runs tests and linting on pull requests.
 
+### Versioning and Releasing
+
+We use [bump2version](https://github.com/c4urself/bump2version) for version management:
+
+```bash
+# Install bump2version if needed
+pip install bump2version
+
+# Release a new patch version (e.g., 0.4.2 -> 0.4.3)
+bump2version patch
+
+# Release a new minor version (e.g., 0.4.2 -> 0.5.0)
+bump2version minor
+
+# Release a new major version (e.g., 0.4.2 -> 1.0.0)
+bump2version major
+```
+
+When a new tag is pushed to GitHub, our CI/CD pipeline automatically builds and publishes the package to PyPI.
+
 Please see the CONTRIBUTING.md file for detailed guidelines.
 
 ## 📄 License

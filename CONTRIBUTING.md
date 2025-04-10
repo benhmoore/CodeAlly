@@ -103,6 +103,32 @@ Our CI workflow will automatically run tests on your PR to ensure everything pas
 5. Verify that all CI checks pass
 6. Address any review comments and update your PR as needed
 
+## Versioning and Release Process
+
+We follow [Semantic Versioning](https://semver.org/) for this project.
+
+1. Update the CHANGELOG.md file with a summary of the changes.
+2. Use bump2version to increment the version number:
+
+   ```bash
+   # For a new patch release (bug fixes)
+   bump2version patch
+   
+   # For a new minor release (new features, backwards compatible)
+   bump2version minor
+   
+   # For a new major release (breaking changes)
+   bump2version major
+   ```
+
+3. Push the new commit and tag to GitHub:
+
+   ```bash
+   git push origin main --tags
+   ```
+
+4. The GitHub Actions workflow will automatically build and publish the new version to PyPI.
+
 ## Adding New Tools
 
 To add a new tool to Code Ally:

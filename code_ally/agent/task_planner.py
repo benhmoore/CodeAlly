@@ -10,10 +10,13 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from code_ally.agent.tool_manager import ToolManager
+# Import only what we need at the module level
 from code_ally.agent.error_handler import display_error
 from code_ally.tools.base import BaseTool
 from code_ally.trust import PermissionDeniedError
+
+# Forward references for type hints
+ToolManager = Any  # Will be imported inside methods
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ class TaskPlanner:
     6. Interactive plan creation with user confirmation
     """
 
-    def __init__(self, tool_manager: ToolManager):
+    def __init__(self, tool_manager: Any):
         """Initialize the task planner.
         
         Args:

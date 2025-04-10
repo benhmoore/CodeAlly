@@ -35,6 +35,10 @@ DEFAULT_CONFIG = {
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": True,
+    # Directory tree generation settings
+    "dir_tree_max_depth": 3,
+    "dir_tree_max_files": 100,
+    "dir_tree_enable": True,
 }
 
 # Config keys that should be type-checked
@@ -58,6 +62,9 @@ CONFIG_TYPES = {
     "theme": str,
     "compact_threshold": int,
     "show_token_usage": bool,
+    "dir_tree_max_depth": int,
+    "dir_tree_max_files": int,
+    "dir_tree_enable": bool,
 }
 
 

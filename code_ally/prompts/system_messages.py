@@ -7,7 +7,6 @@ details are modularized under the 'tool_guidance' package.
 """
 
 from typing import Dict, Optional, List
-from code_ally.tools import ToolRegistry
 from datetime import datetime
 import os
 import platform
@@ -87,6 +86,8 @@ def get_main_system_prompt() -> str:
     Returns:
         The system prompt string with directives and tool list.
     """
+    # Import here to avoid circular imports
+    from code_ally.tools import ToolRegistry
     tool_list = ToolRegistry().get_tools_for_prompt()
 
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -97,14 +98,31 @@ def get_main_system_prompt() -> str:
     except Exception:
         pass
 
-    # Get directory contents
-    directory_contents = ""
+    # Generate directory tree with limits if enabled
+    directory_tree = ""
     if working_dir:
         try:
-            contents = os.listdir(working_dir)
-            directory_contents = "\n".join(contents)
-        except Exception:
-            directory_contents = "Unable to retrieve directory contents."
+            # Import here to avoid circular imports
+            from code_ally.prompts.directory_utils import generate_truncated_tree, get_gitignore_patterns
+            from code_ally.prompts.directory_config import get_directory_tree_config
+            
+            # Get directory tree configuration
+            dir_config = get_directory_tree_config()
+            
+            # Only generate tree if enabled
+            if dir_config["enabled"]:
+                # Get .gitignore patterns to exclude
+                exclude_patterns = get_gitignore_patterns(working_dir)
+                
+                # Generate a truncated directory tree using config values
+                directory_tree = generate_truncated_tree(
+                    working_dir,
+                    max_depth=dir_config["max_depth"],
+                    max_files=dir_config["max_files"],
+                    exclude_patterns=exclude_patterns
+                )
+        except Exception as e:
+            directory_tree = f"Unable to generate directory tree: {str(e)}"
 
     # Get additional contextual details
     os_info = f"{platform.system()} {platform.release()}"
@@ -113,8 +131,8 @@ def get_main_system_prompt() -> str:
     context = f"""
 - Current Date: {current_date}
 - Working Directory (pwd): {working_dir}
-- Directory Contents:
-{directory_contents}
+- Directory Structure:
+{directory_tree}
 - Operating System: {os_info}
 - Python Version: {python_version}
 """
@@ -132,7 +150,7 @@ def get_main_system_prompt() -> str:
 
 # Dictionary of specific system messages
 SYSTEM_MESSAGES = {
-    "main_prompt": get_main_system_prompt(),
+    # main_prompt will be populated on demand in get_system_message()
     "compaction_notice": "Conversation history compacted to save context space.",
     "verbose_thinking": "IMPORTANT: For this response only, first explain your complete reasoning process, starting with: 'THINKING: '. After your reasoning, provide your final response.",
     "interactive_planning_intro": """
@@ -143,4 +161,7 @@ I'll help you create a step-by-step plan for this task. I'll outline each step i
 
 def get_system_message(key: str) -> str:
     """Retrieve a specific system message by its key."""
+    if key == "main_prompt":
+        # Lazy load the main prompt to avoid circular imports
+        return get_main_system_prompt()
     return SYSTEM_MESSAGES.get(key, "")

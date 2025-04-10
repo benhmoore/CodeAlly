@@ -79,12 +79,18 @@ def check_ollama_availability(
 ) -> Tuple[bool, bool, Optional[str]]:
     """Check if Ollama is running and the specified model is available.
 
+    Makes an HTTP request to the Ollama API to check if the server is running
+    and if the specified model is available for use.
+
     Args:
-        endpoint: The Ollama API endpoint
-        model: The model name to check
+        endpoint: The Ollama API endpoint URL (e.g. http://localhost:11434)
+        model: The model name to check (e.g. "llama3" or "qwen:7b")
 
     Returns:
         tuple: (is_running, model_available, error_message)
+            - is_running: True if Ollama server is responding
+            - model_available: True if the model is available
+            - error_message: Description of any error or None if successful
     """
     logger.debug(f"Checking Ollama availability at {endpoint} for model {model}")
 

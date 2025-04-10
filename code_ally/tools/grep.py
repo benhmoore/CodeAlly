@@ -71,6 +71,23 @@ class GrepTool(BaseTool):
         try:
             # Expand user home directory if present
             search_dir = os.path.expanduser(path)
+            
+            # Verify path doesn't contain traversal patterns
+            if ".." in search_dir or search_dir.startswith("/") or search_dir.startswith("~"):
+                # Convert to absolute path to verify CWD constraint
+                abs_path = os.path.abspath(search_dir)
+                cwd = os.path.abspath(os.getcwd())
+                
+                # If it's not within the current working directory, reject it
+                if not abs_path.startswith(cwd):
+                    return {
+                        "success": False,
+                        "matches": [],
+                        "replacements": [],
+                        "total_matches": 0,
+                        "files_searched": 0,
+                        "error": f"Access denied: Path '{path}' is outside the current working directory. Operations are restricted to '{cwd}' and its subdirectories.",
+                    }
 
             if not os.path.exists(search_dir):
                 return {
@@ -150,6 +167,12 @@ class GrepTool(BaseTool):
                         continue
 
                     file_path = os.path.join(root, file)
+                    
+                    # Make sure the file is within the working directory boundary
+                    cwd = os.path.abspath(os.getcwd())
+                    abs_file_path = os.path.abspath(file_path)
+                    if not abs_file_path.startswith(cwd):
+                        continue
 
                     # Skip binary files
                     if self._is_binary_file(file_path):

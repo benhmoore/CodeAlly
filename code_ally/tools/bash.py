@@ -104,6 +104,35 @@ class BashTool(BaseTool):
         # Sanitize and log the command
         command = command.strip()
         logger.info(f"Executing command: {command}")
+        
+        # Verify working directory is within allowed bounds
+        if working_dir:
+            try:
+                abs_working_dir = os.path.abspath(working_dir)
+                current_dir = os.path.abspath(os.getcwd())
+                
+                if not abs_working_dir.startswith(current_dir):
+                    logger.warning(f"Directory traversal attempt detected: {working_dir}")
+                    return self._format_error_response(
+                        f"Access denied: The working directory '{working_dir}' is outside "
+                        f"the current working directory '{current_dir}'. Operations are "
+                        f"restricted to the starting directory and its subdirectories."
+                    ) | {
+                        "output": "",
+                        "interactive": False,
+                        "return_code": -1,
+                        "structured": None,
+                    }
+            except Exception as e:
+                logger.warning(f"Error checking working directory: {e}")
+                return self._format_error_response(
+                    f"Error validating working directory: {str(e)}"
+                ) | {
+                    "output": "",
+                    "interactive": False,
+                    "return_code": -1,
+                    "structured": None,
+                }
 
         # Handle script creation mode
         if create_script:
@@ -298,6 +327,13 @@ class BashTool(BaseTool):
         Returns:
             Command execution result
         """
+        # Ensure the working directory is within allowed bounds
+        if cwd and not cwd.startswith(os.getcwd()):
+            logger.warning(f"Attempted to run command in directory outside CWD: {cwd}")
+            return self._format_error_response(
+                f"Access denied: Working directory '{cwd}' is outside the allowed boundaries."
+            ) | {"output": "", "interactive": False, "return_code": -1}
+            
         try:
             # Run the command with timeout
             result = subprocess.run(
@@ -349,6 +385,13 @@ class BashTool(BaseTool):
         Returns:
             Command execution result with interactive flag if appropriate
         """
+        # Ensure the working directory is within allowed bounds
+        if cwd and not cwd.startswith(os.getcwd()):
+            logger.warning(f"Attempted to run interactive command in directory outside CWD: {cwd}")
+            return self._format_error_response(
+                f"Access denied: Working directory '{cwd}' is outside the allowed boundaries."
+            ) | {"output": "", "interactive": False, "return_code": -1}
+            
         try:
             # Start process without waiting for it to complete
             process = subprocess.Popen(
@@ -468,6 +511,18 @@ class BashTool(BaseTool):
                 script_dir = os.getcwd()
                 script_name = f"script_{int(time.time())}.sh"
                 script_path = os.path.join(script_dir, script_name)
+            
+            # Verify script path is within allowed bounds
+            script_path = os.path.abspath(script_path)
+            current_dir = os.path.abspath(os.getcwd())
+            
+            if not script_path.startswith(current_dir):
+                logger.warning(f"Directory traversal attempt detected for script: {script_path}")
+                return self._format_error_response(
+                    f"Access denied: The script path '{script_path}' is outside "
+                    f"the current working directory '{current_dir}'. Operations are "
+                    f"restricted to the starting directory and its subdirectories."
+                ) | {"output": "", "interactive": False, "return_code": -1}
 
             # Create script content with shebang
             script_content = "#!/bin/bash\n\n"
@@ -479,7 +534,6 @@ class BashTool(BaseTool):
                 script_content += "\n"
 
             # Write the script file
-            script_path = os.path.abspath(script_path)
             os.makedirs(os.path.dirname(script_path), exist_ok=True)
 
             with open(script_path, "w") as f:

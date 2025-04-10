@@ -133,8 +133,12 @@ class Agent:
     def process_llm_response(self, response: Dict[str, Any]) -> None:
         """Process the LLM's response and execute any tool calls if present.
 
+        This method handles the complete processing flow for LLM responses,
+        including tool calls execution, interactive planning, and follow-up
+        responses. It updates the message history and manages token counts.
+
         Args:
-            response: The LLM's response
+            response: The LLM's response dictionary containing content and any tool calls
         """
         content = response.get("content", "")
         tool_calls = []
@@ -696,7 +700,8 @@ class Agent:
 
             if was_interrupted:
                 self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if animation_thread and animation_thread.is_alive():
+                    animation_thread.join(timeout=1.0)
                 self.ui.print_content("[yellow]Request interrupted by user[/]")
                 continue # Go back to waiting for user input
 
@@ -731,9 +736,11 @@ class Agent:
                     )
 
                 self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if animation_thread and animation_thread.is_alive():
+                    animation_thread.join(timeout=1.0)
 
                 self.process_llm_response(response)
             else:
                 self.ui.stop_thinking_animation()
-                animation_thread.join(timeout=1.0)
+                if animation_thread and animation_thread.is_alive():
+                    animation_thread.join(timeout=1.0)

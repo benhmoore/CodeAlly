@@ -81,6 +81,16 @@ class DirectoryTool(BaseTool):
 
             # Expand paths
             source_path = os.path.abspath(os.path.expanduser(path))
+            # Check if source path is within current working directory
+            cwd = os.path.abspath(os.getcwd())
+            if not source_path.startswith(cwd):
+                return {
+                    "success": False,
+                    "error": f"Access denied: The path '{path}' is outside the current working directory. "
+                            f"Operations are restricted to '{cwd}' and its subdirectories.",
+                    "changes": [],
+                    "analysis": {},
+                }
 
             # For operations that require a destination path
             if operation in ["move", "copy", "reorganize"]:
@@ -92,6 +102,15 @@ class DirectoryTool(BaseTool):
                         "analysis": {},
                     }
                 destination_path = os.path.abspath(os.path.expanduser(dest_path))
+                # Check if destination path is within current working directory
+                if not destination_path.startswith(cwd):
+                    return {
+                        "success": False,
+                        "error": f"Access denied: The destination path '{dest_path}' is outside the current working directory. "
+                                f"Operations are restricted to '{cwd}' and its subdirectories.",
+                        "changes": [],
+                        "analysis": {},
+                    }
             else:
                 destination_path = source_path
 

@@ -4,6 +4,7 @@ This module provides security features for Code Ally, including:
 1. Command allowlist/denylist checking for bash operations
 2. User permission management for sensitive operations
 3. Path-based trust scoping
+4. Directory access restriction (prevents operation outside current working directory)
 """
 
 import logging
@@ -20,6 +21,15 @@ class PermissionDeniedError(Exception):
     
     This special exception allows the agent to immediately stop processing
     and return to the main conversation loop.
+    """
+    pass
+
+
+class DirectoryTraversalError(Exception):
+    """Raised when an operation attempts to access paths outside of allowed directory.
+    
+    This special exception prevents the agent from accessing files or directories
+    outside of the current working directory.
     """
     pass
 
@@ -68,6 +78,14 @@ DISALLOWED_PATTERNS = [
     r"wget\s+.+\s*\|\s*(bash|sh|zsh)",  # Piping wget to shell
     r"ssh\s+.+\s+'.*'",  # SSH with commands
     r"eval\s+.+",  # Eval with commands
+    r"ls\s+(-[alFhrt]+\s+)?(\.\.|\/|\~)[\/]?",  # List files outside CWD
+    r"cat\s+(\.\.|\/|\~)[\/]?",  # Cat files outside CWD
+    r"more\s+(\.\.|\/|\~)[\/]?",  # More files outside CWD
+    r"less\s+(\.\.|\/|\~)[\/]?",  # Less files outside CWD
+    r"head\s+(\.\.|\/|\~)[\/]?",  # Head files outside CWD
+    r"tail\s+(\.\.|\/|\~)[\/]?",  # Tail files outside CWD
+    r"grep\s+.+\s+(\.\.|\/|\~)[\/]?",  # Grep outside CWD
+    r"find\s+(\.\.|\/|\~)[\/]?\s+",  # Find outside CWD
 ]
 
 # Commands that require extra scrutiny
@@ -86,6 +104,25 @@ SENSITIVE_COMMAND_PREFIXES = [
     "ssh ",
     "scp ",
     "rsync ",
+    "ls ..",
+    "ls ../",
+    "ls /",
+    "ls ~/",
+    "cat ../",
+    "cat /",
+    "cat ~/",
+    "grep ../",
+    "grep /",
+    "grep ~/",
+    "find ../",
+    "find /",
+    "find ~/",
+    "head ../",
+    "head /",
+    "head ~/",
+    "tail ../",
+    "tail /",
+    "tail ~/",
 ]
 
 # Compile the disallowed patterns for efficiency
@@ -111,6 +148,114 @@ class ToolPermission:
     path: Optional[str] = None  # Relevant for DIRECTORY and FILE scopes
     operation_id: Optional[str] = None  # Unique identifier for batch operations
 
+
+def is_path_within_cwd(path: str) -> bool:
+    """Check if a path is within the current working directory.
+    
+    Args:
+        path: The path to check
+        
+    Returns:
+        True if the path is within CWD, False otherwise
+    """
+    try:
+        # Get the absolute path and normalize it
+        abs_path = os.path.abspath(path)
+        # Get the current working directory
+        cwd = os.path.abspath(os.getcwd())
+        
+        # Check if the path starts with CWD
+        # This ensures the path is within the current working directory or its subdirectories
+        return abs_path.startswith(cwd)
+    except Exception as e:
+        logger.warning(f"Error checking path traversal: {e}")
+        # If there's an error, assume it's not safe
+        return False
+
+def has_path_traversal_patterns(input_str: str) -> bool:
+    """Check if a string contains path traversal patterns.
+    
+    Args:
+        input_str: The string to check
+        
+    Returns:
+        True if the string contains path traversal patterns, False otherwise
+    """
+    if not input_str:
+        return False
+        
+    traversal_patterns = [
+        '..', '/../', '/./', '~/','$HOME', 
+        '${HOME}', '$(pwd)', '`pwd`', 
+        '/etc/', '/var/', '/usr/', '/bin/', '/tmp/',
+        '/root/', '/proc/', '/sys/', '/dev/',
+        '/*', '~/*'
+    ]
+    
+    # Check for direct absolute paths
+    if input_str.startswith('/') or input_str.startswith('~'):
+        return True
+    
+    # Check for common path traversal patterns
+    for pattern in traversal_patterns:
+        if pattern in input_str:
+            return True
+            
+    # Check for environment variable usage that could lead to path traversal
+    if '$(' in input_str or '`' in input_str or '${' in input_str:
+        return True
+        
+    return False
+
+def sanitize_command_for_path_traversal(command: str) -> bool:
+    """Check if a command contains path traversal attempts.
+    
+    Args:
+        command: The command to check
+        
+    Returns:
+        True if command is safe, False if it contains path traversal
+    """
+    # Common commands that involve file access
+    file_access_commands = [
+        'ls', 'cat', 'more', 'less', 'head', 'tail', 'touch', 'mkdir', 'rm', 'cp', 'mv',
+        'echo', 'nano', 'vim', 'vi', 'emacs', 'find', 'grep', 'awk', 'sed', 'diff',
+        'chmod', 'chown', 'stat', 'file', 'wc', 'cd', 'source', '.', 'exec',
+        'python', 'python3', 'python2', 'ruby', 'perl', 'node', 'npm', 'yarn'
+    ]
+    
+    # Split command into parts
+    parts = command.split()
+    if not parts:
+        return True
+        
+    for i, part in enumerate(parts):
+        # Skip options/flags (arguments that start with -)
+        if part.startswith('-'):
+            continue
+            
+        # Check for path traversal in parts
+        if has_path_traversal_patterns(part):
+            command_name = parts[0] if parts else ""
+            logger.warning(f"Path traversal pattern detected in command: {command}")
+            return False
+            
+        # Extra checks for more targeted file operations
+        if i > 0 and parts[0] in file_access_commands:
+            # If this part appears to be a path argument
+            if not part.startswith('-'):
+                # Check if it's an absolute path or contains traversal
+                if has_path_traversal_patterns(part):
+                    logger.warning(f"Path traversal pattern detected in argument: {part}")
+                    return False
+                    
+                # Final verification for paths that might slip through
+                if os.path.isabs(part):
+                    if not is_path_within_cwd(part):
+                        logger.warning(f"Path outside CWD detected in command: {part}")
+                        return False
+    
+    return True
 
 def is_command_allowed(command: str) -> bool:
     """Check if a command is allowed to execute.
@@ -147,6 +292,30 @@ def is_command_allowed(command: str) -> bool:
         if "curl" in command or "wget" in command:
             logger.warning("Command rejected - piping curl/wget to bash")
             return False
+    
+    # Block commands that would allow viewing files outside CWD
+    if not sanitize_command_for_path_traversal(command):
+        logger.warning(f"Command rejected - contains path traversal: {command}")
+        return False
+            
+    # Check for directory traversal attempts
+    if "cd" in normalized_command:
+        # Extract the directory path from cd command
+        parts = command.split("cd ", 1)
+        if len(parts) > 1:
+            dir_path = parts[1].strip().split()[0]  # Get the first argument after cd
+            # Remove quotes if present
+            dir_path = dir_path.strip('"\'')
+            
+            # Special cases that could lead to directory traversal
+            if dir_path == ".." or dir_path.startswith("../") or dir_path.startswith("/") or dir_path.startswith("~"):
+                logger.warning(f"Directory traversal attempt detected: {command}")
+                return False
+            
+            # For relative paths, ensure they don't escape CWD
+            if not is_path_within_cwd(dir_path):
+                logger.warning(f"Command rejected - would navigate outside CWD: {command}")
+                return False
 
     # Log if this is a sensitive command
     for prefix in SENSITIVE_COMMAND_PREFIXES:

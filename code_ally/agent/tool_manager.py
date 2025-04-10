@@ -229,10 +229,21 @@ class ToolManager:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
     def execute_tool(self, tool_name, arguments, check_context_msg=True, client_type=None, pre_approved=False):
-        """Execute a tool with the given arguments after checking trust."""
-        import time
+        """Execute a tool with the given arguments after checking trust.
         
-        start_time = time.time()
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Dictionary of arguments to pass to the tool
+            check_context_msg: Whether to remind about checking context for redundant calls
+            client_type: Optional client type to use for formatting results
+            pre_approved: Whether the operation was pre-approved in a batch
+            
+        Returns:
+            Dictionary containing the result of tool execution
+            
+        Raises:
+            PermissionDeniedError: If permission is denied for protected operations
+        """
         verbose_mode = self.ui and getattr(self.ui, "verbose", False)
         
         if verbose_mode:
@@ -294,6 +305,10 @@ class ToolManager:
     def _is_redundant_call(self, tool_name, arguments):
         """Check if a tool call is redundant.
         
+        This method determines if a tool call should be considered redundant by simply
+        checking if the exact same tool with identical parameters has been called recently.
+        Any variation in parameters is considered a new, non-redundant call.
+        
         Args:
             tool_name: The name of the tool
             arguments: The arguments for the tool
@@ -301,17 +316,27 @@ class ToolManager:
         Returns:
             Whether the call is redundant
         """
+        # Create a hashable representation of the current call
         current_call = (tool_name, tuple(sorted(arguments.items())))
         
-        # For LS tool, be even more strict
-        if tool_name == "ls" and any(call[0] == "ls" for call in self.recent_tool_calls):
-            return True
+        # Special case for 'ls' without parameters - don't allow repeated default ls
+        if tool_name == "ls" and (not arguments or len(arguments) == 0 or 
+                                 (len(arguments) == 1 and arguments.get("path", ".") == ".")):
+            for call in self.recent_tool_calls:
+                if call[0] == "ls":
+                    prev_args = dict(call[1])
+                    # If previous call was also ls with no args or default path, it's redundant
+                    if not prev_args or len(prev_args) == 0 or prev_args.get("path", ".") == ".":
+                        return True
         
-        # Check if this exact call has been made recently
-        # return current_call in self.recent_tool_calls
+        # For all other cases, only consider it redundant if EXACTLY the same call
+        # with identical parameters exists in the history
+        return current_call in self.recent_tool_calls
         
     def _handle_redundant_call(self, tool_name, check_context_msg):
         """Handle a redundant tool call.
+        
+        Provides appropriate feedback when a tool call is considered redundant.
         
         Args:
             tool_name: The name of the tool
@@ -320,9 +345,12 @@ class ToolManager:
         Returns:
             Error result for redundant call
         """
-        error_msg = f"Redundant call to {tool_name}. Directory was already shown."
+        # Simple consistent message for redundancy
+        error_msg = f"Identical {tool_name} call was already executed."
+            
+        # Add context check suggestion if enabled
         if check_context_msg:
-            error_msg += " Please check your context for the previous result."
+            error_msg += " Please check your context for the previous result or modify parameters to perform a different operation."
         
         if self.ui and getattr(self.ui, "verbose", False):
             self.ui.console.print(
@@ -435,7 +463,7 @@ class ToolManager:
             error_message: The error message
             
         Returns:
-            Error result dictionary
+            Dictionary with standardized error format
         """
         return {
             "success": False,

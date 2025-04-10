@@ -6,6 +6,7 @@ import re
 import signal
 import time
 from collections.abc import Callable
+from types import FrameType  # Import FrameType from the correct module
 from typing import Any, NoReturn, Union
 
 import requests
@@ -353,7 +354,9 @@ class OllamaClient(ModelClient):
             # Set up keyboard interrupt handler for this request
             original_sigint_handler = signal.getsignal(signal.SIGINT)
 
-            def sigint_handler(sig: int, frame: signal.FrameType) -> NoReturn:
+            def sigint_handler(
+                sig: int, frame: FrameType
+            ) -> NoReturn:  # Use FrameType from types
                 logger.warning(
                     "SIGINT received during request. Interrupting Ollama request.",
                 )

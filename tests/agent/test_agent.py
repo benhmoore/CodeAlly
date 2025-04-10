@@ -10,13 +10,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Setup mocks FIRST before importing Agent
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from tests.test_helper import setup_mocks
+setup_mocks()
+
+# Now import after mocks are set up
 from code_ally.agent.agent import Agent
 from code_ally.service_registry import ServiceRegistry
-from tests.test_helper import setup_mocks
-
-# Import and setup mocks
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-setup_mocks()
 
 
 @pytest.fixture
@@ -48,30 +49,33 @@ def agent(mock_model_client, mock_tools):
     # Create a new service registry for each test
     service_registry = ServiceRegistry()
 
-    # Create the agent
-    agent = Agent(
-        model_client=mock_model_client,
-        tools=mock_tools,
-        system_prompt="You are a test assistant.",
-        service_registry=service_registry,
-    )
+    # Mock the UIManager class before creating an agent
+    with patch("code_ally.agent.agent.UIManager") as MockUIManager:
+        # Configure the UI manager mock
+        mock_ui = MagicMock()
+        MockUIManager.return_value = mock_ui
 
-    # Mock the UI to avoid console output during tests
-    agent.ui = MagicMock()
+        # Create the agent
+        agent = Agent(
+            model_client=mock_model_client,
+            tools=mock_tools,
+            system_prompt="You are a test assistant.",
+            service_registry=service_registry,
+        )
 
-    # Mock the tool manager - we need to replace the entire attribute, not just the execute_tool method
-    agent.tool_manager = MagicMock()
-    agent.tool_manager.execute_tool.return_value = {
-        "success": True,
-        "result": "Tool executed",
-    }
-    agent.tool_manager.format_tool_result.return_value = {
-        "success": True,
-        "result": "Tool executed",
-    }
-    agent.tool_manager.get_function_definitions.return_value = []
+        # Mock the tool manager - we need to replace the entire attribute, not just the execute_tool method
+        agent.tool_manager = MagicMock()
+        agent.tool_manager.execute_tool.return_value = {
+            "success": True,
+            "result": "Tool executed",
+        }
+        agent.tool_manager.format_tool_result.return_value = {
+            "success": True,
+            "result": "Tool executed",
+        }
+        agent.tool_manager.get_function_definitions.return_value = []
 
-    return agent
+        return agent
 
 
 def test_agent_initialization(agent, mock_model_client, mock_tools):

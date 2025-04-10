@@ -4,9 +4,9 @@ Handles special (slash) commands in the conversation.
 """
 
 import json
+import logging
 import os
 import time
-import logging
 from typing import Any, Dict, List, Tuple
 
 from rich.table import Table
@@ -14,7 +14,6 @@ from rich.table import Table
 from code_ally.config import ConfigManager
 from code_ally.prompts import get_system_message
 from code_ally.trust import TrustManager
-
 
 logger = logging.getLogger(__name__)
 

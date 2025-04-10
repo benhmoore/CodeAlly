@@ -5,15 +5,18 @@ of the CodeAlly system that manages conversations and handles tool execution.
 """
 
 import os
-import pytest
-from unittest.mock import MagicMock, patch
 
 # Add the root directory to the path for direct imports
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
+
 setup_mocks()
 
 # Now we can import our modules
@@ -49,7 +52,7 @@ def agent(mock_model_client, mock_tools):
     """Create an agent instance for testing."""
     # Create a new service registry for each test
     service_registry = ServiceRegistry()
-    
+
     # Create the agent
     agent = Agent(
         model_client=mock_model_client,
@@ -57,10 +60,10 @@ def agent(mock_model_client, mock_tools):
         system_prompt="You are a test assistant.",
         service_registry=service_registry,
     )
-    
+
     # Mock the UI to avoid console output during tests
     agent.ui = MagicMock()
-    
+
     # Mock the tool manager - we need to replace the entire attribute, not just the execute_tool method
     agent.tool_manager = MagicMock()
     agent.tool_manager.execute_tool.return_value = {
@@ -72,7 +75,7 @@ def agent(mock_model_client, mock_tools):
         "result": "Tool executed",
     }
     agent.tool_manager.get_function_definitions.return_value = []
-    
+
     return agent
 
 
@@ -83,7 +86,7 @@ def test_agent_initialization(agent, mock_model_client, mock_tools):
     assert len(agent.messages) == 1  # System message
     assert agent.messages[0]["role"] == "system"
     assert agent.messages[0]["content"] == "You are a test assistant."
-    
+
     # Check that components were registered
     assert agent.service_registry.get("ui_manager") is not None
     assert agent.service_registry.get("trust_manager") is not None
@@ -101,16 +104,18 @@ def test_process_llm_response_text(agent):
         "role": "assistant",
         "content": "This is a test response.",
     }
-    
+
     # Process the response
     agent.process_llm_response(response)
-    
+
     # Check that the message was added to history
     assert len(agent.messages) == 2  # System message + new message
     assert agent.messages[1] == response
-    
+
     # Check that the UI was used to print the response
-    agent.ui.print_assistant_response.assert_called_once_with("This is a test response.")
+    agent.ui.print_assistant_response.assert_called_once_with(
+        "This is a test response."
+    )
 
 
 def test_process_llm_response_with_tool_calls(agent, mock_tools):
@@ -124,34 +129,38 @@ def test_process_llm_response_with_tool_calls(agent, mock_tools):
             "arguments": '{"param1": "value1"}',
         },
     }
-    
+
     # Create a response with a tool call
     response = {
         "role": "assistant",
         "content": "I'll call a tool for you.",
         "tool_calls": [tool_call],
     }
-    
+
     # Set up the model client to return a follow-up response
     follow_up_response = {
         "role": "assistant",
         "content": "The tool was executed successfully.",
     }
     agent.model_client.send.return_value = follow_up_response
-    
+
     # Tool manager is already set up in the fixture
-    
+
     # Process the response
     agent.process_llm_response(response)
-    
+
     # Check that the tool was called
     agent.tool_manager.execute_tool.assert_called_once()
-    
+
     # Check that the follow-up response was processed
-    agent.ui.print_assistant_response.assert_called_with("The tool was executed successfully.")
-    
+    agent.ui.print_assistant_response.assert_called_with(
+        "The tool was executed successfully."
+    )
+
     # Check that the messages include the tool call and its result
-    assert len(agent.messages) > 3  # System message + assistant message + tool result + follow-up
+    assert (
+        len(agent.messages) > 3
+    )  # System message + assistant message + tool result + follow-up
 
 
 def test_normalize_tool_call(agent):
@@ -165,24 +174,24 @@ def test_normalize_tool_call(agent):
             "arguments": '{"param1": "value1"}',
         },
     }
-    
+
     call_id, tool_name, arguments = agent._normalize_tool_call(standard_tool_call)
     assert call_id == "call_123"
     assert tool_name == "test_tool"
     assert arguments == {"param1": "value1"}
-    
+
     # Older format
     older_format = {
         "id": "call_123",
         "name": "test_tool",
         "arguments": '{"param1": "value1"}',
     }
-    
+
     call_id, tool_name, arguments = agent._normalize_tool_call(older_format)
     assert call_id == "call_123"
     assert tool_name == "test_tool"
     assert arguments == {"param1": "value1"}
-    
+
     # Format with already parsed arguments
     parsed_args_format = {
         "id": "call_123",
@@ -191,7 +200,7 @@ def test_normalize_tool_call(agent):
             "arguments": {"param1": "value1"},
         },
     }
-    
+
     call_id, tool_name, arguments = agent._normalize_tool_call(parsed_args_format)
     assert call_id == "call_123"
     assert tool_name == "test_tool"
@@ -202,7 +211,7 @@ def test_normalize_tool_call(agent):
 def test_process_sequential_tool_calls(mock_time, agent):
     """Test processing multiple tool calls sequentially."""
     mock_time.time.return_value = 12345
-    
+
     # Create multiple tool calls
     tool_calls = [
         {
@@ -222,15 +231,15 @@ def test_process_sequential_tool_calls(mock_time, agent):
             },
         },
     ]
-    
+
     # Tool manager is already set up in the fixture
-    
+
     # Process the tool calls
     agent._process_sequential_tool_calls(tool_calls)
-    
+
     # Check that both tools were called
     assert agent.tool_manager.execute_tool.call_count == 2
-    
+
     # Check that tool messages were added
     tool_messages = [m for m in agent.messages if m.get("role") == "tool"]
     assert len(tool_messages) == 2

@@ -84,15 +84,15 @@ class TaskPlanTool(BaseTool):
         """Initialize the task plan tool."""
         super().__init__()
         self.task_planner: Optional[TaskPlanner] = None
-    
+
     def set_task_planner(self, task_planner: TaskPlanner) -> None:
         """Set the task planner instance for this tool.
-        
+
         Args:
             task_planner: The task planner to use
         """
         self.task_planner = task_planner
-    
+
     def execute(
         self,
         plan: Dict[str, Any] = None,
@@ -107,7 +107,7 @@ class TaskPlanTool(BaseTool):
     ) -> Dict[str, Any]:
         """
         Execute a task plan or perform an interactive planning operation.
-        
+
         Args:
             plan: The complete task plan definition as a dictionary
             plan_json: The task plan definition as a JSON string (alternative to plan)
@@ -118,7 +118,7 @@ class TaskPlanTool(BaseTool):
             description: The description of the plan (for start_plan mode)
             task: A task to add to the plan (for add_task mode)
             **kwargs: Additional arguments (unused)
-            
+
         Returns:
             Dict with operation results
         """
@@ -126,46 +126,44 @@ class TaskPlanTool(BaseTool):
             return self._format_error_response(
                 "Task planner not initialized. This is an internal error."
             )
-        
+
         # Handle interactive planning operations
         if mode:
-            return self._handle_interactive_planning(mode, name, description, task, client_type)
-        
+            return self._handle_interactive_planning(
+                mode, name, description, task, client_type
+            )
+
         # Otherwise, handle direct plan execution (traditional mode)
         # Parse plan from JSON string if provided
         if not plan and plan_json:
             try:
                 plan = json.loads(plan_json)
             except json.JSONDecodeError as e:
-                return self._format_error_response(
-                    f"Invalid plan JSON: {str(e)}"
-                )
-                
+                return self._format_error_response(f"Invalid plan JSON: {str(e)}")
+
         # Validate plan existence
         if not plan:
             return self._format_error_response(
                 "No plan provided. Either 'plan' or 'plan_json' must be specified."
             )
-            
+
         # Validate plan structure
         is_valid, error = self.task_planner.validate_plan(plan)
         if not is_valid:
-            return self._format_error_response(
-                f"Invalid plan: {error}"
-            )
-            
+            return self._format_error_response(f"Invalid plan: {error}")
+
         # If validate_only is True, just return validation success
         if validate_only:
             return self._format_success_response(
                 plan_name=plan.get("name", ""),
                 description=plan.get("description", ""),
                 task_count=len(plan.get("tasks", [])),
-                message="Plan validation successful"
+                message="Plan validation successful",
             )
-            
+
         # Execute the plan
         result = self.task_planner.execute_plan(plan, client_type)
-        
+
         # Return all details
         if result.get("success", False):
             return self._format_success_response(**result)
@@ -177,26 +175,26 @@ class TaskPlanTool(BaseTool):
                 "results": result.get("results", {}),
                 "completed_tasks": result.get("completed_tasks", []),
                 "failed_tasks": result.get("failed_tasks", []),
-                "execution_time": result.get("execution_time", 0)
+                "execution_time": result.get("execution_time", 0),
             }
-    
+
     def _handle_interactive_planning(
-        self, 
-        mode: str, 
-        name: str = "", 
-        description: str = "", 
+        self,
+        mode: str,
+        name: str = "",
+        description: str = "",
         task: Dict[str, Any] = None,
-        client_type: str = None
+        client_type: str = None,
     ) -> Dict[str, Any]:
         """Handle interactive planning modes.
-        
+
         Args:
             mode: The operation mode
             name: The name of the plan (for start_plan mode)
             description: The description of the plan (for start_plan mode)
             task: A task to add to the plan (for add_task mode)
             client_type: The client type to use for formatting results
-            
+
         Returns:
             Dict with operation results
         """
@@ -212,14 +210,14 @@ class TaskPlanTool(BaseTool):
             return self.task_planner.execute_interactive_plan(client_type)
         else:
             return self._format_error_response(f"Unknown planning mode: {mode}")
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Get the schema for task plans.
-        
+
         Returns:
             The task plan schema as a dictionary
         """
         if not self.task_planner:
             return {"error": "Task planner not initialized"}
-            
+
         return self.task_planner.get_plan_schema()

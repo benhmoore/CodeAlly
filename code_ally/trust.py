@@ -18,19 +18,21 @@ from typing import Any, Dict, List, Optional, Pattern, Set, Tuple, Union
 
 class PermissionDeniedError(Exception):
     """Raised when a user denies permission for a tool.
-    
+
     This special exception allows the agent to immediately stop processing
     and return to the main conversation loop.
     """
+
     pass
 
 
 class DirectoryTraversalError(Exception):
     """Raised when an operation attempts to access paths outside of allowed directory.
-    
+
     This special exception prevents the agent from accessing files or directories
     outside of the current working directory.
     """
+
     pass
 
 
@@ -151,10 +153,10 @@ class ToolPermission:
 
 def is_path_within_cwd(path: str) -> bool:
     """Check if a path is within the current working directory.
-    
+
     Args:
         path: The path to check
-        
+
     Returns:
         True if the path is within CWD, False otherwise
     """
@@ -163,7 +165,7 @@ def is_path_within_cwd(path: str) -> bool:
         abs_path = os.path.abspath(path)
         # Get the current working directory
         cwd = os.path.abspath(os.getcwd())
-        
+
         # Check if the path starts with CWD
         # This ensures the path is within the current working directory or its subdirectories
         return abs_path.startswith(cwd)
@@ -172,90 +174,143 @@ def is_path_within_cwd(path: str) -> bool:
         # If there's an error, assume it's not safe
         return False
 
+
 def has_path_traversal_patterns(input_str: str) -> bool:
     """Check if a string contains path traversal patterns.
-    
+
     Args:
         input_str: The string to check
-        
+
     Returns:
         True if the string contains path traversal patterns, False otherwise
     """
     if not input_str:
         return False
-        
+
     traversal_patterns = [
-        '..', '/../', '/./', '~/','$HOME', 
-        '${HOME}', '$(pwd)', '`pwd`', 
-        '/etc/', '/var/', '/usr/', '/bin/', '/tmp/',
-        '/root/', '/proc/', '/sys/', '/dev/',
-        '/*', '~/*'
+        "..",
+        "/../",
+        "/./",
+        "~/",
+        "$HOME",
+        "${HOME}",
+        "$(pwd)",
+        "`pwd`",
+        "/etc/",
+        "/var/",
+        "/usr/",
+        "/bin/",
+        "/tmp/",
+        "/root/",
+        "/proc/",
+        "/sys/",
+        "/dev/",
+        "/*",
+        "~/*",
     ]
-    
+
     # Check for direct absolute paths
-    if input_str.startswith('/') or input_str.startswith('~'):
+    if input_str.startswith("/") or input_str.startswith("~"):
         return True
-    
+
     # Check for common path traversal patterns
     for pattern in traversal_patterns:
         if pattern in input_str:
             return True
-            
+
     # Check for environment variable usage that could lead to path traversal
-    if '$(' in input_str or '`' in input_str or '${' in input_str:
+    if "$(" in input_str or "`" in input_str or "${" in input_str:
         return True
-        
+
     return False
+
 
 def sanitize_command_for_path_traversal(command: str) -> bool:
     """Check if a command contains path traversal attempts.
-    
+
     Args:
         command: The command to check
-        
+
     Returns:
         True if command is safe, False if it contains path traversal
     """
     # Common commands that involve file access
     file_access_commands = [
-        'ls', 'cat', 'more', 'less', 'head', 'tail', 'touch', 'mkdir', 'rm', 'cp', 'mv',
-        'echo', 'nano', 'vim', 'vi', 'emacs', 'find', 'grep', 'awk', 'sed', 'diff',
-        'chmod', 'chown', 'stat', 'file', 'wc', 'cd', 'source', '.', 'exec',
-        'python', 'python3', 'python2', 'ruby', 'perl', 'node', 'npm', 'yarn'
+        "ls",
+        "cat",
+        "more",
+        "less",
+        "head",
+        "tail",
+        "touch",
+        "mkdir",
+        "rm",
+        "cp",
+        "mv",
+        "echo",
+        "nano",
+        "vim",
+        "vi",
+        "emacs",
+        "find",
+        "grep",
+        "awk",
+        "sed",
+        "diff",
+        "chmod",
+        "chown",
+        "stat",
+        "file",
+        "wc",
+        "cd",
+        "source",
+        ".",
+        "exec",
+        "python",
+        "python3",
+        "python2",
+        "ruby",
+        "perl",
+        "node",
+        "npm",
+        "yarn",
     ]
-    
+
     # Split command into parts
     parts = command.split()
     if not parts:
         return True
-        
+
     for i, part in enumerate(parts):
         # Skip options/flags (arguments that start with -)
-        if part.startswith('-'):
+        if part.startswith("-"):
             continue
-            
+
         # Check for path traversal in parts
         if has_path_traversal_patterns(part):
             command_name = parts[0] if parts else ""
             logger.warning(f"Path traversal pattern detected in command: {command}")
             return False
-            
+
         # Extra checks for more targeted file operations
         if i > 0 and parts[0] in file_access_commands:
             # If this part appears to be a path argument
-            if not part.startswith('-'):
+            if not part.startswith("-"):
                 # Check if it's an absolute path or contains traversal
                 if has_path_traversal_patterns(part):
-                    logger.warning(f"Path traversal pattern detected in argument: {part}")
+                    logger.warning(
+                        f"Path traversal pattern detected in argument: {part}"
+                    )
                     return False
-                    
+
                 # Final verification for paths that might slip through
                 if os.path.isabs(part):
                     if not is_path_within_cwd(part):
                         logger.warning(f"Path outside CWD detected in command: {part}")
                         return False
-    
+
     return True
+
 
 def is_command_allowed(command: str) -> bool:
     """Check if a command is allowed to execute.
@@ -292,12 +347,12 @@ def is_command_allowed(command: str) -> bool:
         if "curl" in command or "wget" in command:
             logger.warning("Command rejected - piping curl/wget to bash")
             return False
-    
+
     # Block commands that would allow viewing files outside CWD
     if not sanitize_command_for_path_traversal(command):
         logger.warning(f"Command rejected - contains path traversal: {command}")
         return False
-            
+
     # Check for directory traversal attempts
     if "cd" in normalized_command:
         # Extract the directory path from cd command
@@ -305,16 +360,23 @@ def is_command_allowed(command: str) -> bool:
         if len(parts) > 1:
             dir_path = parts[1].strip().split()[0]  # Get the first argument after cd
             # Remove quotes if present
-            dir_path = dir_path.strip('"\'')
-            
+            dir_path = dir_path.strip("\"'")
+
             # Special cases that could lead to directory traversal
-            if dir_path == ".." or dir_path.startswith("../") or dir_path.startswith("/") or dir_path.startswith("~"):
+            if (
+                dir_path == ".."
+                or dir_path.startswith("../")
+                or dir_path.startswith("/")
+                or dir_path.startswith("~")
+            ):
                 logger.warning(f"Directory traversal attempt detected: {command}")
                 return False
-            
+
             # For relative paths, ensure they don't escape CWD
             if not is_path_within_cwd(dir_path):
-                logger.warning(f"Command rejected - would navigate outside CWD: {command}")
+                logger.warning(
+                    f"Command rejected - would navigate outside CWD: {command}"
+                )
                 return False
 
     # Log if this is a sensitive command
@@ -340,7 +402,7 @@ class TrustManager:
         self.auto_confirm = False
         # Track pre-approved operations (simpler implementation)
         self.pre_approved_operations: Set[str] = set()
-        
+
         logger.debug("TrustManager initialized")
 
     def set_auto_confirm(self, value: bool) -> None:
@@ -358,18 +420,18 @@ class TrustManager:
                 return f"{tool_name}:{command[:50]}"  # Truncate long commands
             elif isinstance(path, str):
                 return f"{tool_name}:{path[:50]}"  # Truncate long commands
-        
+
         # If path is None, just use the tool name
         if path is None:
             return tool_name
-            
+
         # If path is a string, normalize it
         if isinstance(path, str):
             try:
                 return f"{tool_name}:{os.path.abspath(path)}"
             except (TypeError, ValueError):
                 return f"{tool_name}:{path}"
-        
+
         # For other types, just return the tool name
         return tool_name
 
@@ -424,7 +486,9 @@ class TrustManager:
                         current_check_path = os.path.join(current_check_path, part)
 
                     if current_check_path and current_check_path in trusted_paths:
-                        logger.debug(f"Found parent directory match: {current_check_path}")
+                        logger.debug(
+                            f"Found parent directory match: {current_check_path}"
+                        )
                         return True
             except (TypeError, ValueError):
                 logger.debug(f"Could not normalize path: {path}")
@@ -435,7 +499,9 @@ class TrustManager:
         logger.debug(f"No specific trust found for {tool_name} at path {path}")
         return False
 
-    def mark_operation_as_approved(self, tool_name: str, path: Optional[Any] = None) -> None:
+    def mark_operation_as_approved(
+        self, tool_name: str, path: Optional[Any] = None
+    ) -> None:
         """Mark a specific operation as pre-approved."""
         operation_key = self.get_operation_key(tool_name, path)
         self.pre_approved_operations.add(operation_key)
@@ -464,9 +530,9 @@ class TrustManager:
 
     def prompt_for_permission(self, tool_name: str, path: Optional[Any] = None) -> bool:
         """Prompt the user for permission to use a tool.
-        
+
         Returns whether permission was granted. Default is now NO for safety.
-        
+
         Raises PermissionDeniedError if permission is denied
         """
         # If auto-confirm is enabled or tool is already trusted, skip the prompt
@@ -498,6 +564,7 @@ class TrustManager:
 
         # Show a visually distinct prompt
         import sys
+
         from rich.console import Console
         from rich.panel import Panel
         from rich.text import Text
@@ -507,8 +574,8 @@ class TrustManager:
 
         # Different styling for bash commands
         if tool_name == "bash":
-            from rich.syntax import Syntax
             from rich.console import Group
+            from rich.syntax import Syntax
 
             panel_text.append(
                 f"🔐 PERMISSION REQUIRED - BASH COMMAND\n\n", style="bold yellow"
@@ -575,7 +642,9 @@ class TrustManager:
             else:
                 # Default to no for empty or invalid response
                 logger.info(f"User denied permission for {tool_name}")
-                console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
+                console.print(
+                    "\n[bold yellow]Permission denied. Enter a new message.[/]"
+                )
                 raise PermissionDeniedError(f"User denied permission for {tool_name}")
         else:
             # Standard permission panel for other tools
@@ -622,10 +691,11 @@ class TrustManager:
             return True
 
         # Create a visually distinct panel for the permission prompt
+        import sys
+
         from rich.console import Console
         from rich.panel import Panel
         from rich.text import Text
-        import sys
 
         console = Console()
         panel_text = Text()
@@ -647,16 +717,22 @@ class TrustManager:
         permission = input().lower()
 
         if permission == "y" or permission == "yes":
-            logger.info(f"User granted permission for {len(operations)} parallel operations")
+            logger.info(
+                f"User granted permission for {len(operations)} parallel operations"
+            )
             # Mark all operations as approved
             for tool_name, path in operations:
                 self.mark_operation_as_approved(tool_name, path)
             return True
         else:
             # Default to no for empty or invalid response
-            logger.info(f"User denied permission for {len(operations)} parallel operations")
+            logger.info(
+                f"User denied permission for {len(operations)} parallel operations"
+            )
             console.print("\n[bold yellow]Permission denied. Enter a new message.[/]")
-            raise PermissionDeniedError("User denied permission for parallel operations")
+            raise PermissionDeniedError(
+                "User denied permission for parallel operations"
+            )
 
     def get_permission_description(self, tool_name: str) -> str:
         """Get a human-readable description of the permissions for a tool."""

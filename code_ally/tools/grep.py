@@ -1,6 +1,6 @@
+import fnmatch
 import os
 import re
-import fnmatch
 from typing import Any, Dict, List, Optional
 
 from code_ally.tools.base import BaseTool
@@ -71,13 +71,17 @@ class GrepTool(BaseTool):
         try:
             # Expand user home directory if present
             search_dir = os.path.expanduser(path)
-            
+
             # Verify path doesn't contain traversal patterns
-            if ".." in search_dir or search_dir.startswith("/") or search_dir.startswith("~"):
+            if (
+                ".." in search_dir
+                or search_dir.startswith("/")
+                or search_dir.startswith("~")
+            ):
                 # Convert to absolute path to verify CWD constraint
                 abs_path = os.path.abspath(search_dir)
                 cwd = os.path.abspath(os.getcwd())
-                
+
                 # If it's not within the current working directory, reject it
                 if not abs_path.startswith(cwd):
                     return {
@@ -167,7 +171,7 @@ class GrepTool(BaseTool):
                         continue
 
                     file_path = os.path.join(root, file)
-                    
+
                     # Make sure the file is within the working directory boundary
                     cwd = os.path.abspath(os.getcwd())
                     abs_file_path = os.path.abspath(file_path)

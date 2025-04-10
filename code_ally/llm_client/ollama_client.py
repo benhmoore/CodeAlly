@@ -10,8 +10,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import requests
 
-from code_ally.prompts import get_system_message
 from code_ally.config import ConfigManager
+from code_ally.prompts import get_system_message
+
 from .model_client import ModelClient
 
 # Configure logging
@@ -39,10 +40,10 @@ class OllamaClient(ModelClient):
         self.keep_alive = keep_alive
         self.api_url = f"{endpoint}/api/chat"
         self.is_qwen_model = "qwen" in model_name.lower()
-        
+
         # Load configuration for model-specific settings
         self.config = ConfigManager.get_instance().get_config()
-        
+
         # State for interruption handling
         self.current_session = None
         self.interrupted = False
@@ -110,11 +111,11 @@ class OllamaClient(ModelClient):
         self, messages: List[Dict[str, Any]], tools: Optional[List[Callable]] = None
     ) -> Dict[str, Any]:
         """Generate Qwen-specific template options for function calling.
-        
+
         Args:
             messages: List of message dictionaries
             tools: Optional list of tool functions
-            
+
         Returns:
             Dictionary with template options for Qwen models
         """
@@ -125,7 +126,7 @@ class OllamaClient(ModelClient):
         qwen_template = self.config.get("qwen_template", "qwen2.5_function_calling")
         enable_parallel = self.config.get("qwen_parallel_calls", True)
         use_chinese = self.config.get("qwen_chinese", False)
-        
+
         # Only check messages for parallel keyword if not explicitly configured
         if not self.config.get("qwen_parallel_calls_explicit", False):
             for msg in messages:
@@ -141,12 +142,16 @@ class OllamaClient(ModelClient):
             for msg in messages:
                 if msg.get("role") in ["system", "user"] and msg.get("content"):
                     # Simple heuristic: if there are Chinese characters in the message
-                    if any("\u4e00" <= char <= "\u9fff" for char in msg.get("content", "")):
+                    if any(
+                        "\u4e00" <= char <= "\u9fff" for char in msg.get("content", "")
+                    ):
                         use_chinese = True
                         break
 
-        logger.debug(f"Using Qwen template options: {qwen_template}, parallel={enable_parallel}, chinese={use_chinese}")
-        
+        logger.debug(
+            f"Using Qwen template options: {qwen_template}, parallel={enable_parallel}, chinese={use_chinese}"
+        )
+
         return {
             "template": qwen_template,
             "template_params": {
@@ -165,17 +170,25 @@ class OllamaClient(ModelClient):
             except Exception as e:
                 logger.warning(f"Error standardizing existing tool calls: {e}")
                 # Continue with extraction as fallback
-        
+
         # Check for function_call (legacy format)
-        if "function_call" in message and message["function_call"] and not message.get("tool_calls"):
+        if (
+            "function_call" in message
+            and message["function_call"]
+            and not message.get("tool_calls")
+        ):
             try:
                 self._convert_function_call_to_tool_calls(message)
                 return
             except Exception as e:
                 logger.warning(f"Error converting function_call to tool_calls: {e}")
-        
+
         # Only attempt regex extraction if no existing tool calls were found
-        if not message.get("tool_calls") and "content" in message and message["content"]:
+        if (
+            not message.get("tool_calls")
+            and "content" in message
+            and message["content"]
+        ):
             self._extract_tool_calls_from_text(message)
 
     def _standardize_existing_tool_calls(self, message: Dict[str, Any]) -> None:
@@ -215,7 +228,7 @@ class OllamaClient(ModelClient):
         """Extract tool calls from text content as a fallback."""
         content = message["content"]
         tool_calls = []
-        
+
         # Common tool call patterns in text
         tool_call_patterns = [
             r"<tool_call>\s*({.*?})\s*</tool_call>",  # Hermes format
@@ -226,7 +239,9 @@ class OllamaClient(ModelClient):
         for pattern in tool_call_patterns:
             matches = re.findall(pattern, content, re.DOTALL)
             if matches:
-                logger.warning(f"Using regex fallback to extract tool calls with pattern: {pattern}")
+                logger.warning(
+                    f"Using regex fallback to extract tool calls with pattern: {pattern}"
+                )
                 for match in matches:
                     try:
                         if isinstance(match, tuple):
@@ -287,7 +302,7 @@ class OllamaClient(ModelClient):
         if tool_matches:
             # Use the first match as the tool response
             response_content = tool_matches[0].strip()
-            
+
             # Try to parse as JSON
             try:
                 response_json = json.loads(response_content)
@@ -303,28 +318,39 @@ class OllamaClient(ModelClient):
             r"<search_reminders>.*?</search_reminders>",
             r"<automated_reminder_from_anthropic>.*?</automated_reminder_from_anthropic>",
         ]
-        
+
         for pattern in patterns_to_remove:
             cleaned_content = re.sub(pattern, "", cleaned_content, flags=re.DOTALL)
 
         return cleaned_content.strip()
 
-    def send(self, messages, functions=None, tools=None, stream=False, include_reasoning=False):
+    def send(
+        self,
+        messages,
+        functions=None,
+        tools=None,
+        stream=False,
+        include_reasoning=False,
+    ):
         """Send a request to Ollama with messages and function definitions."""
         messages_copy = messages.copy()
-        payload = self._prepare_payload(messages_copy, functions, tools, stream, include_reasoning)
-        
+        payload = self._prepare_payload(
+            messages_copy, functions, tools, stream, include_reasoning
+        )
+
         # Reset interruption flag before starting new request
         self.interrupted = False
-        
+
         try:
             # Set up keyboard interrupt handler for this request
             original_sigint_handler = signal.getsignal(signal.SIGINT)
-            
+
             def sigint_handler(sig, frame):
-                logger.warning("SIGINT received during request. Interrupting Ollama request.")
+                logger.warning(
+                    "SIGINT received during request. Interrupting Ollama request."
+                )
                 self.interrupted = True
-                
+
                 # Close current session if it exists
                 if self.current_session:
                     try:
@@ -332,50 +358,52 @@ class OllamaClient(ModelClient):
                         self.current_session.close()
                     except Exception as e:
                         logger.error(f"Error closing session: {e}")
-                
+
                 # Restore original handler for future handling
                 signal.signal(signal.SIGINT, original_sigint_handler)
-                
+
                 # Raise KeyboardInterrupt to propagate upward
                 raise KeyboardInterrupt("Request interrupted by user")
-            
+
             # Set our custom handler for SIGINT
             signal.signal(signal.SIGINT, sigint_handler)
-            
+
             try:
                 result = self._execute_request(payload, stream)
-                
+
                 # Restore the original SIGINT handler
                 signal.signal(signal.SIGINT, original_sigint_handler)
-                
+
                 # If we got here and interruption flag is set, something went wrong with interruption
                 if self.interrupted:
-                    logger.warning("Request was interrupted but still returned a result")
+                    logger.warning(
+                        "Request was interrupted but still returned a result"
+                    )
                     # Return a special response indicating interruption
                     return {
                         "role": "assistant",
                         "content": "[Request interrupted by user]",
-                        "interrupted": True
+                        "interrupted": True,
                     }
-                
+
                 return result
             except KeyboardInterrupt:
                 # This will be caught immediately after our handler raises KeyboardInterrupt
                 logger.warning("Request interrupted by user")
-                
+
                 # Restore the original SIGINT handler
                 signal.signal(signal.SIGINT, original_sigint_handler)
-                
+
                 # Return a special response indicating interruption
                 return {
                     "role": "assistant",
                     "content": "[Request interrupted by user]",
-                    "interrupted": True
+                    "interrupted": True,
                 }
             finally:
                 # Make sure the original SIGINT handler is restored
                 signal.signal(signal.SIGINT, original_sigint_handler)
-        
+
         except requests.RequestException as e:
             return self._handle_request_error(e)
         except json.JSONDecodeError as e:
@@ -391,51 +419,54 @@ class OllamaClient(ModelClient):
                 "temperature": self.temperature,
                 "num_ctx": self.context_size,
                 "num_predict": self.max_tokens,
-                **({"keep_alive": self.keep_alive} if self.keep_alive is not None else {}),
+                **(
+                    {"keep_alive": self.keep_alive}
+                    if self.keep_alive is not None
+                    else {}
+                ),
                 **self._get_qwen_template_options(messages, tools),
-            }
+            },
         }
-        
+
         payload["options"]["tool_choice"] = "auto"
-        
+
         if include_reasoning:
             reasoning_request = {
                 "role": "system",
                 "content": get_system_message("verbose_thinking"),
             }
-            
+
             for i in range(len(messages) - 1, -1, -1):
                 if messages[i]["role"] == "user":
                     messages.insert(i, reasoning_request)
                     break
-        
+
         if functions or tools:
             if functions:
                 payload["tools"] = functions
             elif tools:
                 payload["tools"] = self._convert_tools_to_schemas(tools)
-            
+
             if self.is_qwen_model:
-                payload["options"]["parallel_function_calls"] = self.config.get("qwen_parallel_calls", True)
-        
+                payload["options"]["parallel_function_calls"] = self.config.get(
+                    "qwen_parallel_calls", True
+                )
+
         return payload
 
     def _execute_request(self, payload, stream):
         """Execute the request to the Ollama API."""
         logger.debug(f"Sending request to Ollama: {self.api_url}")
-        
+
         # Create a new session for this request
         self.current_session = requests.Session()
-        
+
         try:
             response = self.current_session.post(
-                self.api_url, 
-                json=payload, 
-                timeout=240,
-                stream=True
+                self.api_url, json=payload, timeout=240, stream=True
             )
             response.raise_for_status()
-            
+
             if not stream:
                 # For non-streaming requests, we need to check for interruption while collecting the response
                 full_content = ""
@@ -447,33 +478,35 @@ class OllamaClient(ModelClient):
                         self.current_session.close()
                         self.current_session = None
                         raise KeyboardInterrupt("Request interrupted by user")
-                    
+
                     if chunk:
-                        full_content += chunk.decode('utf-8')
-                
+                        full_content += chunk.decode("utf-8")
+
                 # Parse the full response
                 try:
                     result = json.loads(full_content)
                 except json.JSONDecodeError:
-                    logger.error(f"Invalid JSON response from Ollama API: {full_content[:100]}...")
+                    logger.error(
+                        f"Invalid JSON response from Ollama API: {full_content[:100]}..."
+                    )
                     raise
-                
+
                 message = result.get("message", {})
-                
+
                 # Normalize tool calls - try structured first, fallback to regex
                 self._normalize_tool_calls_in_message(message)
-                
+
                 if "message" in result:
                     # Close the session
                     self.current_session.close()
                     self.current_session = None
                     return message
-                
+
                 # Close the session
                 self.current_session.close()
                 self.current_session = None
                 return result
-            
+
             # For streaming, just return the response object
             return response
         except KeyboardInterrupt:
@@ -488,10 +521,10 @@ class OllamaClient(ModelClient):
 
     def _handle_request_error(self, e):
         """Handle request exceptions.
-        
+
         Args:
             e: The exception that occurred
-            
+
         Returns:
             A formatted error response for the user
         """
@@ -503,10 +536,10 @@ class OllamaClient(ModelClient):
 
     def _handle_json_error(self, e):
         """Handle JSON decoding errors.
-        
+
         Args:
             e: The JSON decoding exception
-            
+
         Returns:
             A formatted error response for the user
         """

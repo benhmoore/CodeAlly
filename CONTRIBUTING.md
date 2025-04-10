@@ -107,18 +107,24 @@ Our CI workflow will automatically run tests on your PR to ensure everything pas
 
 We follow [Semantic Versioning](https://semver.org/) for this project.
 
-1. Use bump2version to increment the version number:
+1. Use the version management script to increment the version number:
 
     ```bash
     # For a new patch release (bug fixes)
-    bump2version patch
+    python tools/version.py patch
 
     # For a new minor release (new features, backwards compatible)
-    bump2version minor
+    python tools/version.py minor
 
     # For a new major release (breaking changes)
-    bump2version major
+    python tools/version.py major
     ```
+
+    This script will:
+
+    - Update the version in `code_ally/_version.py` (single source of truth)
+    - Commit the change with a message "Bump version to X.Y.Z"
+    - Create a git tag for the new version
 
 2. Push the new commit and tag to GitHub:
 
@@ -126,7 +132,9 @@ We follow [Semantic Versioning](https://semver.org/) for this project.
     git push origin main --tags
     ```
 
-3. The GitHub Actions workflow will automatically build and publish the new version to PyPI.
+3. The GitHub Actions workflow will automatically detect the new tag, build the package, and publish it to PyPI.
+
+Note: The version is stored in a single location (`code_ally/_version.py`) and imported where needed. This simplifies version management and reduces the chance of version inconsistencies.
 
 ## Adding New Tools
 

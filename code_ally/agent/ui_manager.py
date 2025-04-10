@@ -4,8 +4,9 @@ Manages UI rendering and user interaction.
 """
 
 import os
-import time
 import threading
+import time
+
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -54,11 +55,11 @@ class UIManager:
         self.prompt_session = PromptSession(
             history=FileHistory(history_file), key_bindings=kb
         )
-        
+
         # Interactive planning state
         self.current_interactive_plan = None
         self.current_interactive_plan_tasks = []
-        
+
         # Add these attributes
         self.active_live_display = None
         self.plan_panel = None  # Store the entire panel
@@ -109,7 +110,9 @@ class UIManager:
                 with Live(
                     self.thinking_spinner, refresh_per_second=10, console=self.console
                 ) as live:
-                    self.active_live_display = live  # Store reference to current live display
+                    self.active_live_display = (
+                        live  # Store reference to current live display
+                    )
                     while not self.thinking_event.is_set():
                         elapsed_seconds = int(time.time() - start_time)
                         if token_percentage > 0:
@@ -152,7 +155,7 @@ class UIManager:
         panel: bool = False,
         title: str = None,
         border_style: str = None,
-        use_markdown: bool = False
+        use_markdown: bool = False,
     ) -> None:
         """Print content with optional styling and panel."""
         renderable = content
@@ -223,32 +226,34 @@ class UIManager:
 
     def confirm(self, prompt: str, default: bool = True) -> bool:
         """Ask the user for confirmation.
-        
+
         Args:
             prompt: The confirmation prompt
             default: Default return value if user just presses Enter
-            
+
         Returns:
             The user's confirmation choice
         """
         prompt_text = f"{prompt} (Y/n)" if default else f"{prompt} (y/N)"
         response = self.prompt_session.prompt(f"\n{prompt_text} > ")
-        
+
         # Handle empty response
         if not response:
             return default
-            
+
         # Process user input
         response = response.strip().lower()
-        if response in ('y', 'yes'):
+        if response in ("y", "yes"):
             return True
-        elif response in ('n', 'no'):
+        elif response in ("n", "no"):
             return False
         else:
             # For invalid responses, fall back to default
-            self.print_warning(f"Invalid response '{response}'. Using default: {default}")
+            self.print_warning(
+                f"Invalid response '{response}'. Using default: {default}"
+            )
             return default
-    
+
     def print_help(self) -> None:
         """Print help information."""
         help_text = """
@@ -269,7 +274,7 @@ Use up/down arrow keys to navigate through command history.
         self.print_markdown(help_text)
 
     # ----- Interactive Planning UI Methods -----
-    
+
     def display_interactive_plan_started(self, name: str, description: str) -> None:
         """Start displaying an interactive plan with a live-updating panel."""
         # Make sure any existing live display is stopped
@@ -278,17 +283,14 @@ Use up/down arrow keys to navigate through command history.
             self.active_live_display = None
 
         # Save plan info
-        self.current_interactive_plan = {
-            "name": name,
-            "description": description
-        }
+        self.current_interactive_plan = {"name": name, "description": description}
         self.current_interactive_plan_tasks = []
 
-        
         # Create the initial table for tasks
         from rich.table import Table
+
         self.plan_tasks_table = Table(box=None, expand=False, show_header=True)
-        
+
         # We'll show a full set of columns so the single panel can carry
         # everything from creation to finalization:
         self.plan_tasks_table.add_column("#", style="dim", width=3)
@@ -297,32 +299,35 @@ Use up/down arrow keys to navigate through command history.
         self.plan_tasks_table.add_column("Description", style="yellow")
         self.plan_tasks_table.add_column("Dependencies", style="blue")
         self.plan_tasks_table.add_column("Conditional", style="magenta")
-        
+
         # Create the header text
-        from rich.text import Text
         from rich.console import Group
-        
+        from rich.text import Text
+
         header_content = Text.assemble(
-            Text(f"Name: ", style="bold"), Text(name), Text("\n"),
-            Text(f"Description: ", style="bold"), Text(description), Text("\n\n"),
-            Text("Tasks:", style="bold cyan")
+            Text(f"Name: ", style="bold"),
+            Text(name),
+            Text("\n"),
+            Text(f"Description: ", style="bold"),
+            Text(description),
+            Text("\n\n"),
+            Text("Tasks:", style="bold cyan"),
         )
-        
+
         # Group the header and tasks table - store this separately
         self.plan_panel_group = Group(header_content, self.plan_tasks_table)
-        
+
         # Create the panel - use the group
         from rich.panel import Panel
+
         title_text = Text("📋 Creating Task Plan", style="bold blue")
         self.plan_panel = Panel(
-            self.plan_panel_group,
-            title=title_text,
-            border_style="blue",
-            expand=False
+            self.plan_panel_group, title=title_text, border_style="blue", expand=False
         )
-        
+
         # Start the live display with the panel
         from rich.live import Live
+
         live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
         self.active_live_display = live
         live.start()
@@ -331,6 +336,7 @@ Use up/down arrow keys to navigate through command history.
         """Update the title of the plan panel if active."""
         if self.plan_panel:
             from rich.text import Text
+
             self.plan_panel.title = Text(new_title, style="bold blue")
         if self.active_live_display:
             # Force a refresh so the user sees the new title immediately
@@ -343,22 +349,20 @@ Use up/down arrow keys to navigate through command history.
         tool_name: str,
         description: str,
         depends_on: list,
-        condition: dict
+        condition: dict,
     ) -> None:
-        self.current_interactive_plan_tasks.append({
-            "index": task_index,
-            "id": task_id,
-            "description": description
-        })
+        self.current_interactive_plan_tasks.append(
+            {"index": task_index, "id": task_id, "description": description}
+        )
 
-        depends_txt   = ", ".join(depends_on) if depends_on else "—"
+        depends_txt = ", ".join(depends_on) if depends_on else "—"
         condition_str = "No"
         if condition:
             ctype = condition.get("type", "")
             if ctype == "task_result":
                 field = condition.get("field", "success")
-                oper  = condition.get("operator", "equals")
-                val   = condition.get("value", True)
+                oper = condition.get("operator", "equals")
+                val = condition.get("value", True)
                 cond_id = condition.get("task_id", "")
                 condition_str = f"Yes ({cond_id}.{field} {oper} {val})"
             else:
@@ -370,7 +374,7 @@ Use up/down arrow keys to navigate through command history.
             tool_name or "???",
             description,
             depends_txt,
-            condition_str
+            condition_str,
         )
 
         if self.active_live_display:
@@ -416,6 +420,7 @@ Use up/down arrow keys to navigate through command history.
         # Restore the original title if we still have the plan panel
         if self.plan_panel:
             from rich.text import Text
+
             if "Creating Task Plan" in str(self.plan_panel.title):
                 self.plan_panel.title = Text("📋 Creating Task Plan", style="bold blue")
             elif "TASK PLAN:" in str(self.plan_panel.title):
@@ -442,6 +447,7 @@ Use up/down arrow keys to navigate through command history.
 
         while not self._stop_thinking_flag:
             from rich.text import Text
+
             frame = spinner_frames[index % len(spinner_frames)]
             index += 1
 

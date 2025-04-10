@@ -3,12 +3,12 @@
 Advanced refactoring operations across multiple files with preview capabilities.
 """
 
+import difflib
+import fnmatch
+import json
 import os
 import re
-import json
-import fnmatch
-import difflib
-from typing import Any, Dict, List, Tuple, Optional, Set, Pattern
+from typing import Any, Dict, List, Optional, Pattern, Set, Tuple
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool

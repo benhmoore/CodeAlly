@@ -1,19 +1,22 @@
 """Tests for the ModelClient class.
 
-This file contains tests for the ModelClient class, which provides a standardized 
+This file contains tests for the ModelClient class, which provides a standardized
 interface for interacting with different language model backends.
 """
 
 import os
-import pytest
-from unittest.mock import MagicMock
 
 # Add the root directory to the path for direct imports
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from unittest.mock import MagicMock
+
+import pytest
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
+
 setup_mocks()
 
 from code_ally.llm_client.model_client import ModelClient
@@ -23,10 +26,10 @@ from code_ally.llm_client.model_client import ModelClient
 # PyTest will not collect this class as a test class because it doesn't have a test_ prefix
 class SampleModelClient(ModelClient):
     """A test implementation of the ModelClient."""
-    
+
     def __init__(self, mock_response=None):
         """Initialize the test model client.
-        
+
         Args:
             mock_response: The response to return when send is called
         """
@@ -35,7 +38,7 @@ class SampleModelClient(ModelClient):
             "role": "assistant",
             "content": "This is a test response.",
         }
-    
+
     def send(
         self,
         messages,
@@ -46,12 +49,12 @@ class SampleModelClient(ModelClient):
     ):
         """Mock implementation of send."""
         return self._mock_response
-    
+
     @property
     def model_name(self):
         """Mock implementation of model_name."""
         return "test-model"
-    
+
     @property
     def endpoint(self):
         """Mock implementation of endpoint."""
@@ -63,41 +66,55 @@ def test_abstract_model_client():
     # Test that ModelClient can't be instantiated directly
     with pytest.raises(TypeError):
         ModelClient()
-    
+
     # Test that send method must be implemented
     class IncompleteClient(ModelClient):
         @property
         def model_name(self):
             return "incomplete-model"
-        
+
         @property
         def endpoint(self):
             return "https://api.incomplete.com"
-    
+
     with pytest.raises(TypeError):
         IncompleteClient()
-    
+
     # Test that model_name property must be implemented
     class NoModelNameClient(ModelClient):
-        def send(self, messages, functions=None, tools=None, stream=False, include_reasoning=False):
+        def send(
+            self,
+            messages,
+            functions=None,
+            tools=None,
+            stream=False,
+            include_reasoning=False,
+        ):
             return {}
-        
+
         @property
         def endpoint(self):
             return "https://api.noname.com"
-    
+
     with pytest.raises(TypeError):
         NoModelNameClient()
-    
+
     # Test that endpoint property must be implemented
     class NoEndpointClient(ModelClient):
-        def send(self, messages, functions=None, tools=None, stream=False, include_reasoning=False):
+        def send(
+            self,
+            messages,
+            functions=None,
+            tools=None,
+            stream=False,
+            include_reasoning=False,
+        ):
             return {}
-        
+
         @property
         def model_name(self):
             return "no-endpoint-model"
-    
+
     with pytest.raises(TypeError):
         NoEndpointClient()
 
@@ -120,20 +137,20 @@ def test_concrete_model_client():
         ],
     }
     client = SampleModelClient(custom_response)
-    
+
     # Test the send method
     messages = [
         {"role": "system", "content": "You are a test assistant."},
         {"role": "user", "content": "Hello!"},
     ]
-    
+
     response = client.send(messages)
-    
+
     # Check that the response matches our mock
     assert response == custom_response
     assert response["content"] == "Custom response"
     assert "tool_calls" in response
-    
+
     # Test the properties
     assert client.model_name == "test-model"
     assert client.endpoint == "https://api.test.com"

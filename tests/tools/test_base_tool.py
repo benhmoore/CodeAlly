@@ -111,7 +111,7 @@ def test_abstract_execute_method():
         BaseTool.execute(tool)
     
     # Check that NoExecuteTool can't be instantiated because execute is not implemented
-    with pytest.raises(TypeError, match="abstract class NoExecuteTool without an implementation for abstract method 'execute'"):
+    with pytest.raises(TypeError, match="Can't instantiate abstract class NoExecuteTool with abstract method execute"):
         NoExecuteTool()
 
 

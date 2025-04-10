@@ -6,6 +6,6 @@ coding tasks through natural language, while keeping all data on your machine.
 """
 
 # Define package metadata
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 __author__ = "Ben H Moore"
 __email__ = "ben@benhmoore.com"

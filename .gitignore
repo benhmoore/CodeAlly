@@ -56,7 +56,7 @@ coverage.xml
 *.cover
 
 # Ruff
-# .ruff_cache
+.ruff_cache/
 
 # Pytest
-# .pytest_cache/
+.pytest_cache/

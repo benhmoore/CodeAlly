@@ -7,34 +7,11 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements-dev.txt
-        
-    - name: Check formatting with black
-      run: |
-        black --check .
-        
-    - name: Check imports with isort
-      run: |
-        isort --check-only --profile black .
-        
-    - name: Lint with pylint
-      run: |
-        pylint code_ally tests
-        
-    - name: Type check with mypy
-      run: |
-        mypy code_ally tests
+  lint-and-build:
+    uses: ./.github/workflows/ci-shared.yml
+    with:
+      python-version: '3.11'
+      run-tests: false
+      run-lint: true
+      upload-coverage: false
+      build-package: true

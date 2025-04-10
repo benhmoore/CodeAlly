@@ -33,7 +33,7 @@ dev_requires = read_requirements("requirements-dev.txt")
 
 setup(
     name="code_ally",
-    # Read version, author, email from code_ally/CodeAlly/__init__.py
+    # Read version, author, email from code_ally/code_ally/__init__.py
     version=get_meta("version"),
     author=get_meta("author"),
     author_email=get_meta("email"),

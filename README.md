@@ -4,8 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Tests](https://github.com/benhmoore/CodeAlly/actions/workflows/tests.yml/badge.svg)](https://github.com/benhmoore/CodeAlly/actions/workflows/tests.yml)
-[![Lint](https://github.com/benhmoore/CodeAlly/actions/workflows/lint.yml/badge.svg)](https://github.com/benhmoore/CodeAlly/actions/workflows/lint.yml)
+[![Release](https://github.com/benhmoore/CodeAlly/actions/workflows/release.yml/badge.svg)](https://github.com/benhmoore/CodeAlly/actions/workflows/release.yml)
+
 
 A local LLM-powered pair programming assistant using function calling capabilities with Ollama. Code Ally helps you with coding tasks through natural language, providing tools for file operations, code searching, and executing shell commands - all while keeping your code and data local.
 

@@ -11,6 +11,7 @@ import json
 import logging
 import signal
 import sys
+import types
 
 import requests
 from rich.console import Console
@@ -38,7 +39,7 @@ logger = logging.getLogger("code_ally")
 _global_agent: Agent | None = None
 
 
-def handle_interrupt(signum: int, frame: signal.FrameType) -> None:
+def handle_interrupt(signum: int, frame: types.FrameType) -> None:
     """Handle keyboard interrupt (SIGINT) signals.
 
     - If an LLM request is in progress, let the exception propagate to the OllamaClient

@@ -6,11 +6,10 @@ Manages UI rendering and user interaction.
 import os
 import threading
 import time
-from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -39,7 +38,7 @@ class UIManager:
         kb = KeyBindings()
 
         @kb.add("c-c")
-        def _(event: Any) -> None:
+        def _(event: "KeyPressEvent") -> None:
             """Custom Ctrl+C handler.
 
             Clear buffer if not empty, otherwise exit.
@@ -357,6 +356,16 @@ Use up/down arrow keys to navigate through command history.
         depends_on: list,
         condition: dict,
     ) -> None:
+        """Update the interactive plan display with a newly added task.
+
+        Args:
+            task_index: Index of the task in the plan
+            task_id: Unique identifier for the task
+            tool_name: Name of the tool to execute
+            description: Description of what the task does
+            depends_on: List of task IDs this task depends on
+            condition: Dictionary defining the condition for this task to run
+        """
         self.current_interactive_plan_tasks.append(
             {"index": task_index, "id": task_id, "description": description},
         )

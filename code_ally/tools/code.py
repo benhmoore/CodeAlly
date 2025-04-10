@@ -1,3 +1,8 @@
+"""Code structure analysis tool module for Code Ally.
+
+This module provides tools for analyzing code structure across various programming languages.
+"""
+
 import ast
 import os
 import re
@@ -9,6 +14,12 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class CodeStructureAnalyzerTool(BaseTool):
+    """Tool for analyzing code structure in files or directories.
+
+    Provides comprehensive analysis of code files including functions, classes,
+    imports, and other structural elements across various programming languages.
+    """
+
     name = "code_structure"
     description = """Analyze code structure in files or directories.
 
@@ -50,7 +61,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         recursive: bool = False,
         exclude_dirs: str = "",
         max_files: int = 50,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Analyze code structure in files or directories.
@@ -342,26 +353,26 @@ class CodeStructureAnalyzerTool(BaseTool):
                 functions = []
 
                 for node in ast.walk(tree):
-                    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                        # Skip methods (they'll be included in class analysis)
-                        if not include_classes or not any(
+                    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and (
+                        not include_classes
+                        or not any(
                             isinstance(parent, ast.ClassDef)
                             for parent in ast.iter_child_nodes(tree)
                             if hasattr(parent, "body") and node in parent.body
-                        ):
-                            func_info = {
-                                "name": node.name,
-                                "async": isinstance(node, ast.AsyncFunctionDef),
-                                "decorators": [
-                                    self._get_decorator_name(d)
-                                    for d in node.decorator_list
-                                ],
-                                "args": self._get_function_args(node),
-                                "returns": self._get_return_annotation(node),
-                                "docstring": ast.get_docstring(node) or "",
-                                "line": node.lineno,
-                            }
-                            functions.append(func_info)
+                        )
+                    ):
+                        func_info = {
+                            "name": node.name,
+                            "async": isinstance(node, ast.AsyncFunctionDef),
+                            "decorators": [
+                                self._get_decorator_name(d) for d in node.decorator_list
+                            ],
+                            "args": self._get_function_args(node),
+                            "returns": self._get_return_annotation(node),
+                            "docstring": ast.get_docstring(node) or "",
+                            "line": node.lineno,
+                        }
+                        functions.append(func_info)
 
                 result["functions"] = functions
 
@@ -385,7 +396,10 @@ class CodeStructureAnalyzerTool(BaseTool):
 
                         # Analyze methods and class variables
                         for child in node.body:
-                            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                            if isinstance(
+                                child,
+                                ast.FunctionDef | ast.AsyncFunctionDef,
+                            ):
                                 method_info = {
                                     "name": child.name,
                                     "async": isinstance(child, ast.AsyncFunctionDef),

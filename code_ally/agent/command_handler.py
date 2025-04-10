@@ -22,8 +22,8 @@ class CommandHandler:
 
     def __init__(
         self,
-        ui_manager: Any,
-        token_manager: Any,
+        ui_manager: "UIManager",
+        token_manager: "TokenManager",
         trust_manager: TrustManager,
     ) -> None:
         """Initialize the command handler.

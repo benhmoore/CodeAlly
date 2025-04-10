@@ -47,7 +47,10 @@ class BaseTool(ABC):
             )
 
     @abstractmethod
-    def execute(self, **kwargs) -> dict[str, Any]:
+    def execute(
+        self,
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
         """Execute the tool with the given parameters.
 
         Args:
@@ -74,7 +77,10 @@ class BaseTool(ABC):
         """
         return {"success": False, "error": error_message}
 
-    def _format_success_response(self, **kwargs) -> dict[str, Any]:
+    def _format_success_response(
+        self,
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
         """Format a standard success response.
 
         Args:

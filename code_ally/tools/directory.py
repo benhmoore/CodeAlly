@@ -42,7 +42,7 @@ class DirectoryTool(BaseTool):
         create_parents: bool = True,
         structure: dict[str, Any] | None = None,
         dry_run: bool = True,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Execute a directory operation.
@@ -823,7 +823,7 @@ class DirectoryTool(BaseTool):
                     }
 
             # Convert sets to lists for JSON serialization
-            for file_type, stats in analysis["file_types"].items():
+            for _file_type, stats in analysis["file_types"].items():
                 stats["extensions"] = list(stats["extensions"])
 
             return {

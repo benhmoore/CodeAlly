@@ -122,7 +122,11 @@ def load_config() -> dict[str, Any]:
 
                         # Try to convert the value to the expected type
                         try:
-                            if expected_type == bool and isinstance(value, str):
+                            if (
+                                isinstance(expected_type, type)
+                                and issubclass(expected_type, bool)
+                                and isinstance(value, str)
+                            ):
                                 # Handle string boolean conversion separately
                                 value = value.lower() in ("true", "yes", "y", "1")
                             else:
@@ -181,7 +185,7 @@ class ConfigManager:
     _config = None
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "ConfigManager":
         """Get the singleton instance."""
         if cls._instance is None:
             cls._instance = cls()
@@ -193,24 +197,30 @@ class ConfigManager:
         if ConfigManager._config is None:
             ConfigManager._config = load_config()
 
-    def get_config(self):
+    def get_config(self) -> dict[str, Any]:
         """Get the complete configuration dictionary."""
         return ConfigManager._config
 
-    def get_value(self, key, default=None):
+    def get_value(
+        self, key: str, default: str | int | float | bool | None = None,
+    ) -> str | int | float | bool | None:
         """Get a specific configuration value."""
         if default is None:
             default = DEFAULT_CONFIG.get(key)
         return ConfigManager._config.get(key, default)
 
-    def set_value(self, key, value) -> None:
+    def set_value(self, key: str, value: str | int | float | bool) -> None:
         """Set a specific configuration value."""
         # Validate the value type
         if key in CONFIG_TYPES:
             expected_type = CONFIG_TYPES[key]
 
             # For booleans, accept string representations
-            if expected_type == bool and isinstance(value, str):
+            if (
+                isinstance(expected_type, type)
+                and issubclass(expected_type, bool)
+                and isinstance(value, str)
+            ):
                 value = value.lower() in ("true", "yes", "y", "1")
             elif not isinstance(value, expected_type):
                 try:
@@ -219,7 +229,7 @@ class ConfigManager:
                     raise ValueError(
                         f"Invalid type for config key '{key}': "
                         f"expected {expected_type.__name__}, got {type(value).__name__}",
-                    )
+                    ) from None
 
         # Update the config
         ConfigManager._config[key] = value
@@ -228,7 +238,10 @@ class ConfigManager:
         logger.debug(f"Config value updated: {key} = {value}")
 
 
-def get_config_value(key: str, default: Any = None) -> Any:
+def get_config_value(
+    key: str,
+    default: str | int | float | bool | None = None,
+) -> str | int | float | bool | None:
     """Get a specific configuration value.
 
     Args:
@@ -243,7 +256,7 @@ def get_config_value(key: str, default: Any = None) -> Any:
     return config_manager.get_value(key, default)
 
 
-def set_config_value(key: str, value: Any) -> None:
+def set_config_value(key: str, value: str | int | float | bool) -> None:
     """Set a specific configuration value.
 
     Args:

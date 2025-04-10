@@ -1,3 +1,5 @@
+"""BashTool class for executing shell commands safely."""
+
 import logging
 import os
 import subprocess
@@ -39,7 +41,7 @@ class BashTool(BaseTool):
         command: str,
         timeout: int = DEFAULT_TIMEOUT,
         working_dir: str = "",
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """Execute a shell command and return its output.
 

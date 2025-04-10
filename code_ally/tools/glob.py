@@ -14,6 +14,7 @@ from code_ally.tools.registry import register_tool
 @register_tool
 class GlobTool(BaseTool):
     """Tool for finding files that match specific patterns with glob syntax."""
+
     name = "glob"
     description = """Find files matching a glob pattern with improved context efficiency.
 
@@ -39,7 +40,7 @@ class GlobTool(BaseTool):
         limit: int = 20,
         show_content: bool = False,
         content_lines: int = 10,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Find files matching a glob pattern with content preview options to save context.

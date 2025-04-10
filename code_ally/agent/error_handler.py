@@ -60,7 +60,7 @@ def format_error_message(
 
 
 def display_error(
-    ui_manager: Any,
+    ui_manager: "UIManager",
     error_msg: str,
     tool_name: str,
     arguments: dict[str, Any],

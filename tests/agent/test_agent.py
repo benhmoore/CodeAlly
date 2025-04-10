@@ -51,10 +51,10 @@ def agent(mock_model_client, mock_tools):
     service_registry = ServiceRegistry()
 
     # Mock the UIManager class before creating an agent
-    with patch("code_ally.agent.agent.UIManager") as MockUIManager:
+    with patch("code_ally.agent.agent.UIManager") as mock_ui_manager:
         # Configure the UI manager mock
         mock_ui = MagicMock()
-        MockUIManager.return_value = mock_ui
+        mock_ui_manager.return_value = mock_ui
 
         # Create the agent
         agent = Agent(

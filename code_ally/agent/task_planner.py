@@ -33,7 +33,7 @@ class TaskPlanner:
     6. Interactive plan creation with user confirmation
     """
 
-    def __init__(self, tool_manager: Any) -> None:
+    def __init__(self, tool_manager: "ToolManager") -> None:
         """Initialize the task planner.
 
         Args:

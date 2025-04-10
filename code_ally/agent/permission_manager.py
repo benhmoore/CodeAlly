@@ -158,7 +158,9 @@ class PermissionManager:
                     arg_value,
                 )
 
-    def _verify_directory_access(self, tool_name: str, path_info: Any) -> None:
+    def _verify_directory_access(
+        self, tool_name: str, path_info: str | dict[str, str] | None,
+    ) -> None:
         """Verify that the operation doesn't access files outside the starting directory.
 
         Args:
@@ -245,7 +247,9 @@ class PermissionManager:
 
         return resolved_paths
 
-    def _get_permission_path(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    def _get_permission_path(
+        self, tool_name: str, arguments: dict[str, Any],
+    ) -> str | dict[str, str] | None:
         """Extract the path from tool arguments for permission checking."""
         # Handle bash commands differently
         if tool_name == "bash" and "command" in arguments:

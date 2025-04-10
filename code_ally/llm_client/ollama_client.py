@@ -73,16 +73,16 @@ class OllamaClient(ModelClient):
     def _determine_param_type(self, annotation: type) -> str:
         """Determine the JSON schema type from a Python type annotation."""
         # Basic types
-        if annotation == str:
+        if annotation is str:
             return "string"
-        elif annotation == int:
+        elif annotation is int:
             return "integer"
-        elif annotation == float:
+        elif annotation is float:
             return "number"
-        elif annotation == bool:
+        elif annotation is bool:
             return "boolean"
-        elif annotation == list or (
-            hasattr(annotation, "__origin__") and annotation.__origin__ == list
+        elif annotation is list or (
+            hasattr(annotation, "__origin__") and annotation.__origin__ is list
         ):
             return "array"
 
@@ -93,7 +93,7 @@ class OllamaClient(ModelClient):
             if type(None) in args:
                 # Find the non-None type
                 for arg in args:
-                    if arg != type(None):
+                    if arg is not type(None):
                         return self._determine_param_type(arg)
 
         # Default to string for unknown types
@@ -142,13 +142,15 @@ class OllamaClient(ModelClient):
         # Only try to detect language if not explicitly configured
         if not self.config.get("qwen_chinese_explicit", False):
             for msg in messages:
-                if msg.get("role") in ["system", "user"] and msg.get("content"):
-                    # Simple heuristic: if there are Chinese characters in the message
-                    if any(
+                if (
+                    msg.get("role") in ["system", "user"]
+                    and msg.get("content")
+                    and any(
                         "\u4e00" <= char <= "\u9fff" for char in msg.get("content", "")
-                    ):
-                        use_chinese = True
-                        break
+                    )
+                ):
+                    use_chinese = True
+                    break
 
         logger.debug(
             f"Using Qwen template options: {qwen_template}, parallel={enable_parallel}, chinese={use_chinese}",
@@ -328,12 +330,12 @@ class OllamaClient(ModelClient):
 
     def send(
         self,
-        messages,
-        functions=None,
-        tools=None,
-        stream=False,
-        include_reasoning=False,
-    ):
+        messages: list[dict[str, Any]],
+        functions: list[dict[str, Any]] | None = None,
+        tools: list[Callable] | None = None,
+        stream: bool = False,
+        include_reasoning: bool = False,
+    ) -> dict[str, Any] | requests.Response:
         """Send a request to Ollama with messages and function definitions."""
         messages_copy = messages.copy()
         payload = self._prepare_payload(
@@ -351,7 +353,7 @@ class OllamaClient(ModelClient):
             # Set up keyboard interrupt handler for this request
             original_sigint_handler = signal.getsignal(signal.SIGINT)
 
-            def sigint_handler(sig, frame) -> NoReturn:
+            def sigint_handler(sig: int, frame: signal.FrameType) -> NoReturn:
                 logger.warning(
                     "SIGINT received during request. Interrupting Ollama request.",
                 )
@@ -415,7 +417,14 @@ class OllamaClient(ModelClient):
         except json.JSONDecodeError as e:
             return self._handle_json_error(e)
 
-    def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    def _prepare_payload(
+        self,
+        messages: list[dict[str, Any]],
+        functions: list[dict[str, Any]] | None,
+        tools: list[Callable] | None,
+        stream: bool,
+        include_reasoning: bool,
+    ) -> dict[str, Any]:
         """Prepare the request payload."""
         payload = {
             "model": self.model_name,
@@ -461,7 +470,7 @@ class OllamaClient(ModelClient):
 
         return payload
 
-    def _execute_request(self, payload, stream):
+    def _execute_request(self, payload: dict[str, Any], stream: bool) -> dict[str, Any]:
         """Execute the request to the Ollama API."""
         logger.debug(f"Sending request to Ollama: {self.api_url}")
 
@@ -529,7 +538,7 @@ class OllamaClient(ModelClient):
                 self.current_session = None
             raise
 
-    def _handle_request_error(self, e):
+    def _handle_request_error(self, e: Exception) -> dict[str, Any]:
         """Handle request exceptions.
 
         Args:
@@ -544,7 +553,7 @@ class OllamaClient(ModelClient):
             "content": f"Error communicating with Ollama: {str(e)}",
         }
 
-    def _handle_json_error(self, e):
+    def _handle_json_error(self, e: Exception) -> dict[str, Any]:
         """Handle JSON decoding errors.
 
         Args:

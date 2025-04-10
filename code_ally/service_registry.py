@@ -12,7 +12,7 @@ class ServiceRegistry:
     _instance = None
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "ServiceRegistry":
         """Get the singleton instance of the ServiceRegistry.
 
         Returns:
@@ -26,7 +26,7 @@ class ServiceRegistry:
         """Initialize an empty service registry."""
         self._services = {}
 
-    def register(self, name, service) -> None:
+    def register(self, name: str, service: object) -> None:
         """Register a service with the given name.
 
         Args:
@@ -35,7 +35,7 @@ class ServiceRegistry:
         """
         self._services[name] = service
 
-    def get(self, name):
+    def get(self, name: str) -> object | None:
         """Get a service by name.
 
         Args:
@@ -46,7 +46,7 @@ class ServiceRegistry:
         """
         return self._services.get(name)
 
-    def has_service(self, name):
+    def has_service(self, name: str) -> bool:
         """Check if a service exists in the registry.
 
         Args:

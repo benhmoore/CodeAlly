@@ -15,6 +15,7 @@ from code_ally.tools.registry import register_tool
 @register_tool
 class GrepTool(BaseTool):
     """Tool for searching file contents with pattern matching and filtering capabilities."""
+
     name = "grep"
     description = """Search for a pattern in files with sophisticated filtering.
 
@@ -46,7 +47,7 @@ class GrepTool(BaseTool):
         replace: str = "",
         preview_replace: bool = False,
         max_results: int = 100,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Search for a pattern in files with enhanced filtering options.
@@ -219,28 +220,28 @@ class GrepTool(BaseTool):
 
                         # Handle search and replace
                         if (replace or preview_replace) and file_matches:
-                                new_content = regex.sub(replace, content)
-                                # Only add to replacements if content actually changed
-                                if new_content != content:
-                                    replacements.append(
-                                        {
-                                            "file": file_path,
-                                            "matches": len(file_matches),
-                                            "preview": self._get_replacement_preview(
-                                                content,
-                                                new_content,
-                                            ),
-                                        },
-                                    )
+                            new_content = regex.sub(replace, content)
+                            # Only add to replacements if content actually changed
+                            if new_content != content:
+                                replacements.append(
+                                    {
+                                        "file": file_path,
+                                        "matches": len(file_matches),
+                                        "preview": self._get_replacement_preview(
+                                            content,
+                                            new_content,
+                                        ),
+                                    },
+                                )
 
-                                    # If this is not just a preview, write changes back to file
-                                    if replace and not preview_replace:
-                                        with open(
-                                            file_path,
-                                            "w",
-                                            encoding="utf-8",
-                                        ) as f:
-                                            f.write(new_content)
+                                # If this is not just a preview, write changes back to file
+                                if replace and not preview_replace:
+                                    with open(
+                                        file_path,
+                                        "w",
+                                        encoding="utf-8",
+                                    ) as f:
+                                        f.write(new_content)
                     except Exception:
                         # Skip files that can't be read
                         continue

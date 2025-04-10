@@ -46,7 +46,7 @@ class BatchOperationTool(BaseTool):
         preview: bool = True,
         max_files: int = 100,
         create_backup: bool = True,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Execute a batch operation on multiple files.

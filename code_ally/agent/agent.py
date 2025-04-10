@@ -135,11 +135,11 @@ class Agent:
             # Qwen-Agent style single call
             tool_calls = [
                 {
-                        "id": f"manual-id-{int(time.time())}",
-                        "type": "function",
-                        "function": response["function_call"],
-                    },
-                ]
+                    "id": f"manual-id-{int(time.time())}",
+                    "type": "function",
+                    "function": response["function_call"],
+                },
+            ]
 
         if tool_calls:
             # Add assistant message with the tool calls
@@ -393,7 +393,7 @@ class Agent:
     def _format_tool_result_as_natural_language(
         self,
         tool_name: str,
-        result: Any,
+        result: dict[str, Any] | str,
     ) -> str:
         """Convert a tool result dict into a user-readable string if appropriate."""
         # First ensure result_str is definitely a string

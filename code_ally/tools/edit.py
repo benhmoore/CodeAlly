@@ -14,6 +14,7 @@ from code_ally.tools.registry import register_tool
 @register_tool
 class FileEditTool(BaseTool):
     """Tool for editing file contents with multiple editing modes."""
+
     name = "file_edit"
     description = """Edit an existing file with multiple editing modes.
 
@@ -39,7 +40,7 @@ class FileEditTool(BaseTool):
         regex_replacement: str = "",
         append: bool = False,
         prepend: bool = False,
-        **kwargs,
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
         """
         Edit an existing file using various editing modes.

@@ -4,6 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://github.com/benhmoore/code-ally/actions/workflows/tests.yml/badge.svg)](https://github.com/benhmoore/code-ally/actions/workflows/tests.yml)
+[![Lint](https://github.com/benhmoore/code-ally/actions/workflows/lint.yml/badge.svg)](https://github.com/benhmoore/code-ally/actions/workflows/lint.yml)
 
 A local LLM-powered pair programming assistant using function calling capabilities with Ollama. Code Ally helps you with coding tasks through natural language, providing tools for file operations, code searching, and executing shell commands - all while keeping your code and data local.
 
@@ -25,6 +27,10 @@ A local LLM-powered pair programming assistant using function calling capabiliti
     -   Flexible configuration via command line, slash commands, or config file
 -   **Multi-Step Planning:**
     -   Ability to plan and execute multi-step tasks interactively
+-   **Enhanced Context Awareness:**
+    -   Truncated directory tree generation for better project understanding
+    -   Configurable depth and file limits to conserve context window
+    -   Automatic exclusion of common patterns like node_modules, .git, etc.
 
 ## 📋 Prerequisites
 
@@ -135,7 +141,11 @@ The configuration file is a JSON file with the following structure:
     "auto_dump": false,
     "theme": "default",
     "compact_threshold": 95,
-    "show_token_usage": true
+    "show_token_usage": true,
+    
+    "dir_tree_enable": true,          // Enable directory tree in context
+    "dir_tree_max_depth": 3,          // Maximum directory depth to traverse
+    "dir_tree_max_files": 100         // Maximum files to show in tree
 }
 ```
 
@@ -235,6 +245,43 @@ Contributions are welcome. Here's how you can help:
 3. Commit your changes: `git commit -m 'Add amazing feature'`
 4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
+
+### Running Tests
+
+We use pytest for testing. To run the tests:
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest
+
+# Run tests with coverage report
+pytest --cov=code_ally tests/
+```
+
+The project uses GitHub Actions for continuous integration, which automatically runs tests and linting on pull requests.
+
+### Versioning and Releasing
+
+We use [bump2version](https://github.com/c4urself/bump2version) for version management:
+
+```bash
+# Install bump2version if needed
+pip install bump2version
+
+# Release a new patch version (e.g., 0.4.2 -> 0.4.3)
+bump2version patch
+
+# Release a new minor version (e.g., 0.4.2 -> 0.5.0)
+bump2version minor
+
+# Release a new major version (e.g., 0.4.2 -> 1.0.0)
+bump2version major
+```
+
+When a new tag is pushed to GitHub, our CI/CD pipeline automatically builds and publishes the package to PyPI.
 
 Please see the CONTRIBUTING.md file for detailed guidelines.
 

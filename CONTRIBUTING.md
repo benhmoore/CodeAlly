@@ -71,14 +71,62 @@ You can run all code style checks with the following commands:
 ```bash
 # Format code
 black . && isort .
+
+# Check code
+pylint code_ally tests
+mypy code_ally tests
 ```
+
+## Testing
+
+We use pytest for testing. Please include tests for any new functionality or bug fixes:
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with coverage report
+pytest --cov=code_ally tests/
+
+# Run specific test files
+pytest tests/test_specific_module.py
+```
+
+Our CI workflow will automatically run tests on your PR to ensure everything passes.
 
 ## Pull Request Process
 
 1. Ensure your code follows the style guidelines
-2. Update the README.md with details of changes if needed
-3. Create a pull request with a clear title and description
-4. Address any review comments and update your PR as needed
+2. Add tests for any new functionality or bug fixes
+3. Update the README.md with details of changes if needed
+4. Create a pull request with a clear title and description
+5. Verify that all CI checks pass
+6. Address any review comments and update your PR as needed
+
+## Versioning and Release Process
+
+We follow [Semantic Versioning](https://semver.org/) for this project.
+
+1. Use bump2version to increment the version number:
+
+    ```bash
+    # For a new patch release (bug fixes)
+    bump2version patch
+
+    # For a new minor release (new features, backwards compatible)
+    bump2version minor
+
+    # For a new major release (breaking changes)
+    bump2version major
+    ```
+
+2. Push the new commit and tag to GitHub:
+
+    ```bash
+    git push origin main --tags
+    ```
+
+3. The GitHub Actions workflow will automatically build and publish the new version to PyPI.
 
 ## Adding New Tools
 

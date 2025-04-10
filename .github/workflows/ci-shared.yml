@@ -1,0 +1,80 @@
+name: Shared CI Components
+
+# This workflow is meant to be reused by other workflows
+# It contains shared steps for CI processes
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: '3.11'
+      run-tests:
+        required: false
+        type: boolean
+        default: true
+      run-lint:
+        required: false
+        type: boolean
+        default: true
+      upload-coverage:
+        required: false
+        type: boolean
+        default: false
+      build-package:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CI: true  # Set CI environment variable to skip interactive tests
+
+jobs:
+  shared-ci:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        pip install -e .
+    
+    - name: Run tests
+      if: ${{ inputs.run-tests }}
+      run: |
+        pytest -xvs
+    
+    - name: Run tests with coverage
+      if: ${{ inputs.upload-coverage }}
+      run: |
+        pytest --cov=code_ally tests/
+    
+    - name: Upload coverage report
+      if: ${{ inputs.upload-coverage }}
+      uses: codecov/codecov-action@v3
+      
+    - name: Check code formatting and quality
+      if: ${{ inputs.run-lint }}
+      run: |
+        black --check .
+        isort --check-only --profile black .
+        pylint code_ally tests
+        mypy code_ally tests
+      
+    - name: Build package
+      if: ${{ inputs.build-package }}
+      run: |
+        pip install build twine
+        python -m build
+        twine check dist/*

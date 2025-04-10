@@ -109,7 +109,15 @@ class OllamaClient(ModelClient):
     def _get_qwen_template_options(
         self, messages: List[Dict[str, Any]], tools: Optional[List[Callable]] = None
     ) -> Dict[str, Any]:
-        """Generate Qwen-specific template options for function calling."""
+        """Generate Qwen-specific template options for function calling.
+        
+        Args:
+            messages: List of message dictionaries
+            tools: Optional list of tool functions
+            
+        Returns:
+            Dictionary with template options for Qwen models
+        """
         if not self.is_qwen_model:
             return {}
 
@@ -479,7 +487,14 @@ class OllamaClient(ModelClient):
             raise
 
     def _handle_request_error(self, e):
-        """Handle request exceptions."""
+        """Handle request exceptions.
+        
+        Args:
+            e: The exception that occurred
+            
+        Returns:
+            A formatted error response for the user
+        """
         logger.error(f"Error communicating with Ollama: {str(e)}")
         return {
             "role": "assistant",
@@ -487,7 +502,14 @@ class OllamaClient(ModelClient):
         }
 
     def _handle_json_error(self, e):
-        """Handle JSON decoding errors."""
+        """Handle JSON decoding errors.
+        
+        Args:
+            e: The JSON decoding exception
+            
+        Returns:
+            A formatted error response for the user
+        """
         logger.error(f"Invalid JSON response from Ollama API: {str(e)}")
         return {
             "role": "assistant",

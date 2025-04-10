@@ -57,6 +57,22 @@ class GlobTool(BaseTool):
         try:
             # Expand user home directory if present
             search_dir = os.path.expanduser(path)
+            
+            # Verify path doesn't contain traversal patterns
+            if ".." in search_dir or search_dir.startswith("/") or search_dir.startswith("~"):
+                # Convert to absolute path to verify CWD constraint
+                abs_path = os.path.abspath(search_dir)
+                cwd = os.path.abspath(os.getcwd())
+                
+                # If it's not within the current working directory, reject it
+                if not abs_path.startswith(cwd):
+                    return {
+                        "success": False,
+                        "files": [],
+                        "total_matches": 0,
+                        "limited": False,
+                        "error": f"Access denied: Path '{path}' is outside the current working directory. Operations are restricted to '{cwd}' and its subdirectories.",
+                    }
 
             if not os.path.exists(search_dir):
                 return {
@@ -76,11 +92,25 @@ class GlobTool(BaseTool):
                     "error": f"Path is not a directory: {search_dir}",
                 }
 
+            # Check if the pattern contains traversal attempts
+            if ".." in pattern or pattern.startswith("/") or pattern.startswith("~"):
+                return {
+                    "success": False,
+                    "files": [],
+                    "total_matches": 0,
+                    "limited": False,
+                    "error": f"Access denied: Pattern '{pattern}' contains path traversal patterns. Operations are restricted to the current working directory and its subdirectories.",
+                }
+                
             # Construct the glob pattern by joining the directory and pattern
             glob_pattern = os.path.join(search_dir, pattern)
 
             # Find all matching files
             files = glob.glob(glob_pattern, recursive=True)
+            
+            # Filter out any files outside the current working directory
+            cwd = os.path.abspath(os.getcwd())
+            files = [f for f in files if os.path.abspath(f).startswith(cwd)]
 
             # Sort by modification time (newest first)
             files.sort(key=os.path.getmtime, reverse=True)

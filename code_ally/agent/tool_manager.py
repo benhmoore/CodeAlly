@@ -36,71 +36,7 @@ class ToolManager:
         # Track recent tool calls to avoid redundancy
         self.recent_tool_calls: List[Tuple[str, Tuple]] = []
         self.max_recent_calls = 5  # Remember last 5 calls
-
-        # Initialize tool result formatters
-        self._init_tool_formatters()
-
-    def _init_tool_formatters(self):
-        """Initialize formatters for converting tool results to natural language."""
-        self.tool_formatters = {
-            # Filesystem tools
-            "file_read": self._format_file_read_result,
-            "file_write": self._format_file_write_result,
-            "file_edit": self._format_file_edit_result,
-            # Search tools
-            "glob": self._format_glob_result,
-            "grep": self._format_grep_result,
-            # Command execution
-            "bash": self._format_bash_result,
-            # General tools
-            "ls": self._format_ls_result,
-            "math": self._format_math_result,
-        }
-
-    def _format_file_read_result(self, result: Dict[str, Any]) -> str:
-        """Format file_read result as natural language."""
-        if not result.get("success", False):
-            return json.dumps(result)
-
-        content_length = len(result.get("content", ""))
-        return json.dumps(
-            {
-                "content": result.get("content", ""),
-                "description": f"Successfully read file with {content_length} characters",
-            }
-        )
-
-    def _format_file_write_result(self, result: Dict[str, Any]) -> str:
-        """Format file_write result as natural language."""
-        if result.get("success", False):
-            return json.dumps({"success": True, "message": "File written successfully"})
-        return json.dumps(result)
-
-    def _format_file_edit_result(self, result: Dict[str, Any]) -> str:
-        """Format file_edit result as natural language."""
-        if result.get("success", False):
-            return json.dumps({"success": True, "message": "File edited successfully"})
-        return json.dumps(result)
-
-    def _format_bash_result(self, result: Dict[str, Any]) -> str:
-        """Format bash result as natural language."""
-        return json.dumps(result)
-
-    def _format_glob_result(self, result: Dict[str, Any]) -> str:
-        """Format glob result as natural language."""
-        return json.dumps(result)
-
-    def _format_grep_result(self, result: Dict[str, Any]) -> str:
-        """Format grep result as natural language."""
-        return json.dumps(result)
-
-    def _format_ls_result(self, result: Dict[str, Any]) -> str:
-        """Format ls result as natural language."""
-        return json.dumps(result)
-
-    def _format_math_result(self, result: Dict[str, Any]) -> str:
-        """Format math result as natural language."""
-        return json.dumps(result)
+        self.current_turn_tool_calls: List[Tuple[str, Tuple]] = []  # For the current conversation turn only
 
     def get_function_definitions(self) -> List[Dict[str, Any]]:
         """Create function definitions for tools in the format expected by the LLM.
@@ -193,46 +129,22 @@ class ToolManager:
 
         return function_defs
 
-    def is_redundant_call(self, tool_name: str, arguments: Dict[str, Any]) -> bool:
-        """Check if a tool call is redundant.
-
-        Args:
-            tool_name: Name of the tool
-            arguments: Tool arguments
-
-        Returns:
-            Whether the call is redundant
-        """
-        current_call = (tool_name, tuple(sorted(arguments.items())))
-
-        # For LS tool, be even more strict
-        if tool_name == "ls" and any(
-            call[0] == "ls" for call in self.recent_tool_calls
-        ):
-            return True
-
-        # Check if this exact call has been made recently
-        return current_call in self.recent_tool_calls
-
-    def record_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> None:
-        """Record a tool call to avoid redundancy.
-
-        Args:
-            tool_name: Name of the tool
-            arguments: Tool arguments
-        """
-        current_call = (tool_name, tuple(sorted(arguments.items())))
-        self.recent_tool_calls.append(current_call)
-
-        # Keep only the most recent calls
-        if len(self.recent_tool_calls) > self.max_recent_calls:
-            self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
-
     def execute_tool(self, tool_name, arguments, check_context_msg=True, client_type=None, pre_approved=False):
-        """Execute a tool with the given arguments after checking trust."""
-        import time
+        """Execute a tool with the given arguments after checking trust.
         
-        start_time = time.time()
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Dictionary of arguments to pass to the tool
+            check_context_msg: Whether to remind about checking context for redundant calls
+            client_type: Optional client type to use for formatting results
+            pre_approved: Whether the operation was pre-approved in a batch
+            
+        Returns:
+            Dictionary containing the result of tool execution
+            
+        Raises:
+            PermissionDeniedError: If permission is denied for protected operations
+        """
         verbose_mode = self.ui and getattr(self.ui, "verbose", False)
         
         if verbose_mode:
@@ -274,14 +186,7 @@ class ToolManager:
         return self._perform_tool_execution(tool_name, arguments)
 
     def _is_valid_tool(self, tool_name):
-        """Check if a tool exists.
-        
-        Args:
-            tool_name: The name of the tool to check
-            
-        Returns:
-            Whether the tool exists
-        """
+        """Check if a tool exists."""
         valid = tool_name in self.tools
         
         if not valid and self.ui and getattr(self.ui, "verbose", False):
@@ -294,33 +199,20 @@ class ToolManager:
     def _is_redundant_call(self, tool_name, arguments):
         """Check if a tool call is redundant.
         
-        Args:
-            tool_name: The name of the tool
-            arguments: The arguments for the tool
-            
-        Returns:
-            Whether the call is redundant
+        Only considers calls made in the current conversation turn as redundant.
         """
+        # Create a hashable representation of the current call
         current_call = (tool_name, tuple(sorted(arguments.items())))
         
-        # For LS tool, be even more strict
-        if tool_name == "ls" and any(call[0] == "ls" for call in self.recent_tool_calls):
-            return True
-        
-        # Check if this exact call has been made recently
-        # return current_call in self.recent_tool_calls
+        # Only check for redundancy within the current conversation turn
+        return current_call in self.current_turn_tool_calls
         
     def _handle_redundant_call(self, tool_name, check_context_msg):
-        """Handle a redundant tool call.
-        
-        Args:
-            tool_name: The name of the tool
-            check_context_msg: Whether to include context check message
+        """Handle a redundant tool call."""
+        # Simple consistent message for redundancy
+        error_msg = f"Identical {tool_name} call was already executed in this conversation turn."
             
-        Returns:
-            Error result for redundant call
-        """
-        error_msg = f"Redundant call to {tool_name}. Directory was already shown."
+        # Add context check suggestion if enabled
         if check_context_msg:
             error_msg += " Please check your context for the previous result."
         
@@ -335,41 +227,16 @@ class ToolManager:
         }
         
     def _record_tool_call(self, tool_name, arguments):
-        """Record a tool call to avoid redundancy.
-        
-        Args:
-            tool_name: The name of the tool
-            arguments: The arguments for the tool
-        """
+        """Record a tool call to avoid redundancy."""
         current_call = (tool_name, tuple(sorted(arguments.items())))
-        self.recent_tool_calls.append(current_call)
         
-        # Keep only the most recent calls
+        # Add to both lists
+        self.recent_tool_calls.append(current_call)
+        self.current_turn_tool_calls.append(current_call)
+        
+        # Keep only the most recent calls in the history
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls:]
-            
-    def _check_permissions(self, tool_name, arguments, batch_id):
-        """Check if a tool has permission to execute.
-        
-        Args:
-            tool_name: The name of the tool
-            arguments: The arguments for the tool
-            batch_id: The batch ID for parallel tool calls
-            
-        Returns:
-            Whether permission is granted
-        """
-        tool = self.tools[tool_name]
-
-        if not tool.requires_confirmation:
-            return True
-
-        # Delegate to PermissionManager
-        try:
-            return self.permission_manager.check_permission(tool_name, arguments, batch_id)
-        except Exception:
-            # Let exceptions propagate upward
-            raise
         
     def _get_permission_path(self, tool_name, arguments):
         """Get the permission path for a tool."""
@@ -385,15 +252,7 @@ class ToolManager:
         return None
         
     def _perform_tool_execution(self, tool_name, arguments):
-        """Execute a tool with the given arguments.
-        
-        Args:
-            tool_name: The name of the tool
-            arguments: The arguments for the tool
-            
-        Returns:
-            The result of the tool execution
-        """
+        """Execute a tool with the given arguments."""
         import time
         
         tool = self.tools[tool_name]
@@ -417,9 +276,6 @@ class ToolManager:
             
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
             return result
-        except json.JSONDecodeError as json_exc:
-            logger.exception("Error parsing JSON in tool execution for %s", tool_name)
-            return self._create_error_result(f"JSON Error executing {tool_name}: {str(json_exc)}")
         except Exception as exc:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
@@ -429,14 +285,7 @@ class ToolManager:
             return self._create_error_result(f"Error executing {tool_name}: {str(exc)}")
         
     def _create_error_result(self, error_message):
-        """Create a standardized error result.
-        
-        Args:
-            error_message: The error message
-            
-        Returns:
-            Error result dictionary
-        """
+        """Create a standardized error result."""
         return {
             "success": False,
             "error": error_message,
@@ -445,15 +294,13 @@ class ToolManager:
     def format_tool_result(
         self, result: Dict[str, Any], client_type: str = None
     ) -> Dict[str, Any]:
-        """Format the tool result based on the client type.
+        """Format the tool result.
 
         Args:
             result: The result to format
-            client_type: The client type to use for formatting
+            client_type: The client type (unused)
 
         Returns:
-            The formatted result
+            The unmodified result
         """
-        client_type = client_type or self.client_type
-        # In the future, add any client-specific formatting logic here.
         return result

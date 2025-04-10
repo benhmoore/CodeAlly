@@ -9,4 +9,3 @@ pre-commit==4.2.0     # Pre-commit hooks
 build==1.0.3          # Build packaging
 twine==5.1.1         # Package publishing
 setuptools==78.1.0    # Package building
-bump2version==1.0.1   # Version management

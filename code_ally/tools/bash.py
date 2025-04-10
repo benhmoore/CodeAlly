@@ -1,7 +1,7 @@
 import logging
 import os
-import subprocess
 import shlex
+import subprocess
 from typing import Any, Dict, Optional
 
 from code_ally.tools.base import BaseTool
@@ -60,15 +60,17 @@ class BashTool(BaseTool):
         # Sanitize and log the command
         command = command.strip()
         logger.info(f"Executing command: {command}")
-        
+
         # Verify working directory is within allowed bounds
         if working_dir:
             try:
                 abs_working_dir = os.path.abspath(working_dir)
                 current_dir = os.path.abspath(os.getcwd())
-                
+
                 if not abs_working_dir.startswith(current_dir):
-                    logger.warning(f"Directory traversal attempt detected: {working_dir}")
+                    logger.warning(
+                        f"Directory traversal attempt detected: {working_dir}"
+                    )
                     return self._format_error_response(
                         f"Access denied: The working directory '{working_dir}' is outside "
                         f"the current working directory '{current_dir}'. Operations are "
@@ -107,7 +109,7 @@ class BashTool(BaseTool):
         try:
             # Prepare working directory
             work_dir = os.path.abspath(working_dir) if working_dir else None
-            
+
             # Run the command with timeout
             result = subprocess.run(
                 command,

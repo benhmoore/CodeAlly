@@ -9,16 +9,16 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from code_ally.llm_client import ModelClient
-from code_ally.trust import TrustManager, PermissionDeniedError
-from code_ally.agent.token_manager import TokenManager
-from code_ally.agent.ui_manager import UIManager
-from code_ally.agent.tool_manager import ToolManager
-from code_ally.agent.task_planner import TaskPlanner
 from code_ally.agent.command_handler import CommandHandler
 from code_ally.agent.error_handler import display_error
-from code_ally.service_registry import ServiceRegistry
 from code_ally.agent.permission_manager import PermissionManager
+from code_ally.agent.task_planner import TaskPlanner
+from code_ally.agent.token_manager import TokenManager
+from code_ally.agent.tool_manager import ToolManager
+from code_ally.agent.ui_manager import UIManager
+from code_ally.llm_client import ModelClient
+from code_ally.service_registry import ServiceRegistry
+from code_ally.trust import PermissionDeniedError, TrustManager
 
 logger = logging.getLogger(__name__)
 
@@ -51,28 +51,28 @@ class Agent:
         """
         # Use provided service registry or create one
         self.service_registry = service_registry or ServiceRegistry.get_instance()
-        
+
         # Store basic configuration
         self.model_client = model_client
         self.messages = []
         self.check_context_msg = check_context_msg
         self.auto_dump = auto_dump
         self.request_in_progress = False
-        
+
         # Determine client type
         self.client_type = client_type or "ollama"
-        
+
         # Create and register components
         self._initialize_components(tools, verbose)
-        
+
         # Optionally add an initial system prompt
         if system_prompt:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
-        
+
     def _initialize_components(self, tools, verbose):
         """Initialize and register all agent components.
-        
+
         Args:
             tools: List of available tools
             verbose: Whether to enable verbose mode
@@ -82,32 +82,32 @@ class Agent:
         self.ui.set_verbose(verbose)
         self.ui.agent = self
         self.service_registry.register("ui_manager", self.ui)
-        
+
         # Create Trust Manager
         self.trust_manager = TrustManager()
         self.service_registry.register("trust_manager", self.trust_manager)
-        
+
         # Create Permission Manager
         self.permission_manager = PermissionManager(self.trust_manager)
         self.service_registry.register("permission_manager", self.permission_manager)
-        
+
         # Create Token Manager
         self.token_manager = TokenManager(self.model_client.context_size)
         self.token_manager.ui = self.ui
         self.service_registry.register("token_manager", self.token_manager)
-        
+
         # Create Tool Manager
         self.tool_manager = ToolManager(tools, self.trust_manager)
         self.tool_manager.ui = self.ui
         self.tool_manager.client_type = self.client_type
         self.service_registry.register("tool_manager", self.tool_manager)
-        
+
         # Create Task Planner
         self.task_planner = TaskPlanner(self.tool_manager)
         self.task_planner.ui = self.ui
         self.task_planner.set_verbose(verbose)
         self.service_registry.register("task_planner", self.task_planner)
-        
+
         # Create Command Handler
         self.command_handler = CommandHandler(
             self.ui, self.token_manager, self.trust_manager
@@ -154,34 +154,36 @@ class Agent:
                 return
 
             # Get a follow-up response
-            follow_up_response = None 
+            follow_up_response = None
             was_interrupted = False
-            
+
             # Clear the current turn's tool calls for follow-up responses
             self.tool_manager.current_turn_tool_calls = []
 
             try:
-                self.request_in_progress = True # Signal that a request is starting
+                self.request_in_progress = True  # Signal that a request is starting
                 try:
                     follow_up_response = self.model_client.send(
                         self.messages,
                         functions=self.tool_manager.get_function_definitions(),
                         include_reasoning=self.ui.verbose,
                     )
-                    was_interrupted = follow_up_response.get('interrupted', False)
+                    was_interrupted = follow_up_response.get("interrupted", False)
                 except KeyboardInterrupt:
-                    logger.warning("KeyboardInterrupt caught during model_client.send call.")
+                    logger.warning(
+                        "KeyboardInterrupt caught during model_client.send call."
+                    )
                     was_interrupted = True
                 except Exception as e:
                     logger.error(f"Error during model_client.send: {e}", exc_info=True)
                     self.ui.print_error(f"Failed to get response from model: {e}")
             finally:
-                self.request_in_progress = False # Ensure flag is always reset
+                self.request_in_progress = False  # Ensure flag is always reset
 
             if was_interrupted:
                 self.ui.stop_thinking_animation()
                 self.ui.print_content("[yellow]Request interrupted by user[/]")
-                return 
+                return
 
             if follow_up_response:
                 # Define the interruption marker message
@@ -192,12 +194,15 @@ class Agent:
                 ]
 
                 response_content = follow_up_response.get("content", "").strip()
-                was_interrupted = follow_up_response.get("interrupted", False) or response_content in interruption_markers
+                was_interrupted = (
+                    follow_up_response.get("interrupted", False)
+                    or response_content in interruption_markers
+                )
                 if was_interrupted:
                     self.ui.stop_thinking_animation()
                     self.ui.print_content("[yellow]Request interrupted by user[/]")
                     return
-                    
+
                 if self.ui.verbose:
                     has_tool_calls = (
                         "tool_calls" in follow_up_response
@@ -227,7 +232,7 @@ class Agent:
             self.messages.append(response)
             self.token_manager.update_token_count(self.messages)
             self.ui.print_assistant_response(content)
-    
+
     def _normalize_tool_call(
         self, tool_call: Dict[str, Any]
     ) -> Tuple[str, str, Dict[str, Any]]:
@@ -281,20 +286,22 @@ class Agent:
                     )
                 except PermissionDeniedError:
                     # User denied permission, add a special message to history
-                    self.messages.append({
-                        "role": "assistant",
-                        "content": "[Request interrupted by user due to permission denial]"
-                    })
+                    self.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": "[Request interrupted by user due to permission denial]",
+                        }
+                    )
                     self.token_manager.update_token_count(self.messages)
                     raise  # Re-raise to exit the entire process
-                
+
                 # Check for errors and provide acknowledgement if needed
                 if not raw_result.get("success", False):
                     error_msg = raw_result.get("error", "Unknown error")
-                    
+
                     # Display formatted error with suggestions
                     display_error(self.ui, error_msg, tool_name, arguments)
-                
+
                 result = self.tool_manager.format_tool_result(
                     raw_result, self.client_type
                 )
@@ -309,44 +316,55 @@ class Agent:
                     "name": tool_name,
                     "content": content,
                 }
-                
+
                 # Check for duplicate file reads (from file_read tool)
                 previous_message_id = None
-                if (tool_name == "file_read" and raw_result.get("_needs_duplicate_check") and 
-                    raw_result.get("file_path") and raw_result.get("success", False)):
+                if (
+                    tool_name == "file_read"
+                    and raw_result.get("_needs_duplicate_check")
+                    and raw_result.get("file_path")
+                    and raw_result.get("success", False)
+                ):
                     # Check if we've seen this file before
                     file_path = raw_result.get("file_path")
                     file_content = content
-                    
+
                     # If we register the file and it already exists, we'll get back the previous message ID
                     previous_message_id = self.token_manager.register_file_read(
                         file_path, file_content, call_id
                     )
-                    
-                    if previous_message_id and self.ui and getattr(self.ui, "verbose", False):
+
+                    if (
+                        previous_message_id
+                        and self.ui
+                        and getattr(self.ui, "verbose", False)
+                    ):
                         self.ui.console.print(
                             f"[dim yellow][Verbose] Detected duplicate file read for {file_path}. "
                             f"Removing previous version from context.[/]"
                         )
-                
+
                 # Check if we need to remove a previous file read from context
                 if previous_message_id:
                     # Filter out the previous message with this content
                     self.messages = [
-                        msg for msg in self.messages 
-                        if not (msg.get("role") == "tool" and 
-                               msg.get("tool_call_id") == previous_message_id)
+                        msg
+                        for msg in self.messages
+                        if not (
+                            msg.get("role") == "tool"
+                            and msg.get("tool_call_id") == previous_message_id
+                        )
                     ]
-                
+
                 # Add to history
                 self.messages.append(tool_message)
-                
+
                 # If we removed a previous message, update token count immediately
                 if previous_message_id:
                     # Clear token cache to ensure accurate token count after removal
                     self.token_manager.clear_cache()
                     self.token_manager.update_token_count(self.messages)
-                    
+
                     if self.ui and getattr(self.ui, "verbose", False):
                         token_pct = self.token_manager.get_token_percentage()
                         self.ui.console.print(
@@ -443,17 +461,19 @@ class Agent:
 
             # Check for special messages after permission denial
             last_message = self.messages[-1] if self.messages else None
-            if (last_message and last_message.get("role") == "assistant" and
-                last_message.get("content", "").strip() == "[Request interrupted by user due to permission denial]"):
+            if (
+                last_message
+                and last_message.get("role") == "assistant"
+                and last_message.get("content", "").strip()
+                == "[Request interrupted by user due to permission denial]"
+            ):
                 # Replace the permission denial message with a more useful one
                 self.messages[-1] = {
                     "role": "assistant",
-                    "content": "I understand you denied permission. Let me know how I can better assist you."
+                    "content": "I understand you denied permission. Let me know how I can better assist you.",
                 }
 
-            self.messages.append(
-                {"role": "user", "content": user_input}
-            )
+            self.messages.append({"role": "user", "content": user_input})
 
             self.token_manager.update_token_count(self.messages)
 
@@ -471,9 +491,9 @@ class Agent:
                     f"{tokens} tokens, {functions_count} available functions[/]"
                 )
 
-            response = None 
+            response = None
             was_interrupted = False
-            
+
             # Clear the current turn's tool calls at the start of each new conversation turn
             self.tool_manager.current_turn_tool_calls = []
 
@@ -485,9 +505,11 @@ class Agent:
                         functions=self.tool_manager.get_function_definitions(),
                         include_reasoning=self.ui.verbose,
                     )
-                    was_interrupted = response.get('interrupted', False)
+                    was_interrupted = response.get("interrupted", False)
                 except KeyboardInterrupt:
-                    logger.warning("KeyboardInterrupt caught during model_client.send call.")
+                    logger.warning(
+                        "KeyboardInterrupt caught during model_client.send call."
+                    )
                     was_interrupted = True
                 except Exception as e:
                     logger.error(f"Error during model_client.send: {e}", exc_info=True)
@@ -511,7 +533,10 @@ class Agent:
                 ]
 
                 response_content = response.get("content", "").strip()
-                was_interrupted = response.get("interrupted", False) or response_content in interruption_markers
+                was_interrupted = (
+                    response.get("interrupted", False)
+                    or response_content in interruption_markers
+                )
 
                 if was_interrupted:
                     self.ui.stop_thinking_animation()

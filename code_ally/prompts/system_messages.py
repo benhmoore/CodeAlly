@@ -6,11 +6,11 @@ and functions for dynamically providing tool-specific guidance. Tool guidance
 details are modularized under the 'tool_guidance' package.
 """
 
-from typing import Dict, Optional, List
-from datetime import datetime
 import os
 import platform
 import sys
+from datetime import datetime
+from typing import Dict, List, Optional
 
 # --- Core Agent Directives ---
 
@@ -88,6 +88,7 @@ def get_main_system_prompt() -> str:
     """
     # Import here to avoid circular imports
     from code_ally.tools import ToolRegistry
+
     tool_list = ToolRegistry().get_tools_for_prompt()
 
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -103,23 +104,26 @@ def get_main_system_prompt() -> str:
     if working_dir:
         try:
             # Import here to avoid circular imports
-            from code_ally.prompts.directory_utils import generate_truncated_tree, get_gitignore_patterns
             from code_ally.prompts.directory_config import get_directory_tree_config
-            
+            from code_ally.prompts.directory_utils import (
+                generate_truncated_tree,
+                get_gitignore_patterns,
+            )
+
             # Get directory tree configuration
             dir_config = get_directory_tree_config()
-            
+
             # Only generate tree if enabled
             if dir_config["enabled"]:
                 # Get .gitignore patterns to exclude
                 exclude_patterns = get_gitignore_patterns(working_dir)
-                
+
                 # Generate a truncated directory tree using config values
                 directory_tree = generate_truncated_tree(
                     working_dir,
                     max_depth=dir_config["max_depth"],
                     max_files=dir_config["max_files"],
-                    exclude_patterns=exclude_patterns
+                    exclude_patterns=exclude_patterns,
                 )
         except Exception as e:
             directory_tree = f"Unable to generate directory tree: {str(e)}"

@@ -3,11 +3,11 @@
 Operations for managing directories and project structure.
 """
 
+import fnmatch
+import json
 import os
 import re
 import shutil
-import fnmatch
-import json
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from code_ally.tools.base import BaseTool
@@ -87,7 +87,7 @@ class DirectoryTool(BaseTool):
                 return {
                     "success": False,
                     "error": f"Access denied: The path '{path}' is outside the current working directory. "
-                            f"Operations are restricted to '{cwd}' and its subdirectories.",
+                    f"Operations are restricted to '{cwd}' and its subdirectories.",
                     "changes": [],
                     "analysis": {},
                 }
@@ -107,7 +107,7 @@ class DirectoryTool(BaseTool):
                     return {
                         "success": False,
                         "error": f"Access denied: The destination path '{dest_path}' is outside the current working directory. "
-                                f"Operations are restricted to '{cwd}' and its subdirectories.",
+                        f"Operations are restricted to '{cwd}' and its subdirectories.",
                         "changes": [],
                         "analysis": {},
                     }

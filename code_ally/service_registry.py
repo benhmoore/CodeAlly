@@ -1,18 +1,20 @@
 """Service registry for dependency injection and service management."""
 
+
 class ServiceRegistry:
     """Registry for managing services with a singleton pattern.
-    
+
     This class provides a central registry for services that can be
     accessed throughout the application. It uses a singleton pattern
     to ensure only one instance exists.
     """
+
     _instance = None
 
     @classmethod
     def get_instance(cls):
         """Get the singleton instance of the ServiceRegistry.
-        
+
         Returns:
             ServiceRegistry: The singleton instance
         """
@@ -26,7 +28,7 @@ class ServiceRegistry:
 
     def register(self, name, service):
         """Register a service with the given name.
-        
+
         Args:
             name: The name to register the service under
             service: The service instance to register
@@ -35,21 +37,21 @@ class ServiceRegistry:
 
     def get(self, name):
         """Get a service by name.
-        
+
         Args:
             name: The name of the service to retrieve
-            
+
         Returns:
             The service instance or None if not found
         """
         return self._services.get(name)
-        
+
     def has_service(self, name):
         """Check if a service exists in the registry.
-        
+
         Args:
             name: The name of the service to check
-            
+
         Returns:
             bool: True if the service exists, False otherwise
         """

@@ -5,15 +5,18 @@ in the CodeAlly system.
 """
 
 import os
-import pytest
-from unittest.mock import MagicMock
 
 # Add the root directory to the path for direct imports
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from unittest.mock import MagicMock
+
+import pytest
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
+
 setup_mocks()
 
 from code_ally.tools.base import BaseTool
@@ -22,11 +25,11 @@ from code_ally.tools.base import BaseTool
 # Create concrete tool classes for testing
 class ValidTool(BaseTool):
     """A valid tool implementation for testing."""
-    
+
     name = "valid_tool"
     description = "A valid tool for testing"
     requires_confirmation = False
-    
+
     def execute(self, param1=None, param2=None):
         """Execute the valid tool."""
         return self._format_success_response(result="Tool executed")
@@ -34,10 +37,10 @@ class ValidTool(BaseTool):
 
 class NoNameTool(BaseTool):
     """A tool without a name."""
-    
+
     description = "A tool without a name"
     requires_confirmation = False
-    
+
     def execute(self):
         """Execute the tool."""
         return self._format_success_response()
@@ -45,10 +48,10 @@ class NoNameTool(BaseTool):
 
 class NoDescriptionTool(BaseTool):
     """A tool without a description."""
-    
+
     name = "no_description_tool"
     requires_confirmation = False
-    
+
     def execute(self):
         """Execute the tool."""
         return self._format_success_response()
@@ -56,10 +59,10 @@ class NoDescriptionTool(BaseTool):
 
 class NoConfirmationTool(BaseTool):
     """A tool without a requires_confirmation attribute."""
-    
+
     name = "no_confirmation_tool"
     description = "A tool without a requires_confirmation attribute"
-    
+
     def execute(self):
         """Execute the tool."""
         return self._format_success_response()
@@ -67,7 +70,7 @@ class NoConfirmationTool(BaseTool):
 
 class NoExecuteTool(BaseTool):
     """A tool without an execute method implementation."""
-    
+
     name = "no_execute_tool"
     description = "A tool without an execute method implementation"
     requires_confirmation = False
@@ -105,11 +108,11 @@ def test_tool_without_confirmation_flag():
 def test_abstract_execute_method():
     """Test that the abstract execute method raises NotImplementedError."""
     tool = ValidTool()
-    
-    # Check that BaseTool.execute raises NotImplementedError 
+
+    # Check that BaseTool.execute raises NotImplementedError
     with pytest.raises(NotImplementedError):
         BaseTool.execute(tool)
-    
+
     # Check that NoExecuteTool can't be instantiated because execute is not implemented
     with pytest.raises(TypeError):
         NoExecuteTool()
@@ -118,9 +121,9 @@ def test_abstract_execute_method():
 def test_format_error_response():
     """Test formatting an error response."""
     tool = ValidTool()
-    
+
     response = tool._format_error_response("Test error message")
-    
+
     assert response["success"] is False
     assert response["error"] == "Test error message"
 
@@ -128,16 +131,15 @@ def test_format_error_response():
 def test_format_success_response():
     """Test formatting a success response."""
     tool = ValidTool()
-    
+
     # Simple success response
     response = tool._format_success_response()
     assert response["success"] is True
     assert response["error"] == ""
-    
+
     # Success response with additional fields
     response = tool._format_success_response(
-        result="Test result",
-        data={"key": "value"}
+        result="Test result", data={"key": "value"}
     )
     assert response["success"] is True
     assert response["error"] == ""
@@ -148,8 +150,8 @@ def test_format_success_response():
 def test_execute_implementation():
     """Test that the execute method can be implemented and called correctly."""
     tool = ValidTool()
-    
+
     response = tool.execute(param1="test1", param2="test2")
-    
+
     assert response["success"] is True
     assert response["result"] == "Tool executed"

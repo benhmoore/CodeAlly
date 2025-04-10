@@ -23,8 +23,8 @@ from code_ally.agent import Agent
 from code_ally.config import DEFAULT_CONFIG, ConfigManager
 from code_ally.llm_client import OllamaClient
 from code_ally.prompts import get_main_system_prompt
-from code_ally.tools import ToolRegistry
 from code_ally.service_registry import ServiceRegistry
+from code_ally.tools import ToolRegistry
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +39,7 @@ logger = logging.getLogger("code_ally")
 # Ctrl+C during requests vs. Ctrl+C when idle.
 _global_agent: Optional[Agent] = None
 
+
 def handle_interrupt(signum, frame):
     """Handle keyboard interrupt (SIGINT) signals.
 
@@ -49,10 +50,12 @@ def handle_interrupt(signum, frame):
     global _global_agent
 
     # Check if an agent exists and if its request_in_progress flag is set
-    if (_global_agent and getattr(_global_agent, 'request_in_progress', False)):
+    if _global_agent and getattr(_global_agent, "request_in_progress", False):
         # If a request is in progress, we now want to propagate the signal
         # to the OllamaClient which will handle it properly
-        logger.debug("SIGINT caught by main handler during request. Propagating to client...")
+        logger.debug(
+            "SIGINT caught by main handler during request. Propagating to client..."
+        )
         # We don't return here - let the signal propagate to the client
     else:
         # If no request is active, exit gracefully
@@ -60,6 +63,7 @@ def handle_interrupt(signum, frame):
         console = Console()
         console.print("\n[bold]Goodbye![/]")
         sys.exit(0)
+
 
 def configure_logging(verbose: bool) -> None:
     """Configure logging level based on verbose flag.
@@ -361,7 +365,7 @@ def main() -> None:
         temperature=args.temperature,
         context_size=args.context_size,
         max_tokens=args.max_tokens,
-        keep_alive=60 # seconds
+        keep_alive=60,  # seconds
     )
 
     # Get tools from the registry
@@ -384,7 +388,7 @@ def main() -> None:
         verbose=args.verbose,
         check_context_msg=args.check_context_msg,
         auto_dump=args.auto_dump,
-        service_registry=service_registry
+        service_registry=service_registry,
     )
 
     # Set debug options
@@ -397,7 +401,7 @@ def main() -> None:
         logger.warning("Auto-confirm mode enabled - will skip all confirmation prompts")
 
     # Set up the global agent reference for the signal handler
-    global _global_agent # Use global scope for the signal handler's access
+    global _global_agent  # Use global scope for the signal handler's access
     _global_agent = agent
 
     # Install signal handler for SIGINT (Ctrl+C)

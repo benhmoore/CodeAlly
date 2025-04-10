@@ -3,6 +3,9 @@
 Simple version management script.
 
 This script updates the version in code_ally/_version.py and creates a git tag.
+The version in pyproject.toml is dynamically linked to _version.py, so only one
+update is needed.
+
 Usage:
     python tools/version.py patch  # Increments 0.4.5 to 0.4.6
     python tools/version.py minor  # Increments 0.4.5 to 0.5.0
@@ -99,8 +102,11 @@ def main():
 
         print(f"Current version: {current_version}")
         print(f"New version: {new_version}")
+        print(
+            "\nNOTE: Since pyproject.toml uses dynamic versioning, only _version.py needs updating."
+        )
 
-        confirm = input("Continue? [y/N] ")
+        confirm = input("\nContinue? [y/N] ")
         if confirm.lower() != "y":
             print("Aborting")
             return 0

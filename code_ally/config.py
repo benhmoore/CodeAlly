@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "qwen_template": "qwen2.5_function_calling",
     "qwen_parallel_calls": True,
     "qwen_parallel_calls_explicit": False,  # Whether explicitly set by user
-    "qwen_chinese": False, 
+    "qwen_chinese": False,
     "qwen_chinese_explicit": False,  # Whether explicitly set by user
     "dump_dir": "ally",
     "auto_dump": False,
@@ -176,6 +176,7 @@ def save_config(config: Dict[str, Any]) -> None:
 
 class ConfigManager:
     """Singleton manager for configuration settings."""
+
     _instance = None
     _config = None
 

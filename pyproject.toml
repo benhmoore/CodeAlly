@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "code_ally"
-version = "0.4.5"
+dynamic = ["version"]
 description = "A local LLM-powered pair programming assistant"
 readme = "README.md"
 authors = [
@@ -45,6 +45,9 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "*" = ["*.md", "*.ini"]
+
+[tool.setuptools.dynamic]
+version = {attr = "code_ally._version.__version__"}
 
 [project.optional-dependencies]
 dev = [

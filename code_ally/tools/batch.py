@@ -3,10 +3,10 @@
 Execute operations on multiple files with filtering and pattern matching.
 """
 
-import os
-import re
 import fnmatch
 import glob as glob_mod
+import os
+import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from code_ally.tools.base import BaseTool

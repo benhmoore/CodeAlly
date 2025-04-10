@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -37,7 +37,7 @@ class FileReadTool(BaseTool):
     ) -> Dict[str, Any]:
         """
         Read the contents of a file with options to target specific sections or search results.
-        
+
         Tracks file content hashes to ensure only one copy of a file is kept in conversation
         context at a time. If a file is read multiple times, earlier instances are removed.
 
@@ -150,17 +150,18 @@ class FileReadTool(BaseTool):
                 "error": "",
                 "file_path": file_path,  # Include the file path for tracking
             }
-            
+
             # Check for duplicate file content by getting service registry
             from code_ally.service_registry import ServiceRegistry
+
             service_registry = ServiceRegistry.get_instance()
-            
+
             # If token manager is available, check for duplicates
             if service_registry and service_registry.has_service("token_manager"):
                 token_manager = service_registry.get("token_manager")
                 # Note: message_id will be assigned by the agent when processing the tool response
                 result["_needs_duplicate_check"] = True
-            
+
             return result
         except Exception as exc:
             return {

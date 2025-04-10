@@ -51,7 +51,11 @@ class FileWriteTool(BaseTool):
         variables = kwargs.get("variables")
         if not isinstance(variables, dict) and variables is not None:
             variables = None
-        line_insert = int(kwargs.get("line_insert", -1)) if kwargs.get("line_insert") is not None else -1
+        line_insert = (
+            int(kwargs.get("line_insert", -1))
+            if kwargs.get("line_insert") is not None
+            else -1
+        )
         create_backup = bool(kwargs.get("create_backup", False))
         format_str = str(kwargs.get("format", ""))
         """

@@ -47,14 +47,18 @@ class GlobTool(BaseTool):
         """
         pattern = str(kwargs.get("pattern", ""))
         path = str(kwargs.get("path", "."))
-        
+
         limit_val = kwargs.get("limit", 20)
         limit = int(limit_val) if isinstance(limit_val, int | str | float) else 20
-        
+
         show_content = bool(kwargs.get("show_content", False))
-        
+
         content_lines_val = kwargs.get("content_lines", 10)
-        content_lines = int(content_lines_val) if isinstance(content_lines_val, int | str | float) else 10
+        content_lines = (
+            int(content_lines_val)
+            if isinstance(content_lines_val, int | str | float)
+            else 10
+        )
         """
         Find files matching a glob pattern with content preview options to save context.
 

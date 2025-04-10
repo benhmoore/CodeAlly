@@ -51,17 +51,23 @@ class GrepTool(BaseTool):
         include = str(kwargs.get("include", "*"))
         exclude = str(kwargs.get("exclude", ""))
         file_types = str(kwargs.get("file_types", ""))
-        
+
         max_depth_val = kwargs.get("max_depth", -1)
-        max_depth = int(max_depth_val) if isinstance(max_depth_val, int | str | float) else -1
-        
+        max_depth = (
+            int(max_depth_val) if isinstance(max_depth_val, int | str | float) else -1
+        )
+
         case_sensitive = bool(kwargs.get("case_sensitive", False))
         whole_words = bool(kwargs.get("whole_words", False))
         replace = str(kwargs.get("replace", ""))
         preview_replace = bool(kwargs.get("preview_replace", False))
-        
+
         max_results_val = kwargs.get("max_results", 100)
-        max_results = int(max_results_val) if isinstance(max_results_val, int | str | float) else 100
+        max_results = (
+            int(max_results_val)
+            if isinstance(max_results_val, int | str | float)
+            else 100
+        )
         """
         Search for a pattern in files with enhanced filtering options.
 

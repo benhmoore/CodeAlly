@@ -29,7 +29,9 @@ class UIManager:
         self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
         self.thinking_event = threading.Event()
         self.verbose = False
-        self.active_live_display: Live | None = None  # Track the current active Live display
+        self.active_live_display: Live | None = (
+            None  # Track the current active Live display
+        )
         self.plan_tasks_table: Table | None = None
         self.plan_panel: Panel | None = None
         self.plan_panel_group: Any | None = None
@@ -302,7 +304,7 @@ Use up/down arrow keys to navigate through command history.
         table.add_column("Description", style="yellow")
         table.add_column("Dependencies", style="blue")
         table.add_column("Conditional", style="magenta")
-        
+
         self.plan_tasks_table = table
 
         # Create the header text

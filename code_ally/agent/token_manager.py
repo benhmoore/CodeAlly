@@ -76,7 +76,9 @@ class TokenManager:
                 function_call = message["function_call"]
                 # Count function name
                 if "name" in function_call:
-                    message_tokens += int(len(function_call["name"]) / self.chars_per_token)
+                    message_tokens += int(
+                        len(function_call["name"]) / self.chars_per_token,
+                    )
                 # Count arguments
                 if "arguments" in function_call:
                     message_tokens += int(

@@ -81,14 +81,21 @@ def tools() -> list[BaseTool]:
 
 
 @pytest.fixture
-def tool_manager(tools: list[BaseTool], trust_manager: MagicMock, permission_manager: MagicMock) -> ToolManager:
+def tool_manager(
+    tools: list[BaseTool],
+    trust_manager: MagicMock,
+    permission_manager: MagicMock,
+) -> ToolManager:
     """Create a tool manager instance for testing."""
     manager = ToolManager(tools, trust_manager, permission_manager)
     manager.ui = MagicMock()
     return manager
 
 
-def test_tool_manager_initialization(tool_manager: ToolManager, tools: list[BaseTool]) -> None:
+def test_tool_manager_initialization(
+    tool_manager: ToolManager,
+    tools: list[BaseTool],
+) -> None:
     """Test that the tool manager initializes correctly."""
     # Check that the tools were registered
     assert len(tool_manager.tools) == 2
@@ -138,7 +145,10 @@ def test_execute_tool_basic(tool_manager: ToolManager) -> None:
     assert "Executed with value1 and value2" in result["result"]
 
 
-def test_execute_tool_with_permission(tool_manager: ToolManager, trust_manager: MagicMock) -> None:
+def test_execute_tool_with_permission(
+    tool_manager: ToolManager,
+    trust_manager: MagicMock,
+) -> None:
     """Test tool execution that requires permission."""
     # Execute a protected tool
     result = tool_manager.execute_tool("protected_tool", {"path": "/test/path"})
@@ -152,7 +162,10 @@ def test_execute_tool_with_permission(tool_manager: ToolManager, trust_manager: 
     assert "Protected operation on /test/path" in result["result"]
 
 
-def test_execute_tool_permission_denied(tool_manager: ToolManager, trust_manager: MagicMock) -> None:
+def test_execute_tool_permission_denied(
+    tool_manager: ToolManager,
+    trust_manager: MagicMock,
+) -> None:
     """Test tool execution when permission is denied."""
     # Set up the trust manager to deny permission
     trust_manager.prompt_for_permission.side_effect = PermissionDeniedError(

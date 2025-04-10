@@ -48,16 +48,24 @@ class FileReadTool(BaseTool):
         """
         path = str(kwargs.get("path", ""))
         start_line_val = kwargs.get("start_line", 0)
-        start_line = int(start_line_val) if isinstance(start_line_val, int | str | float) else 0
-        
+        start_line = (
+            int(start_line_val) if isinstance(start_line_val, int | str | float) else 0
+        )
+
         max_lines_val = kwargs.get("max_lines", 0)
-        max_lines = int(max_lines_val) if isinstance(max_lines_val, int | str | float) else 0
-        
+        max_lines = (
+            int(max_lines_val) if isinstance(max_lines_val, int | str | float) else 0
+        )
+
         search_pattern = str(kwargs.get("search_pattern", ""))
-        
+
         context_lines_val = kwargs.get("context_lines", 3)
-        context_lines = int(context_lines_val) if isinstance(context_lines_val, int | str | float) else 3
-        
+        context_lines = (
+            int(context_lines_val)
+            if isinstance(context_lines_val, int | str | float)
+            else 3
+        )
+
         from_delimiter = str(kwargs.get("from_delimiter", ""))
         to_delimiter = str(kwargs.get("to_delimiter", ""))
         section_pattern = str(kwargs.get("section_pattern", ""))

@@ -94,7 +94,7 @@ class Agent:
 
         # Create Token Manager
         # Get context size from model client if available
-        context_size = getattr(self.model_client, 'context_size', 8192)
+        context_size = getattr(self.model_client, "context_size", 8192)
         self.token_manager = TokenManager(context_size)
         self.token_manager.ui = self.ui
         self.service_registry.register("token_manager", self.token_manager)

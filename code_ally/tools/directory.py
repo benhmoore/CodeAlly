@@ -781,7 +781,9 @@ class DirectoryTool(BaseTool):
                         ext_count = analysis["file_extensions"][ext]["count"]
                         ext_size = analysis["file_extensions"][ext]["size"]
                         analysis["file_extensions"][ext]["count"] = int(ext_count) + 1
-                        analysis["file_extensions"][ext]["size"] = int(ext_size) + file_size
+                        analysis["file_extensions"][ext]["size"] = (
+                            int(ext_size) + file_size
+                        )
                     else:
                         analysis["file_extensions"][ext] = {
                             "count": 1,
@@ -793,8 +795,12 @@ class DirectoryTool(BaseTool):
                     if language in analysis["language_stats"]:
                         lang_count = analysis["language_stats"][language]["count"]
                         lang_size = analysis["language_stats"][language]["size"]
-                        analysis["language_stats"][language]["count"] = int(lang_count) + 1
-                        analysis["language_stats"][language]["size"] = int(lang_size) + file_size
+                        analysis["language_stats"][language]["count"] = (
+                            int(lang_count) + 1
+                        )
+                        analysis["language_stats"][language]["size"] = (
+                            int(lang_size) + file_size
+                        )
                     else:
                         analysis["language_stats"][language] = {
                             "count": 1,

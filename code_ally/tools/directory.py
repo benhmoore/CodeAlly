@@ -1,4 +1,4 @@
-"""File: directory.py
+"""File: directory.py.
 
 Operations for managing directories and project structure.
 """
@@ -394,7 +394,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -531,7 +530,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -869,7 +867,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -1137,7 +1134,7 @@ class DirectoryTool(BaseTool):
                 return os.path.join(base_path, "test", filename)
 
         # 2. Check if there's a direct path match
-        for struct_path, struct_value in self._flatten_structure(structure).items():
+        for struct_path, _struct_value in self._flatten_structure(structure).items():
             if file_info["path"] == struct_path or filename == struct_path:
                 # Direct match
                 return os.path.join(base_path, struct_path)

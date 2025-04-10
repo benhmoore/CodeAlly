@@ -416,9 +416,7 @@ Use up/down arrow keys to navigate through command history.
         self._thinking_thread.start()
 
     def stop_plan_thinking(self) -> None:
-        """
-        Stop the plan spinner thread, restore the title back to normal.
-        """
+        """Stop the plan spinner thread, restore the title back to normal."""
         self._stop_thinking_flag = True
         if self._thinking_thread and self._thinking_thread.is_alive():
             self._thinking_thread.join(timeout=2.0)

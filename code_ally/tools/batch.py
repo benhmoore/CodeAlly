@@ -1,4 +1,4 @@
-"""File: batch.py
+"""File: batch.py.
 
 Execute operations on multiple files with filtering and pattern matching.
 """

@@ -6,7 +6,7 @@ import re
 import signal
 import time
 from collections.abc import Callable
-from typing import Any, Union
+from typing import Any, NoReturn, Union
 
 import requests
 
@@ -30,7 +30,7 @@ class OllamaClient(ModelClient):
         context_size: int = 16000,
         max_tokens: int = 5000,
         keep_alive: int | None = None,
-    ):
+    ) -> None:
         """Initialize the Ollama client."""
         self._endpoint = endpoint
         self._model_name = model_name
@@ -351,7 +351,7 @@ class OllamaClient(ModelClient):
             # Set up keyboard interrupt handler for this request
             original_sigint_handler = signal.getsignal(signal.SIGINT)
 
-            def sigint_handler(sig, frame):
+            def sigint_handler(sig, frame) -> NoReturn:
                 logger.warning(
                     "SIGINT received during request. Interrupting Ollama request.",
                 )

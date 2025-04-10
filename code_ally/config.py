@@ -187,7 +187,7 @@ class ConfigManager:
             cls._instance = cls()
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the configuration manager."""
         # Only load config once
         if ConfigManager._config is None:
@@ -203,7 +203,7 @@ class ConfigManager:
             default = DEFAULT_CONFIG.get(key)
         return ConfigManager._config.get(key, default)
 
-    def set_value(self, key, value):
+    def set_value(self, key, value) -> None:
         """Set a specific configuration value."""
         # Validate the value type
         if key in CONFIG_TYPES:

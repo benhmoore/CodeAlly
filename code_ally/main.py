@@ -38,7 +38,7 @@ logger = logging.getLogger("code_ally")
 _global_agent: Agent | None = None
 
 
-def handle_interrupt(signum, frame):
+def handle_interrupt(signum, frame) -> None:
     """Handle keyboard interrupt (SIGINT) signals.
 
     - If an LLM request is in progress, let the exception propagate to the OllamaClient

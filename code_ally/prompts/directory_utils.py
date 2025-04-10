@@ -82,10 +82,7 @@ def generate_truncated_tree(
     def should_exclude(path: str) -> bool:
         """Check if a path should be excluded based on patterns."""
         basename = os.path.basename(path)
-        for pattern in exclude_patterns:
-            if fnmatch.fnmatch(basename, pattern):
-                return True
-        return False
+        return any(fnmatch.fnmatch(basename, pattern) for pattern in exclude_patterns)
 
     def walk_directory(
         current_path: str,

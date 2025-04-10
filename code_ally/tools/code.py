@@ -342,10 +342,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                 functions = []
 
                 for node in ast.walk(tree):
-                    if isinstance(node, ast.FunctionDef) or isinstance(
-                        node,
-                        ast.AsyncFunctionDef,
-                    ):
+                    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                         # Skip methods (they'll be included in class analysis)
                         if not include_classes or not any(
                             isinstance(parent, ast.ClassDef)
@@ -388,10 +385,7 @@ class CodeStructureAnalyzerTool(BaseTool):
 
                         # Analyze methods and class variables
                         for child in node.body:
-                            if isinstance(child, ast.FunctionDef) or isinstance(
-                                child,
-                                ast.AsyncFunctionDef,
-                            ):
+                            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                                 method_info = {
                                     "name": child.name,
                                     "async": isinstance(child, ast.AsyncFunctionDef),

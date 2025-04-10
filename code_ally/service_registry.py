@@ -22,11 +22,11 @@ class ServiceRegistry:
             cls._instance = cls()
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize an empty service registry."""
         self._services = {}
 
-    def register(self, name, service):
+    def register(self, name, service) -> None:
         """Register a service with the given name.
 
         Args:

@@ -199,6 +199,8 @@ class ConfigManager:
 
     def get_config(self) -> dict[str, Any]:
         """Get the complete configuration dictionary."""
+        if ConfigManager._config is None:
+            return {}
         return ConfigManager._config
 
     def get_value(
@@ -209,7 +211,27 @@ class ConfigManager:
         """Get a specific configuration value."""
         if default is None:
             default = DEFAULT_CONFIG.get(key)
-        return ConfigManager._config.get(key, default)
+        if ConfigManager._config is None:
+            return default
+
+        # Get the value, handle type safety
+        value = ConfigManager._config.get(key, default)
+
+        # Handle type checking for expected return types
+        if value is None:
+            return default
+        elif isinstance(value, str | int | float | bool):
+            return value
+        else:
+            # Try to convert to appropriate type
+            if key in CONFIG_TYPES:
+                expected_type = CONFIG_TYPES[key]
+                try:
+                    return expected_type(value)
+                except (ValueError, TypeError):
+                    return default
+            # If there's no explicit type, return default since we can't guarantee type safety
+            return default
 
     def set_value(self, key: str, value: str | int | float | bool) -> None:
         """Set a specific configuration value."""
@@ -234,12 +256,14 @@ class ConfigManager:
                     ) from None
 
         # Update the config
+        if ConfigManager._config is None:
+            ConfigManager._config = {}
         ConfigManager._config[key] = value
         save_config(ConfigManager._config)
 
         logger.debug(f"Config value updated: {key} = {value}")
 
-    def reset(self) -> None:
+    def reset(self) -> dict[str, bool | str]:
         """Reset the configuration to default values."""
         ConfigManager._config = DEFAULT_CONFIG.copy()
         save_config(ConfigManager._config)

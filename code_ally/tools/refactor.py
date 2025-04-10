@@ -43,17 +43,19 @@ class RefactorTool(BaseTool):
 
     def execute(
         self,
-        operation: str,
-        target: str,
-        new_value: str = "",
-        scope: str = ".",
-        include_pattern: str = "*",
-        exclude_pattern: str = "",
-        preview: bool = True,
-        apply: bool = False,
-        create_backup: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
+        """Execute a refactoring operation."""
+        # Extract expected parameters from kwargs
+        operation = str(kwargs.get("operation", ""))
+        target = str(kwargs.get("target", ""))
+        new_value = str(kwargs.get("new_value", ""))
+        scope = str(kwargs.get("scope", "."))
+        include_pattern = str(kwargs.get("include_pattern", "*"))
+        exclude_pattern = str(kwargs.get("exclude_pattern", ""))
+        preview = bool(kwargs.get("preview", True))
+        apply = bool(kwargs.get("apply", False))
+        create_backup = bool(kwargs.get("create_backup", True))
         """
         Execute a refactoring operation across multiple files.
 
@@ -132,6 +134,8 @@ class RefactorTool(BaseTool):
                     create_backup,
                 )
             elif operation == "extract":
+                # Extract include_imports if present in kwargs
+                include_imports = bool(kwargs.get("include_imports", True))
                 result = self._extract_code(
                     matching_files,
                     target,
@@ -139,9 +143,13 @@ class RefactorTool(BaseTool):
                     preview,
                     apply,
                     create_backup,
-                    **kwargs,
+                    include_imports,
                 )
             elif operation == "move":
+                # Extract specific parameters for move operation
+                start_pattern = str(kwargs.get("start_pattern", ""))
+                end_pattern = str(kwargs.get("end_pattern", ""))
+                line_range = str(kwargs.get("line_range", ""))
                 result = self._move_code(
                     matching_files,
                     target,
@@ -149,9 +157,16 @@ class RefactorTool(BaseTool):
                     preview,
                     apply,
                     create_backup,
-                    **kwargs,
+                    start_pattern,
+                    end_pattern,
+                    line_range,
                 )
             elif operation == "transform":
+                # Extract specific parameters for transform operation
+                max_replacements_val = kwargs.get("max_replacements")
+                max_replacements = int(max_replacements_val) if max_replacements_val is not None else 0
+                whole_words = bool(kwargs.get("whole_words", False))
+                case_sensitive = bool(kwargs.get("case_sensitive", True))
                 result = self._transform_code(
                     matching_files,
                     target,
@@ -159,7 +174,9 @@ class RefactorTool(BaseTool):
                     preview,
                     apply,
                     create_backup,
-                    **kwargs,
+                    max_replacements,
+                    whole_words,
+                    case_sensitive,
                 )
             else:
                 # This should never happen due to the validation above
@@ -353,7 +370,7 @@ class RefactorTool(BaseTool):
             Result dictionary with changes
         """
         changes = []
-        extracted_content = []
+        extracted_content: list[str] = []
         imports = set()
         total_extractions = 0
         total_files_changed = 0
@@ -908,6 +925,12 @@ class RefactorTool(BaseTool):
                     line_type = "context"
 
                 if line_type:
+                    # Ensure changes is a list
+                    if "changes" not in current_hunk:
+                        current_hunk["changes"] = []
+                    elif not isinstance(current_hunk["changes"], list):
+                        current_hunk["changes"] = list(current_hunk["changes"])
+                    
                     current_hunk["changes"].append(
                         {
                             "type": line_type,

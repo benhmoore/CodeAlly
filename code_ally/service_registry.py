@@ -24,7 +24,7 @@ class ServiceRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty service registry."""
-        self._services = {}
+        self._services: dict[str, object] = {}
 
     def register(self, name: str, service: object) -> None:
         """Register a service with the given name.

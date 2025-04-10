@@ -33,17 +33,25 @@ class DirectoryTool(BaseTool):
 
     def execute(
         self,
-        operation: str,
-        path: str = ".",
-        dest_path: str = "",
-        pattern: str = "*",
-        exclude: str = "",
-        recursive: bool = False,
-        create_parents: bool = True,
-        structure: dict[str, Any] | None = None,
-        dry_run: bool = True,
         **kwargs: dict[str, object],
     ) -> dict[str, Any]:
+        """Execute the directory tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with operation results
+        """
+        operation = str(kwargs.get("operation", ""))
+        path = str(kwargs.get("path", "."))
+        dest_path = str(kwargs.get("dest_path", ""))
+        pattern = str(kwargs.get("pattern", "*"))
+        exclude = str(kwargs.get("exclude", ""))
+        recursive = bool(kwargs.get("recursive", False))
+        create_parents = bool(kwargs.get("create_parents", True))
+        structure = kwargs.get("structure")
+        dry_run = bool(kwargs.get("dry_run", True))
         """
         Execute a directory operation.
 
@@ -763,15 +771,15 @@ class DirectoryTool(BaseTool):
                     ext = ext.lower()
 
                     # Update stats
-                    analysis["total_files"] += 1
-                    analysis["total_size"] += file_size
-                    dir_info["file_count"] += 1
-                    dir_info["size"] += file_size
+                    analysis["total_files"] = int(analysis["total_files"]) + 1
+                    analysis["total_size"] = int(analysis["total_size"]) + file_size
+                    dir_info["file_count"] = int(dir_info["file_count"]) + 1
+                    dir_info["size"] = int(dir_info["size"]) + file_size
 
                     # Update file extension stats
                     if ext in analysis["file_extensions"]:
-                        analysis["file_extensions"][ext]["count"] += 1
-                        analysis["file_extensions"][ext]["size"] += file_size
+                        analysis["file_extensions"][ext]["count"] = int(analysis["file_extensions"][ext]["count"]) + 1
+                        analysis["file_extensions"][ext]["size"] = int(analysis["file_extensions"][ext]["size"]) + file_size
                     else:
                         analysis["file_extensions"][ext] = {
                             "count": 1,
@@ -781,8 +789,8 @@ class DirectoryTool(BaseTool):
                     # Update language stats
                     language = extension_to_language.get(ext, "Other")
                     if language in analysis["language_stats"]:
-                        analysis["language_stats"][language]["count"] += 1
-                        analysis["language_stats"][language]["size"] += file_size
+                        analysis["language_stats"][language]["count"] = int(analysis["language_stats"][language]["count"]) + 1
+                        analysis["language_stats"][language]["size"] = int(analysis["language_stats"][language]["size"]) + file_size
                     else:
                         analysis["language_stats"][language] = {
                             "count": 1,

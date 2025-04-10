@@ -28,10 +28,10 @@ class TokenManager:
         self.min_compaction_interval = 300  # Seconds between auto-compactions
         self.ui = None  # Will be set by the Agent class
         # Cache for token counts to avoid re-estimation
-        self._token_cache = {}
+        self._token_cache: dict[tuple[str, str], int] = {}
         # Track file content hashes to avoid duplicate reads
-        self._file_content_hashes = {}  # Maps file path to content hash
-        self._file_message_ids = (
+        self._file_content_hashes: dict[str, str] = {}  # Maps file path to content hash
+        self._file_message_ids: dict[str, str] = (
             {}
         )  # Maps file path to message id containing its content
 
@@ -69,18 +69,18 @@ class TokenManager:
             # Count tokens for content (4 chars per token approximation)
             if "content" in message and message["content"]:
                 content = message["content"]
-                message_tokens += len(content) / self.chars_per_token
+                message_tokens += int(len(content) / self.chars_per_token)
 
             # Count tokens for function calls
             if "function_call" in message and message["function_call"]:
                 function_call = message["function_call"]
                 # Count function name
                 if "name" in function_call:
-                    message_tokens += len(function_call["name"]) / self.chars_per_token
+                    message_tokens += int(len(function_call["name"]) / self.chars_per_token)
                 # Count arguments
                 if "arguments" in function_call:
-                    message_tokens += (
-                        len(function_call["arguments"]) / self.chars_per_token
+                    message_tokens += int(
+                        len(function_call["arguments"]) / self.chars_per_token,
                     )
 
             # Count tokens for tool calls
@@ -89,18 +89,18 @@ class TokenManager:
                     if "function" in tool_call:
                         function = tool_call["function"]
                         if "name" in function:
-                            message_tokens += (
-                                len(function["name"]) / self.chars_per_token
+                            message_tokens += int(
+                                len(function["name"]) / self.chars_per_token,
                             )
                         if "arguments" in function:
                             if isinstance(function["arguments"], str):
-                                message_tokens += (
-                                    len(function["arguments"]) / self.chars_per_token
+                                message_tokens += int(
+                                    len(function["arguments"]) / self.chars_per_token,
                                 )
                             elif isinstance(function["arguments"], dict):
-                                message_tokens += (
+                                message_tokens += int(
                                     len(json.dumps(function["arguments"]))
-                                    / self.chars_per_token
+                                    / self.chars_per_token,
                                 )
 
             # Store in cache if we have a key

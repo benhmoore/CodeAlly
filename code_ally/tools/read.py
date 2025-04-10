@@ -36,16 +36,31 @@ class FileReadTool(BaseTool):
 
     def execute(
         self,
-        path: str,
-        start_line: int = 0,
-        max_lines: int = 0,
-        search_pattern: str = "",
-        context_lines: int = 3,
-        from_delimiter: str = "",
-        to_delimiter: str = "",
-        section_pattern: str = "",
-        **kwargs: dict[str, Any],
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
+        """Execute the read tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with file read results
+        """
+        path = str(kwargs.get("path", ""))
+        start_line_val = kwargs.get("start_line", 0)
+        start_line = int(start_line_val) if isinstance(start_line_val, int | str | float) else 0
+        
+        max_lines_val = kwargs.get("max_lines", 0)
+        max_lines = int(max_lines_val) if isinstance(max_lines_val, int | str | float) else 0
+        
+        search_pattern = str(kwargs.get("search_pattern", ""))
+        
+        context_lines_val = kwargs.get("context_lines", 3)
+        context_lines = int(context_lines_val) if isinstance(context_lines_val, int | str | float) else 3
+        
+        from_delimiter = str(kwargs.get("from_delimiter", ""))
+        to_delimiter = str(kwargs.get("to_delimiter", ""))
+        section_pattern = str(kwargs.get("section_pattern", ""))
         r"""
         Read the contents of a file with options to target specific sections or search results.
 
@@ -350,10 +365,10 @@ class FileReadTool(BaseTool):
         except re.error:
             return f"Invalid regex pattern: {section_pattern}", 0, 0
 
-        content = []
+        content: list[str] = []
         total_lines = 0
         sections_found = 0
-        current_section = []
+        current_section: list[str] = []
         in_section = False
 
         with open(file_path, encoding="utf-8", errors="replace") as f:
@@ -411,8 +426,8 @@ class FileReadTool(BaseTool):
             # Fall back to basic string search if regex is invalid
             pattern_re = None
 
-        matches = []
-        context_blocks = []
+        matches: list[tuple[int, str]] = []
+        context_blocks: list[list[tuple[int, str]]] = []
         total_lines = 0
         match_count = 0
 

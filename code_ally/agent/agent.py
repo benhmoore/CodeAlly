@@ -30,7 +30,7 @@ class Agent:
         self,
         model_client: ModelClient,
         tools: list[Any],
-        client_type: str = None,
+        client_type: str | None = None,
         system_prompt: str | None = None,
         verbose: bool = False,
         check_context_msg: bool = True,
@@ -78,10 +78,11 @@ class Agent:
             verbose: Whether to enable verbose mode
         """
         # Create UI Manager
-        self.ui = UIManager()
-        self.ui.set_verbose(verbose)
-        self.ui.agent = self
-        self.service_registry.register("ui_manager", self.ui)
+        ui_manager = UIManager()
+        ui_manager.set_verbose(verbose)
+        ui_manager.agent = self
+        self.ui: UIManager = ui_manager
+        self.service_registry.register("ui_manager", ui_manager)
 
         # Create Trust Manager
         self.trust_manager = TrustManager()
@@ -92,7 +93,9 @@ class Agent:
         self.service_registry.register("permission_manager", self.permission_manager)
 
         # Create Token Manager
-        self.token_manager = TokenManager(self.model_client.context_size)
+        # Get context size from model client if available
+        context_size = getattr(self.model_client, 'context_size', 8192)
+        self.token_manager = TokenManager(context_size)
         self.token_manager.ui = self.ui
         self.service_registry.register("token_manager", self.token_manager)
 

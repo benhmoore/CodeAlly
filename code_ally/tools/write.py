@@ -40,16 +40,20 @@ class FileWriteTool(BaseTool):
 
     def execute(
         self,
-        path: str,
-        content: str = "",
-        mode: str = "w",
-        template: str = "",
-        variables: dict[str, Any] | None = None,
-        line_insert: int = -1,
-        create_backup: bool = False,
-        format: str = "",
-        **kwargs: dict[str, Any],
+        **kwargs: dict[str, object],
     ) -> dict[str, Any]:
+        """Execute the write tool with the given parameters."""
+        # Extract expected parameters from kwargs
+        path = str(kwargs.get("path", ""))
+        content = str(kwargs.get("content", ""))
+        mode = str(kwargs.get("mode", "w"))
+        template = str(kwargs.get("template", ""))
+        variables = kwargs.get("variables")
+        if not isinstance(variables, dict) and variables is not None:
+            variables = None
+        line_insert = int(kwargs.get("line_insert", -1)) if kwargs.get("line_insert") is not None else -1
+        create_backup = bool(kwargs.get("create_backup", False))
+        format_str = str(kwargs.get("format", ""))
         """
         Write content to a file with enhanced options.
 
@@ -88,8 +92,8 @@ class FileWriteTool(BaseTool):
                 final_content = self._process_template(template, variables)
 
             # Format content if requested
-            if format and final_content:
-                final_content = self._format_content(final_content, format)
+            if format_str and final_content:
+                final_content = self._format_content(final_content, format_str)
 
             # Create backup if requested and file exists
             backup_path = None

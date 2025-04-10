@@ -6,6 +6,7 @@ Manages UI rendering and user interaction.
 import os
 import threading
 import time
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -29,6 +30,9 @@ class UIManager:
         self.thinking_event = threading.Event()
         self.verbose = False
         self.active_live_display = None  # Track the current active Live display
+        self.plan_tasks_table = None
+        self.plan_panel = None
+        self.plan_panel_group = None
 
         # Create history directory if it doesn't exist
         history_dir = os.path.expanduser("~/.ally")
@@ -52,14 +56,14 @@ class UIManager:
 
         # Initialize prompt session with command history and custom key bindings
         history_file = os.path.join(history_dir, "command_history")
-        self.prompt_session = PromptSession(
+        self.prompt_session: PromptSession = PromptSession(
             history=FileHistory(history_file),
             key_bindings=kb,
         )
 
         # Interactive planning state
         self.current_interactive_plan = None
-        self.current_interactive_plan_tasks = []
+        self.current_interactive_plan_tasks: list[dict[str, Any]] = []
 
         # Add these attributes
         self.active_live_display = None
@@ -113,7 +117,7 @@ class UIManager:
                     refresh_per_second=10,
                     console=self.console,
                 ) as live:
-                    self.active_live_display = (
+                    self.active_live_display: Live = (
                         live  # Store reference to current live display
                     )
                     while not self.thinking_event.is_set():
@@ -154,10 +158,10 @@ class UIManager:
     def print_content(
         self,
         content: str,
-        style: str = None,
+        style: str | None = None,
         panel: bool = False,
-        title: str = None,
-        border_style: str = None,
+        title: str | None = None,
+        border_style: str | None = None,
         use_markdown: bool = False,
     ) -> None:
         """Print content with optional styling and panel."""
@@ -290,17 +294,18 @@ Use up/down arrow keys to navigate through command history.
         self.current_interactive_plan_tasks = []
 
         # Create the initial table for tasks
-
-        self.plan_tasks_table = Table(box=None, expand=False, show_header=True)
+        table = Table(box=None, expand=False, show_header=True)
 
         # We'll show a full set of columns so the single panel can carry
         # everything from creation to finalization:
-        self.plan_tasks_table.add_column("#", style="dim", width=3)
-        self.plan_tasks_table.add_column("Task ID", style="cyan")
-        self.plan_tasks_table.add_column("Tool", style="green")
-        self.plan_tasks_table.add_column("Description", style="yellow")
-        self.plan_tasks_table.add_column("Dependencies", style="blue")
-        self.plan_tasks_table.add_column("Conditional", style="magenta")
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Task ID", style="cyan")
+        table.add_column("Tool", style="green")
+        table.add_column("Description", style="yellow")
+        table.add_column("Dependencies", style="blue")
+        table.add_column("Conditional", style="magenta")
+        
+        self.plan_tasks_table = table
 
         # Create the header text
         from rich.console import Group
@@ -317,24 +322,26 @@ Use up/down arrow keys to navigate through command history.
         )
 
         # Group the header and tasks table - store this separately
-        self.plan_panel_group = Group(header_content, self.plan_tasks_table)
+        panel_group = Group(header_content, self.plan_tasks_table)
+        self.plan_panel_group: Group = panel_group
 
         # Create the panel - use the group
         from rich.panel import Panel
 
         title_text = Text("📋 Creating Task Plan", style="bold blue")
-        self.plan_panel = Panel(
-            self.plan_panel_group,
+        panel = Panel(
+            panel_group,
             title=title_text,
             border_style="blue",
             expand=False,
         )
+        self.plan_panel: Panel = panel
 
         # Start the live display with the panel
         from rich.live import Live
 
-        live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
-        self.active_live_display = live
+        live = Live(panel, console=self.console, refresh_per_second=4)
+        self.active_live_display: Live = live
         live.start()
 
     def update_plan_panel_title(self, new_title: str) -> None:

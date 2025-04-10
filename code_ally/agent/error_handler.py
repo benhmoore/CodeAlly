@@ -60,7 +60,7 @@ def format_error_message(
 
 
 def display_error(
-    ui_manager: "UIManager",
+    ui_manager: Any,  # Should be "UIManager", but importing causes circular import
     error_msg: str,
     tool_name: str,
     arguments: dict[str, Any],

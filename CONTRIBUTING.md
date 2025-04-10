@@ -7,8 +7,8 @@ Thank you for your interest in contributing to Code Ally! This document provides
 1. Fork the repository and clone your fork:
 
     ```bash
-    git clone https://github.com/YOUR_USERNAME/code-ally.git
-    cd code-ally
+    git clone https://github.com/YOUR_USERNAME/CodeAlly.git
+    cd code_ally
     ```
 
 2. Set up a virtual environment and install development dependencies:

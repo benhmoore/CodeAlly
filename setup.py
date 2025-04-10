@@ -33,7 +33,7 @@ dev_requires = read_requirements("requirements-dev.txt")
 
 setup(
     name="code_ally",
-    # Read version, author, email from code_ally/code_ally/__init__.py
+    # Read version, author, email from code_ally/CodeAlly/__init__.py
     version=get_meta("version"),
     author=get_meta("author"),
     author_email=get_meta("email"),
@@ -51,12 +51,12 @@ setup(
     description="A local LLM-powered pair programming assistant",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/benhmoore/code-ally",
+    url="https://github.com/benhmoore/CodeAlly",
     license="MIT",
     license_files=["LICENSE"],
     project_urls={
-        "Bug Reports": "https://github.com/benhmoore/code-ally/issues",
-        "Source": "https://github.com/benhmoore/code-ally",
+        "Bug Reports": "https://github.com/benhmoore/CodeAlly/issues",
+        "Source": "https://github.com/benhmoore/CodeAlly",
     },
     classifiers=[
         "Development Status :: 3 - Alpha",

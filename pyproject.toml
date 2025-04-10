@@ -3,8 +3,6 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "code_ally"
-version = "0.4.4"
 description = "A local LLM-powered pair programming assistant"
 readme = "README.md"
 authors = [
@@ -29,11 +27,11 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
 ]
 keywords = ["llm", "ai", "pair programming", "code assistant", "development"]
-dynamic = ["optional-dependencies"]
+dynamic = ["name", "version", "optional-dependencies"]
 
 [project.urls]
-"Homepage" = "https://github.com/benhmoore/code-ally"
-"Bug Tracker" = "https://github.com/benhmoore/code-ally/issues"
+"Homepage" = "https://github.com/benhmoore/CodeAlly"
+"Bug Tracker" = "https://github.com/benhmoore/CodeAlly/issues"
 
 [project.scripts]
 ally = "code_ally.main:main"

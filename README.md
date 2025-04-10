@@ -1,11 +1,11 @@
 # Code Ally
 
-![Code Ally Demo - Terminal interface showing interactive interface](https://github.com/benhmoore/code-ally/blob/main/assets/code-ally-demo.png)
+![Code Ally Demo - Terminal interface showing interactive interface](https://github.com/benhmoore/CodeAlly/blob/main/assets/CodeAlly-demo.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Tests](https://github.com/benhmoore/code-ally/actions/workflows/tests.yml/badge.svg)](https://github.com/benhmoore/code-ally/actions/workflows/tests.yml)
-[![Lint](https://github.com/benhmoore/code-ally/actions/workflows/lint.yml/badge.svg)](https://github.com/benhmoore/code-ally/actions/workflows/lint.yml)
+[![Tests](https://github.com/benhmoore/CodeAlly/actions/workflows/tests.yml/badge.svg)](https://github.com/benhmoore/CodeAlly/actions/workflows/tests.yml)
+[![Lint](https://github.com/benhmoore/CodeAlly/actions/workflows/lint.yml/badge.svg)](https://github.com/benhmoore/CodeAlly/actions/workflows/lint.yml)
 
 A local LLM-powered pair programming assistant using function calling capabilities with Ollama. Code Ally helps you with coding tasks through natural language, providing tools for file operations, code searching, and executing shell commands - all while keeping your code and data local.
 
@@ -60,7 +60,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install from PyPI
-pip install code-ally
+pip install code_ally
 
 # Install the required Ollama model
 ollama pull qwen2.5-coder:14b
@@ -70,8 +70,8 @@ ollama pull qwen2.5-coder:14b
 
 ```bash
 # Clone the repository
-git clone https://github.com/benhmoore/code-ally.git
-cd code-ally
+git clone https://github.com/benhmoore/CodeAlly.git
+cd code_ally
 
 # Create a virtual environment (recommended)
 python -m venv venv
@@ -142,10 +142,10 @@ The configuration file is a JSON file with the following structure:
     "theme": "default",
     "compact_threshold": 95,
     "show_token_usage": true,
-    
-    "dir_tree_enable": true,          // Enable directory tree in context
-    "dir_tree_max_depth": 3,          // Maximum directory depth to traverse
-    "dir_tree_max_files": 100         // Maximum files to show in tree
+
+    "dir_tree_enable": true, // Enable directory tree in context
+    "dir_tree_max_depth": 3, // Maximum directory depth to traverse
+    "dir_tree_max_files": 100 // Maximum files to show in tree
 }
 ```
 

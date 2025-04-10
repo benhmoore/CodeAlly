@@ -1,9 +1,14 @@
+"""File writing tool module for Code Ally.
+
+This module provides enhanced file writing capabilities including template substitution,
+line insertion, and various formatting options.
+"""
+
 import json
 import os
-import re
 import shutil
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -11,6 +16,11 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class FileWriteTool(BaseTool):
+    """Tool for writing content to files with advanced options.
+
+    Handles multiple write modes, templating, backups, and formatting.
+    """
+
     name = "file_write"
     description = """Write content to a file with enhanced options.
 
@@ -34,12 +44,12 @@ class FileWriteTool(BaseTool):
         content: str = "",
         mode: str = "w",
         template: str = "",
-        variables: Optional[Dict[str, Any]] = None,
+        variables: dict[str, Any] | None = None,
         line_insert: int = -1,
         create_backup: bool = False,
         format: str = "",
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Write content to a file with enhanced options.
 
@@ -90,7 +100,7 @@ class FileWriteTool(BaseTool):
             # Determine write mode and perform the operation
             if mode == "a" and os.path.exists(absolute_path):
                 # Append mode
-                with open(absolute_path, "r", encoding="utf-8") as f:
+                with open(absolute_path, encoding="utf-8") as f:
                     existing_content = f.read()
 
                 # Only add newline if the existing content doesn't end with one
@@ -103,7 +113,7 @@ class FileWriteTool(BaseTool):
 
             elif mode == "p" and os.path.exists(absolute_path):
                 # Prepend mode
-                with open(absolute_path, "r", encoding="utf-8") as f:
+                with open(absolute_path, encoding="utf-8") as f:
                     existing_content = f.read()
 
                 # Only add newline if the content doesn't already have one
@@ -113,12 +123,12 @@ class FileWriteTool(BaseTool):
                 with open(absolute_path, "w", encoding="utf-8") as f:
                     f.write(final_content + existing_content)
                     bytes_written = len(
-                        (final_content + existing_content).encode("utf-8")
+                        (final_content + existing_content).encode("utf-8"),
                     )
 
             elif line_insert != -1 and os.path.exists(absolute_path):
                 # Line insertion mode
-                with open(absolute_path, "r", encoding="utf-8") as f:
+                with open(absolute_path, encoding="utf-8") as f:
                     lines = f.readlines()
 
                 # Ensure content ends with newline
@@ -160,7 +170,7 @@ class FileWriteTool(BaseTool):
                 "file_path": file_path if "file_path" in locals() else path,
             }
 
-    def _process_template(self, template: str, variables: Dict[str, Any]) -> str:
+    def _process_template(self, template: str, variables: dict[str, Any]) -> str:
         """Process a template string by substituting variables.
 
         Args:
@@ -175,7 +185,7 @@ class FileWriteTool(BaseTool):
         # Simple variable substitution
         for var_name, var_value in variables.items():
             # Handle different value types
-            if isinstance(var_value, (dict, list)):
+            if isinstance(var_value, dict | list):
                 # Convert to JSON string for complex types
                 val_str = json.dumps(var_value, indent=2)
             else:

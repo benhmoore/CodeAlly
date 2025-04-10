@@ -3,14 +3,12 @@
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_ally.trust import (
     DirectoryTraversalError,
-    PermissionDeniedError,
     TrustManager,
     has_path_traversal_patterns,
-    is_path_within_cwd,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,7 @@ class PermissionManager:
         # Store the starting directory at initialization time
         self.start_directory = os.path.abspath(os.getcwd())
         logger.info(
-            f"PermissionManager initialized with starting directory: {self.start_directory}"
+            f"PermissionManager initialized with starting directory: {self.start_directory}",
         )
 
         # Create a set of allowed file paths (paths within the working directory)
@@ -64,7 +62,7 @@ class PermissionManager:
             re.compile(pattern) for pattern in self.path_traversal_patterns
         ]
 
-    def check_permission(self, tool_name: str, arguments: Dict[str, Any]) -> bool:
+    def check_permission(self, tool_name: str, arguments: dict[str, Any]) -> bool:
         """Check if a tool has permission to execute."""
         # Get permission path based on the tool and arguments
         permission_path = self._get_permission_path(tool_name, arguments)
@@ -86,7 +84,9 @@ class PermissionManager:
         return self.trust_manager.prompt_for_permission(tool_name, permission_path)
 
     def _check_all_arguments_for_traversal(
-        self, tool_name: str, arguments: Dict[str, Any]
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> None:
         """Check all string arguments for path traversal patterns.
 
@@ -111,11 +111,11 @@ class PermissionManager:
                 # Check for path traversal patterns
                 if has_path_traversal_patterns(arg_value):
                     logger.warning(
-                        f"Path traversal pattern detected in {tool_name} argument {arg_name}: {arg_value}"
+                        f"Path traversal pattern detected in {tool_name} argument {arg_name}: {arg_value}",
                     )
                     raise DirectoryTraversalError(
                         f"Access denied: The argument '{arg_name}' contains path traversal patterns. "
-                        f"Operations are restricted to '{self.start_directory}' and its subdirectories."
+                        f"Operations are restricted to '{self.start_directory}' and its subdirectories.",
                     )
 
                 # Check if it's a potential file path
@@ -125,18 +125,18 @@ class PermissionManager:
                         abs_path = os.path.abspath(arg_value)
                         if not abs_path.startswith(self.start_directory):
                             logger.warning(
-                                f"Path outside CWD detected in {tool_name} argument {arg_name}: {arg_value}"
+                                f"Path outside CWD detected in {tool_name} argument {arg_name}: {arg_value}",
                             )
                             raise DirectoryTraversalError(
                                 f"Access denied: The path '{arg_value}' in argument '{arg_name}' is outside the working directory. "
-                                f"Operations are restricted to '{self.start_directory}' and its subdirectories."
+                                f"Operations are restricted to '{self.start_directory}' and its subdirectories.",
                             )
                     except Exception as e:
                         if isinstance(e, DirectoryTraversalError):
                             raise
                         # If we can't parse it as a path, log and continue
                         logger.debug(
-                            f"Could not validate potential path in {tool_name} argument {arg_name}: {e}"
+                            f"Could not validate potential path in {tool_name} argument {arg_name}: {e}",
                         )
 
             # Check string arrays recursively
@@ -144,17 +144,18 @@ class PermissionManager:
                 for item in arg_value:
                     if isinstance(item, str) and has_path_traversal_patterns(item):
                         logger.warning(
-                            f"Path traversal pattern detected in {tool_name} list argument {arg_name}: {item}"
+                            f"Path traversal pattern detected in {tool_name} list argument {arg_name}: {item}",
                         )
                         raise DirectoryTraversalError(
                             f"Access denied: The list argument '{arg_name}' contains path traversal patterns. "
-                            f"Operations are restricted to '{self.start_directory}' and its subdirectories."
+                            f"Operations are restricted to '{self.start_directory}' and its subdirectories.",
                         )
 
             # Check nested dictionaries recursively
             elif isinstance(arg_value, dict):
                 self._check_all_arguments_for_traversal(
-                    f"{tool_name}.{arg_name}", arg_value
+                    f"{tool_name}.{arg_name}",
+                    arg_value,
                 )
 
     def _verify_directory_access(self, tool_name: str, path_info: Any) -> None:
@@ -187,11 +188,11 @@ class PermissionManager:
             # Check for path traversal patterns first
             if has_path_traversal_patterns(path):
                 logger.warning(
-                    f"Path traversal pattern detected for {tool_name}: {path}"
+                    f"Path traversal pattern detected for {tool_name}: {path}",
                 )
                 raise DirectoryTraversalError(
                     f"Access denied: The path '{path}' contains path traversal patterns. "
-                    f"Operations are restricted to '{self.start_directory}' and its subdirectories."
+                    f"Operations are restricted to '{self.start_directory}' and its subdirectories.",
                 )
 
             # Normalize path
@@ -201,18 +202,18 @@ class PermissionManager:
                 # Check if the path is within our starting directory
                 if not abs_path.startswith(self.start_directory):
                     logger.warning(
-                        f"Directory traversal attempt detected for {tool_name}: {path}"
+                        f"Directory traversal attempt detected for {tool_name}: {path}",
                     )
                     raise DirectoryTraversalError(
                         f"Access denied: The path '{path}' is outside the working directory. "
-                        f"Operations are restricted to '{self.start_directory}' and its subdirectories."
+                        f"Operations are restricted to '{self.start_directory}' and its subdirectories.",
                     )
             except Exception as e:
                 if isinstance(e, DirectoryTraversalError):
                     raise
                 logger.warning(f"Error checking path for {tool_name}: {e}")
 
-    def resolve_paths_in_string(self, input_str: str) -> List[Tuple[str, str]]:
+    def resolve_paths_in_string(self, input_str: str) -> list[tuple[str, str]]:
         """Extract and resolve potential file paths in a string.
 
         Args:
@@ -244,7 +245,7 @@ class PermissionManager:
 
         return resolved_paths
 
-    def _get_permission_path(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    def _get_permission_path(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Extract the path from tool arguments for permission checking."""
         # Handle bash commands differently
         if tool_name == "bash" and "command" in arguments:

@@ -6,7 +6,7 @@ Manages token counting and context window utilization.
 import hashlib
 import json
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 
 class TokenManager:
@@ -31,11 +31,9 @@ class TokenManager:
         self._token_cache = {}
         # Track file content hashes to avoid duplicate reads
         self._file_content_hashes = {}  # Maps file path to content hash
-        self._file_message_ids = (
-            {}
-        )  # Maps file path to message id containing its content
+        self._file_message_ids = {}  # Maps file path to message id containing its content
 
-    def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
+    def estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
 
         Args:
@@ -129,8 +127,11 @@ class TokenManager:
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     def register_file_read(
-        self, file_path: str, content: str, message_id: str
-    ) -> Optional[str]:
+        self,
+        file_path: str,
+        content: str,
+        message_id: str,
+    ) -> str | None:
         """Register a file that has been read and track its hash.
 
         Args:
@@ -160,8 +161,10 @@ class TokenManager:
         return None
 
     def get_existing_file_message_id(
-        self, file_path: str, content: str
-    ) -> Optional[str]:
+        self,
+        file_path: str,
+        content: str,
+    ) -> str | None:
         """Check if a file has been previously read with same content.
 
         Args:
@@ -180,7 +183,7 @@ class TokenManager:
 
         return None
 
-    def update_token_count(self, messages: List[Dict[str, Any]]) -> None:
+    def update_token_count(self, messages: list[dict[str, Any]]) -> None:
         """Update the token count for the current messages.
 
         Args:
@@ -197,7 +200,7 @@ class TokenManager:
                 change_sign = "+" if change > 0 else ""
                 self.ui.console.print(
                     f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} "
-                    f"({token_percentage}% of context) [{change_sign}{change} tokens][/]"
+                    f"({token_percentage}% of context) [{change_sign}{change} tokens][/]",
                 )
 
     def should_compact(self) -> bool:

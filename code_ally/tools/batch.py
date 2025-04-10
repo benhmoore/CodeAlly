@@ -7,7 +7,7 @@ import fnmatch
 import glob as glob_mod
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -41,13 +41,13 @@ class BatchOperationTool(BaseTool):
         find: str = "",
         replace: str = "",
         template: str = "",
-        template_vars: Optional[Dict[str, str]] = None,
+        template_vars: dict[str, str] | None = None,
         recursive: bool = False,
         preview: bool = True,
         max_files: int = 100,
         create_backup: bool = True,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute a batch operation on multiple files.
 
@@ -96,7 +96,11 @@ class BatchOperationTool(BaseTool):
 
             # Find matching files
             matching_files = self._find_matching_files(
-                base_path, file_pattern, exclude_pattern, recursive, max_files
+                base_path,
+                file_pattern,
+                exclude_pattern,
+                recursive,
+                max_files,
             )
 
             if not matching_files:
@@ -169,7 +173,7 @@ class BatchOperationTool(BaseTool):
         exclude_pattern: str,
         recursive: bool,
         max_files: int,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Find files matching the given patterns.
 
@@ -202,7 +206,8 @@ class BatchOperationTool(BaseTool):
                     if fnmatch.fnmatch(filename, file_pattern):
                         # Check if it should be excluded
                         if exclude_pattern and fnmatch.fnmatch(
-                            filename, exclude_pattern
+                            filename,
+                            exclude_pattern,
                         ):
                             continue
 
@@ -253,10 +258,10 @@ class BatchOperationTool(BaseTool):
         find: str,
         replace: str,
         template: str,
-        template_vars: Dict[str, str],
+        template_vars: dict[str, str],
         preview: bool,
         create_backup: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process a single file based on the operation type.
 
@@ -275,7 +280,7 @@ class BatchOperationTool(BaseTool):
         """
         try:
             # Read the file
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 original_content = f.read()
 
             # Process based on operation type
@@ -408,7 +413,10 @@ class BatchOperationTool(BaseTool):
             }
 
     def _generate_preview(
-        self, original: str, modified: str, context_lines: int = 3
+        self,
+        original: str,
+        modified: str,
+        context_lines: int = 3,
     ) -> str:
         """
         Generate a preview of changes between original and modified content.
@@ -436,7 +444,7 @@ class BatchOperationTool(BaseTool):
                 modified_lines,
                 lineterm="",
                 n=context_lines,
-            )
+            ),
         )
 
         # Skip the first two lines (--- and +++ headers)

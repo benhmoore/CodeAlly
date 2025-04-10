@@ -53,7 +53,8 @@ class UIManager:
         # Initialize prompt session with command history and custom key bindings
         history_file = os.path.join(history_dir, "command_history")
         self.prompt_session = PromptSession(
-            history=FileHistory(history_file), key_bindings=kb
+            history=FileHistory(history_file),
+            key_bindings=kb,
         )
 
         # Interactive planning state
@@ -108,7 +109,9 @@ class UIManager:
             start_time = time.time()
             try:
                 with Live(
-                    self.thinking_spinner, refresh_per_second=10, console=self.console
+                    self.thinking_spinner,
+                    refresh_per_second=10,
+                    console=self.console,
                 ) as live:
                     self.active_live_display = (
                         live  # Store reference to current live display
@@ -250,7 +253,7 @@ class UIManager:
         else:
             # For invalid responses, fall back to default
             self.print_warning(
-                f"Invalid response '{response}'. Using default: {default}"
+                f"Invalid response '{response}'. Using default: {default}",
             )
             return default
 
@@ -287,7 +290,6 @@ Use up/down arrow keys to navigate through command history.
         self.current_interactive_plan_tasks = []
 
         # Create the initial table for tasks
-        from rich.table import Table
 
         self.plan_tasks_table = Table(box=None, expand=False, show_header=True)
 
@@ -305,10 +307,10 @@ Use up/down arrow keys to navigate through command history.
         from rich.text import Text
 
         header_content = Text.assemble(
-            Text(f"Name: ", style="bold"),
+            Text("Name: ", style="bold"),
             Text(name),
             Text("\n"),
-            Text(f"Description: ", style="bold"),
+            Text("Description: ", style="bold"),
             Text(description),
             Text("\n\n"),
             Text("Tasks:", style="bold cyan"),
@@ -322,7 +324,10 @@ Use up/down arrow keys to navigate through command history.
 
         title_text = Text("📋 Creating Task Plan", style="bold blue")
         self.plan_panel = Panel(
-            self.plan_panel_group, title=title_text, border_style="blue", expand=False
+            self.plan_panel_group,
+            title=title_text,
+            border_style="blue",
+            expand=False,
         )
 
         # Start the live display with the panel
@@ -352,7 +357,7 @@ Use up/down arrow keys to navigate through command history.
         condition: dict,
     ) -> None:
         self.current_interactive_plan_tasks.append(
-            {"index": task_index, "id": task_id, "description": description}
+            {"index": task_index, "id": task_id, "description": description},
         )
 
         depends_txt = ", ".join(depends_on) if depends_on else "—"
@@ -404,7 +409,8 @@ Use up/down arrow keys to navigate through command history.
 
         self._stop_thinking_flag = False
         self._thinking_thread = threading.Thread(
-            target=self._plan_spinner_loop, daemon=True
+            target=self._plan_spinner_loop,
+            daemon=True,
         )
         self._thinking_thread.start()
 

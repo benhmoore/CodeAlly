@@ -4,9 +4,8 @@ Manages tool registration, validation, and execution.
 """
 
 import inspect
-import json
 import logging
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from code_ally.agent.permission_manager import PermissionManager
 from code_ally.tools.base import BaseTool
@@ -20,7 +19,7 @@ class ToolManager:
 
     def __init__(
         self,
-        tools: List[BaseTool],
+        tools: list[BaseTool],
         trust_manager: TrustManager,
         permission_manager: PermissionManager = None,
     ):
@@ -39,13 +38,13 @@ class ToolManager:
         self.client_type = None  # Will be set by the Agent when initialized
 
         # Track recent tool calls to avoid redundancy
-        self.recent_tool_calls: List[Tuple[str, Tuple]] = []
+        self.recent_tool_calls: list[tuple[str, tuple]] = []
         self.max_recent_calls = 5  # Remember last 5 calls
-        self.current_turn_tool_calls: List[Tuple[str, Tuple]] = (
-            []
-        )  # For the current conversation turn only
+        self.current_turn_tool_calls: list[
+            tuple[str, tuple]
+        ] = []  # For the current conversation turn only
 
-    def get_function_definitions(self) -> List[Dict[str, Any]]:
+    def get_function_definitions(self) -> list[dict[str, Any]]:
         """Create function definitions for tools in the format expected by the LLM.
 
         Returns:
@@ -164,7 +163,7 @@ class ToolManager:
         if verbose_mode:
             args_str = ", ".join(f"{k}={repr(v)}" for k, v in arguments.items())
             self.ui.console.print(
-                f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]"
+                f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]",
             )
 
         # Validate tool existence
@@ -191,10 +190,11 @@ class ToolManager:
 
                     # Prompt for permission (this may raise PermissionDeniedError)
                     if not self.trust_manager.prompt_for_permission(
-                        tool_name, permission_path
+                        tool_name,
+                        permission_path,
                     ):
                         return self._create_error_result(
-                            f"Permission denied for {tool_name}"
+                            f"Permission denied for {tool_name}",
                         )
             except PermissionDeniedError:
                 # Let exceptions propagate upward
@@ -234,7 +234,7 @@ class ToolManager:
 
         if self.ui and getattr(self.ui, "verbose", False):
             self.ui.console.print(
-                f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]"
+                f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]",
             )
 
         return {
@@ -282,7 +282,7 @@ class ToolManager:
         try:
             if verbose_mode:
                 self.ui.console.print(
-                    f"[dim green][Verbose] Executing tool: {tool_name}[/]"
+                    f"[dim green][Verbose] Executing tool: {tool_name}[/]",
                 )
 
             result = tool.execute(**arguments)
@@ -291,7 +291,7 @@ class ToolManager:
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim green][Verbose] Tool {tool_name} executed in {execution_time:.2f}s "
-                    f"(success: {result.get('success', False)})[/]"
+                    f"(success: {result.get('success', False)})[/]",
                 )
 
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
@@ -300,7 +300,7 @@ class ToolManager:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
                 self.ui.console.print(
-                    f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]"
+                    f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]",
                 )
             return self._create_error_result(f"Error executing {tool_name}: {str(exc)}")
 
@@ -312,8 +312,10 @@ class ToolManager:
         }
 
     def format_tool_result(
-        self, result: Dict[str, Any], client_type: str = None
-    ) -> Dict[str, Any]:
+        self,
+        result: dict[str, Any],
+        client_type: str = None,
+    ) -> dict[str, Any]:
         """Format the tool result.
 
         Args:

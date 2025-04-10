@@ -1,14 +1,13 @@
-"""File: refactor.py
+"""File: refactor.py.
 
 Advanced refactoring operations across multiple files with preview capabilities.
 """
 
 import difflib
 import fnmatch
-import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Pattern, Set, Tuple
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -53,8 +52,8 @@ class RefactorTool(BaseTool):
         preview: bool = True,
         apply: bool = False,
         create_backup: bool = True,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute a refactoring operation across multiple files.
 
@@ -109,7 +108,9 @@ class RefactorTool(BaseTool):
 
             # Collect files that match the include/exclude patterns
             matching_files = self._collect_files(
-                scope_dir, include_pattern, exclude_pattern
+                scope_dir,
+                include_pattern,
+                exclude_pattern,
             )
 
             if not matching_files:
@@ -123,7 +124,12 @@ class RefactorTool(BaseTool):
             # Execute the appropriate refactoring operation
             if operation == "rename":
                 result = self._rename_symbol(
-                    matching_files, target, new_value, preview, apply, create_backup
+                    matching_files,
+                    target,
+                    new_value,
+                    preview,
+                    apply,
+                    create_backup,
                 )
             elif operation == "extract":
                 result = self._extract_code(
@@ -174,8 +180,11 @@ class RefactorTool(BaseTool):
             }
 
     def _collect_files(
-        self, directory: str, include_pattern: str, exclude_pattern: str
-    ) -> List[str]:
+        self,
+        directory: str,
+        include_pattern: str,
+        exclude_pattern: str,
+    ) -> list[str]:
         """
         Collect files matching the include/exclude patterns recursively.
 
@@ -228,13 +237,13 @@ class RefactorTool(BaseTool):
 
     def _rename_symbol(
         self,
-        files: List[str],
+        files: list[str],
         old_symbol: str,
         new_symbol: str,
         preview: bool,
         apply: bool,
         create_backup: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Rename a symbol across multiple files.
 
@@ -259,7 +268,7 @@ class RefactorTool(BaseTool):
 
         for file_path in files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Count occurrences and prepare new content
@@ -287,7 +296,7 @@ class RefactorTool(BaseTool):
                         "file": file_path,
                         "occurrences": occurrences,
                         "diff": diff if preview else "",
-                    }
+                    },
                 )
 
                 total_occurrences += occurrences
@@ -300,7 +309,7 @@ class RefactorTool(BaseTool):
                         "error": str(e),
                         "occurrences": 0,
                         "diff": "",
-                    }
+                    },
                 )
 
         # Generate summary
@@ -318,15 +327,15 @@ class RefactorTool(BaseTool):
 
     def _extract_code(
         self,
-        files: List[str],
+        files: list[str],
         extraction_pattern: str,
         new_file_path: str,
         preview: bool,
         apply: bool,
         create_backup: bool,
         include_imports: bool = True,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Extract code matching a pattern to a new file.
 
@@ -363,7 +372,7 @@ class RefactorTool(BaseTool):
         # Extract code from files
         for file_path in files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Find all matches
@@ -385,15 +394,15 @@ class RefactorTool(BaseTool):
                     new_content = new_content[:start] + new_content[end:]
 
                 # If we're including imports, detect and collect them
-                if include_imports:
+                if include_imports and file_path.endswith(".py"):
                     # Simple import detection for Python
                     # This should be extended for other languages
-                    if file_path.endswith(".py"):
-                        import_pattern = re.compile(
-                            r"^import\s+[\w\.]+|^from\s+[\w\.]+\s+import", re.MULTILINE
-                        )
-                        for match in import_pattern.finditer(content):
-                            imports.add(match.group(0))
+                    import_pattern = re.compile(
+                        r"^import\s+[\w\.]+|^from\s+[\w\.]+\s+import",
+                        re.MULTILINE,
+                    )
+                    for match in import_pattern.finditer(content):
+                        imports.add(match.group(0))
 
                 # Generate diff for preview
                 diff = self._generate_diff(file_path, content, new_content)
@@ -416,7 +425,7 @@ class RefactorTool(BaseTool):
                         "file": file_path,
                         "extractions": len(matches),
                         "diff": diff if preview else "",
-                    }
+                    },
                 )
 
                 total_extractions += len(matches)
@@ -429,7 +438,7 @@ class RefactorTool(BaseTool):
                         "error": str(e),
                         "extractions": 0,
                         "diff": "",
-                    }
+                    },
                 )
 
         # Create new file with extracted content
@@ -447,7 +456,8 @@ class RefactorTool(BaseTool):
             if apply and not preview:
                 # Ensure directory exists
                 os.makedirs(
-                    os.path.dirname(os.path.abspath(new_file_path)), exist_ok=True
+                    os.path.dirname(os.path.abspath(new_file_path)),
+                    exist_ok=True,
                 )
 
                 with open(new_file_path, "w", encoding="utf-8") as f:
@@ -459,7 +469,7 @@ class RefactorTool(BaseTool):
                     "file": new_file_path,
                     "new_file_content": new_file_content if preview else "",
                     "is_new_file": True,
-                }
+                },
             )
 
         # Generate summary
@@ -478,7 +488,7 @@ class RefactorTool(BaseTool):
 
     def _move_code(
         self,
-        files: List[str],
+        files: list[str],
         source_file: str,
         target_file: str,
         preview: bool,
@@ -487,8 +497,8 @@ class RefactorTool(BaseTool):
         start_pattern: str = "",
         end_pattern: str = "",
         line_range: str = "",
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Move code from one file to another.
 
@@ -527,7 +537,7 @@ class RefactorTool(BaseTool):
 
         # Read source file
         try:
-            with open(source_path, "r", encoding="utf-8") as f:
+            with open(source_path, encoding="utf-8") as f:
                 source_content = f.read()
                 source_lines = source_content.splitlines()
         except Exception as e:
@@ -542,7 +552,7 @@ class RefactorTool(BaseTool):
         target_exists = os.path.exists(target_path)
         if target_exists:
             try:
-                with open(target_path, "r", encoding="utf-8") as f:
+                with open(target_path, encoding="utf-8") as f:
                     target_content = f.read()
             except Exception as e:
                 return {
@@ -646,10 +656,14 @@ class RefactorTool(BaseTool):
 
         # Generate diffs for preview
         source_diff = self._generate_diff(
-            source_path, source_content, new_source_content
+            source_path,
+            source_content,
+            new_source_content,
         )
         target_diff = self._generate_diff(
-            target_path, target_content, new_target_content
+            target_path,
+            target_content,
+            new_target_content,
         )
 
         # Apply changes if requested and not just preview
@@ -675,7 +689,7 @@ class RefactorTool(BaseTool):
                 "file": source_path,
                 "diff": source_diff if preview else "",
                 "is_source": True,
-            }
+            },
         )
 
         changes.append(
@@ -684,7 +698,7 @@ class RefactorTool(BaseTool):
                 "diff": target_diff if preview else "",
                 "is_target": True,
                 "is_new_file": not target_exists,
-            }
+            },
         )
 
         # Generate summary
@@ -701,7 +715,7 @@ class RefactorTool(BaseTool):
 
     def _transform_code(
         self,
-        files: List[str],
+        files: list[str],
         pattern: str,
         replacement: str,
         preview: bool,
@@ -710,8 +724,8 @@ class RefactorTool(BaseTool):
         max_replacements: int = 0,
         whole_words: bool = False,
         case_sensitive: bool = True,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Apply a regex transformation across multiple files.
 
@@ -752,17 +766,20 @@ class RefactorTool(BaseTool):
         # Process each file
         for file_path in files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Apply the transformation
                 if max_replacements > 0:
                     new_content, replacements = transform_regex.subn(
-                        replacement, content, max_replacements
+                        replacement,
+                        content,
+                        max_replacements,
                     )
                 else:
                     new_content, replacements = transform_regex.subn(
-                        replacement, content
+                        replacement,
+                        content,
                     )
 
                 if replacements == 0:
@@ -786,7 +803,7 @@ class RefactorTool(BaseTool):
                         "file": file_path,
                         "replacements": replacements,
                         "diff": diff if preview else "",
-                    }
+                    },
                 )
 
                 total_replacements += replacements
@@ -799,7 +816,7 @@ class RefactorTool(BaseTool):
                         "error": str(e),
                         "replacements": 0,
                         "diff": "",
-                    }
+                    },
                 )
 
         # Generate summary
@@ -820,8 +837,11 @@ class RefactorTool(BaseTool):
         }
 
     def _generate_diff(
-        self, file_path: str, old_content: str, new_content: str
-    ) -> List[Dict[str, Any]]:
+        self,
+        file_path: str,
+        old_content: str,
+        new_content: str,
+    ) -> list[dict[str, Any]]:
         """
         Generate a human-readable diff between old and new content.
 
@@ -892,7 +912,7 @@ class RefactorTool(BaseTool):
                         {
                             "type": line_type,
                             "content": line[1:],  # Remove the prefix character
-                        }
+                        },
                     )
 
         # Add the last hunk

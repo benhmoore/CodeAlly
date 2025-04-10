@@ -9,8 +9,6 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
 # Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -36,9 +34,9 @@ def test_generate_truncated_tree_basic(sample_directory_structure):
 
     # Basic assertion checks
     assert tree, "Tree should not be empty"
-    assert (
-        os.path.basename(sample_directory_structure) in tree
-    ), "Root directory should be in the tree"
+    assert os.path.basename(sample_directory_structure) in tree, (
+        "Root directory should be in the tree"
+    )
     assert "dir1" in tree, "dir1 should be in the tree"
     assert "dir2" in tree, "dir2 should be in the tree"
     assert "file1.txt" in tree, "file1.txt should be in the tree"
@@ -70,10 +68,10 @@ def test_generate_truncated_tree_depth_limit():
 
     # Verify that depth limits work
     assert len(full_tree.split("\n")) > len(
-        limited_tree.split("\n")
+        limited_tree.split("\n"),
     ), "Full tree should be larger than depth-limited tree"
     assert len(limited_tree.split("\n")) > len(
-        root_only_tree.split("\n")
+        root_only_tree.split("\n"),
     ), "Limited tree should be larger than root-only tree"
 
     # Verify the limited trees have truncation indicators
@@ -81,12 +79,12 @@ def test_generate_truncated_tree_depth_limit():
         assert "..." in limited_tree, "Depth-limited tree should indicate truncation"
 
     # Verify root_only_tree is minimal
-    assert (
-        os.path.basename(test_dir) in root_only_tree
-    ), "Root should still be in the tree"
-    assert (
-        len(root_only_tree.strip().split("\n")) <= 2
-    ), "Root-only tree should be minimal"
+    assert os.path.basename(test_dir) in root_only_tree, (
+        "Root should still be in the tree"
+    )
+    assert len(root_only_tree.strip().split("\n")) <= 2, (
+        "Root-only tree should be minimal"
+    )
 
 
 def test_generate_truncated_tree_file_limit(sample_directory_structure):
@@ -102,10 +100,11 @@ def test_generate_truncated_tree_file_limit(sample_directory_structure):
         if not line.endswith("/") and not line.endswith("...") and "- " in line
     )
 
-    # The tree should either have at most max_files files or include a truncation indicator
-    assert (
-        file_count <= 2 or "..." in tree
-    ), "Tree should respect file limit or indicate truncation"
+    # The tree should either have at most max_files files or include a truncation
+    # indicator
+    assert file_count <= 2 or "..." in tree, (
+        "Tree should respect file limit or indicate truncation"
+    )
 
     # Since max_files=0 doesn't work as expected in the current implementation
     # (it should be fixed in the code), let's test with a different approach
@@ -131,13 +130,14 @@ def test_generate_truncated_tree_file_limit(sample_directory_structure):
     ]
 
     # Should either respect the limit or include truncation
-    assert (
-        len(file_entries) <= 3 or "..." in tree_limited
-    ), "Should limit files or indicate truncation"
+    assert len(file_entries) <= 3 or "..." in tree_limited, (
+        "Should limit files or indicate truncation"
+    )
 
     # Test with a high file limit (should include all files)
     tree_high_limit = generate_truncated_tree(
-        sample_directory_structure, max_files=1000
+        sample_directory_structure,
+        max_files=1000,
     )
     assert "file1.txt" in tree_high_limit
     assert "file2.py" in tree_high_limit
@@ -151,7 +151,8 @@ def test_generate_truncated_tree_exclude_patterns(sample_directory_structure):
     # Generate a tree with specific exclude patterns
     exclude_patterns = ["*.py", "dir2"]
     tree = generate_truncated_tree(
-        sample_directory_structure, exclude_patterns=exclude_patterns
+        sample_directory_structure,
+        exclude_patterns=exclude_patterns,
     )
 
     # These should be excluded
@@ -166,11 +167,12 @@ def test_generate_truncated_tree_exclude_patterns(sample_directory_structure):
 
     # Test excluding directories with patterns
     tree_no_subdir = generate_truncated_tree(
-        sample_directory_structure, exclude_patterns=["subdir*"]
+        sample_directory_structure,
+        exclude_patterns=["subdir*"],
     )
-    assert (
-        "subdir1" not in tree_no_subdir
-    ), "subdirectories matching the pattern should be excluded"
+    assert "subdir1" not in tree_no_subdir, (
+        "subdirectories matching the pattern should be excluded"
+    )
 
 
 def test_get_gitignore_patterns(sample_directory_structure):
@@ -180,9 +182,9 @@ def test_get_gitignore_patterns(sample_directory_structure):
 
     # Verify the patterns we added to the sample .gitignore
     assert "*.pyc" in patterns, "The pattern *.pyc should be extracted from .gitignore"
-    assert (
-        ".DS_Store" in patterns
-    ), "The pattern .DS_Store should be extracted from .gitignore"
+    assert ".DS_Store" in patterns, (
+        "The pattern .DS_Store should be extracted from .gitignore"
+    )
 
     # Check for __pycache__ with any possible format conversion
     pycache_found = any(p.startswith("__pycache__") for p in patterns)
@@ -192,29 +194,35 @@ def test_get_gitignore_patterns(sample_directory_structure):
     no_gitignore_dir = os.path.join(sample_directory_structure, "dir1")
     patterns = get_gitignore_patterns(no_gitignore_dir)
     assert isinstance(
-        patterns, list
+        patterns,
+        list,
     ), "Should return an empty list for directories without .gitignore"
-    assert (
-        len(patterns) == 0
-    ), "Should return an empty list for directories without .gitignore"
+    assert len(patterns) == 0, (
+        "Should return an empty list for directories without .gitignore"
+    )
 
     # Test with an empty .gitignore file
     empty_gitignore_path = os.path.join(
-        sample_directory_structure, "dir1", ".gitignore"
+        sample_directory_structure,
+        "dir1",
+        ".gitignore",
     )
-    with open(empty_gitignore_path, "w") as f:
+    with open(empty_gitignore_path, "w"):
         pass  # Create empty file
 
     patterns = get_gitignore_patterns(os.path.join(sample_directory_structure, "dir1"))
     assert isinstance(
-        patterns, list
+        patterns,
+        list,
     ), "Should return an empty list for empty .gitignore file"
     assert len(patterns) == 0, "Should return an empty list for empty .gitignore file"
 
 
 # Test for directory_config.py
 def test_get_directory_tree_config_defaults():
-    """Test that get_directory_tree_config returns defaults when config is unavailable."""
+    """Test that get_directory_tree_config returns defaults when config is
+    unavailable.
+    """
     # Mock an ImportError when trying to import get_config_value
     with patch("code_ally.config.get_config_value", side_effect=ImportError):
         config = get_directory_tree_config()
@@ -234,9 +242,9 @@ def test_generate_truncated_tree_edge_cases(temp_directory):
 
     # Test with empty directory
     tree = generate_truncated_tree(empty_dir)
-    assert (
-        tree.strip() == f"- {os.path.basename(empty_dir)}/"
-    ), "Empty directory should only show the root"
+    assert tree.strip() == f"- {os.path.basename(empty_dir)}/", (
+        "Empty directory should only show the root"
+    )
 
     # Test with a file instead of a directory - we don't know how this is handled
     # in the current implementation, so just ensure it doesn't crash
@@ -244,13 +252,12 @@ def test_generate_truncated_tree_edge_cases(temp_directory):
     with open(file_path, "w") as f:
         f.write("test content")
 
-    try:
+    from contextlib import suppress
+
+    with suppress(Exception):
         # This might raise an exception or return an empty tree
         # We just want to make sure it's handled gracefully
         generate_truncated_tree(file_path)
-    except Exception:
-        # Exception is okay, just make sure we continue
-        pass
 
     # Test with custom indent
     os.makedirs(os.path.join(temp_directory, "test_dir"))

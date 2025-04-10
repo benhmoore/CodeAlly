@@ -5,22 +5,22 @@ and context window utilization in the CodeAlly system.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
 import time
 from unittest.mock import MagicMock, patch
+from typing import Union
 
 import pytest
 
+from code_ally.agent.token_manager import TokenManager
+
+# Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
 
 setup_mocks()
-
-from code_ally.agent.token_manager import TokenManager
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def test_estimate_tokens_with_function_calls(token_manager):
                 "name": "get_weather",
                 "arguments": '{"location": "San Francisco", "unit": "celsius"}',
             },
-        }
+        },
     ]
 
     # Estimate tokens
@@ -99,9 +99,9 @@ def test_estimate_tokens_with_function_calls(token_manager):
                         "name": "get_weather",
                         "arguments": '{"location": "New York", "unit": "fahrenheit"}',
                     },
-                }
+                },
             ],
-        }
+        },
     )
 
     # Estimate tokens again
@@ -127,7 +127,7 @@ def test_update_token_count(token_manager):
 
     # Add more messages
     messages.append(
-        {"role": "assistant", "content": "Hello! How can I help you today?"}
+        {"role": "assistant", "content": "Hello! How can I help you today?"},
     )
 
     # Update token count again
@@ -227,7 +227,9 @@ def test_file_hash_management(token_manager):
     # Register the same file with different content
     new_content = "def updated_function():\n    return False"
     previous_id = token_manager.register_file_read(
-        file_path, new_content, new_message_id
+        file_path,
+        new_content,
+        new_message_id,
     )
 
     # Should return the previous message ID since content changed
@@ -239,7 +241,8 @@ def test_file_hash_management(token_manager):
 
     # Check with non-existent file
     result = token_manager.get_existing_file_message_id(
-        "/non/existent/file.py", "content"
+        "/non/existent/file.py",
+        "content",
     )
     assert result is None
 

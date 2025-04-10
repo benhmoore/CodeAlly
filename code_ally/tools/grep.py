@@ -1,7 +1,7 @@
 import fnmatch
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -41,7 +41,7 @@ class GrepTool(BaseTool):
         preview_replace: bool = False,
         max_results: int = 100,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Search for a pattern in files with enhanced filtering options.
 
@@ -186,7 +186,7 @@ class GrepTool(BaseTool):
 
                     try:
                         # For search and replace, we need to read the entire file
-                        with open(file_path, "r", encoding="utf-8") as f:
+                        with open(file_path, encoding="utf-8") as f:
                             content = f.read()
 
                         # Check if pattern exists in content (for efficiency)
@@ -204,7 +204,7 @@ class GrepTool(BaseTool):
                                         "file": file_path,
                                         "line": i,
                                         "content": line.strip(),
-                                    }
+                                    },
                                 )
 
                         # Add matches to results
@@ -223,18 +223,21 @@ class GrepTool(BaseTool):
                                             "file": file_path,
                                             "matches": len(file_matches),
                                             "preview": self._get_replacement_preview(
-                                                content, new_content
+                                                content,
+                                                new_content,
                                             ),
-                                        }
+                                        },
                                     )
 
                                     # If this is not just a preview, write changes back to file
                                     if replace and not preview_replace:
                                         with open(
-                                            file_path, "w", encoding="utf-8"
+                                            file_path,
+                                            "w",
+                                            encoding="utf-8",
                                         ) as f:
                                             f.write(new_content)
-                    except Exception as e:
+                    except Exception:
                         # Skip files that can't be read
                         continue
 
@@ -248,7 +251,9 @@ class GrepTool(BaseTool):
 
             # Sort matches by file modification time (newest first)
             sorted_matches = sorted(
-                matches, key=lambda m: os.path.getmtime(m["file"]), reverse=True
+                matches,
+                key=lambda m: os.path.getmtime(m["file"]),
+                reverse=True,
             )
 
             return {
@@ -284,8 +289,11 @@ class GrepTool(BaseTool):
             return True
 
     def _get_replacement_preview(
-        self, original: str, modified: str, context_lines: int = 2
-    ) -> List[Dict[str, Any]]:
+        self,
+        original: str,
+        modified: str,
+        context_lines: int = 2,
+    ) -> list[dict[str, Any]]:
         """Generate a preview of replacements with surrounding context."""
         original_lines = original.splitlines()
         modified_lines = modified.splitlines()
@@ -296,11 +304,13 @@ class GrepTool(BaseTool):
         if len(original_lines) != len(modified_lines):
             return [
                 {
-                    "summary": f"Changed from {len(original_lines)} to {len(modified_lines)} lines"
-                }
+                    "summary": f"Changed from {len(original_lines)} to {len(modified_lines)} lines",
+                },
             ]
 
-        for i, (orig, mod) in enumerate(zip(original_lines, modified_lines)):
+        for i, (orig, mod) in enumerate(
+            zip(original_lines, modified_lines, strict=False),
+        ):
             if orig != mod:
                 # Collect context lines
                 start = max(0, i - context_lines)

@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def get_config_file_path() -> Path:
     return get_config_dir() / "config.json"
 
 
-def load_config() -> Dict[str, Any]:
+def load_config() -> dict[str, Any]:
     """Load configuration from file or use defaults.
 
     Returns:
@@ -112,7 +112,7 @@ def load_config() -> Dict[str, Any]:
 
     if config_file.exists():
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
+            with open(config_file, encoding="utf-8") as f:
                 user_config = json.load(f)
 
                 # Validate and type-check user config values
@@ -133,7 +133,7 @@ def load_config() -> Dict[str, Any]:
                         except (ValueError, TypeError):
                             logger.warning(
                                 f"Invalid type for config key '{key}': "
-                                f"expected {expected_type.__name__}, got {type(value).__name__}"
+                                f"expected {expected_type.__name__}, got {type(value).__name__}",
                             )
                     else:
                         # Include unknown keys but log a warning
@@ -143,7 +143,7 @@ def load_config() -> Dict[str, Any]:
                 logger.debug("Configuration loaded successfully")
         except json.JSONDecodeError:
             logger.warning(
-                f"Invalid JSON in config file at {config_file}. Using defaults."
+                f"Invalid JSON in config file at {config_file}. Using defaults.",
             )
         except Exception as e:
             logger.warning(f"Error loading config: {str(e)}. Using defaults.")
@@ -153,7 +153,7 @@ def load_config() -> Dict[str, Any]:
     return config
 
 
-def save_config(config: Dict[str, Any]) -> None:
+def save_config(config: dict[str, Any]) -> None:
     """Save configuration to file.
 
     Args:
@@ -218,7 +218,7 @@ class ConfigManager:
                 except (ValueError, TypeError):
                     raise ValueError(
                         f"Invalid type for config key '{key}': "
-                        f"expected {expected_type.__name__}, got {type(value).__name__}"
+                        f"expected {expected_type.__name__}, got {type(value).__name__}",
                     )
 
         # Update the config

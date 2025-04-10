@@ -17,12 +17,14 @@ def setup_mocks():
     mock_pt.styles = MagicMock()
     mock_pt.history = MagicMock()
     mock_pt.completion = MagicMock()
+    mock_pt.patch_stdout = MagicMock()
     sys.modules["prompt_toolkit"] = mock_pt
     sys.modules["prompt_toolkit.key_binding"] = mock_pt.key_binding
     sys.modules["prompt_toolkit.shortcuts"] = mock_pt.shortcuts
     sys.modules["prompt_toolkit.styles"] = mock_pt.styles
     sys.modules["prompt_toolkit.history"] = mock_pt.history
     sys.modules["prompt_toolkit.completion"] = mock_pt.completion
+    sys.modules["prompt_toolkit.patch_stdout"] = mock_pt.patch_stdout
 
     # Create a comprehensive set of mocks for rich
     mock_rich = MagicMock()

@@ -1,6 +1,12 @@
+"""File reading tool module for Code Ally.
+
+This module provides enhanced file reading capabilities including support for
+line ranges, pattern matching, section extraction, and delimited content.
+"""
+
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -8,6 +14,11 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class FileReadTool(BaseTool):
+    """Tool for reading file contents with advanced filtering options.
+
+    Supports line ranges, pattern matching, and section extraction features.
+    """
+
     name = "file_read"
     description = """Read the contents of a file with context-efficient options.
 
@@ -33,9 +44,9 @@ class FileReadTool(BaseTool):
         from_delimiter: str = "",
         to_delimiter: str = "",
         section_pattern: str = "",
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        r"""
         Read the contents of a file with options to target specific sections or search results.
 
         Tracks file content hashes to ensure only one copy of a file is kept in conversation
@@ -112,14 +123,17 @@ class FileReadTool(BaseTool):
             # If delimiters are provided, use those for reading
             if from_delimiter or to_delimiter:
                 content, lines_read, total_lines = self._read_with_delimiters(
-                    file_path, from_delimiter, to_delimiter
+                    file_path,
+                    from_delimiter,
+                    to_delimiter,
                 )
                 is_partial = lines_read < total_lines
 
             # If section pattern is provided, extract matching sections
             elif section_pattern:
                 content, sections_found, total_lines = self._read_sections(
-                    file_path, section_pattern
+                    file_path,
+                    section_pattern,
                 )
                 lines_read = sections_found if sections_found > 0 else 0
                 is_partial = True  # Section extraction is always partial
@@ -127,7 +141,11 @@ class FileReadTool(BaseTool):
             # If search pattern is provided, use search reading
             elif search_pattern:
                 content, matches, total_lines = self._read_with_pattern(
-                    file_path, search_pattern, context_lines, start_line, max_lines
+                    file_path,
+                    search_pattern,
+                    context_lines,
+                    start_line,
+                    max_lines,
                 )
                 read_lines = len(matches) if matches else 0
                 is_partial = read_lines < total_lines
@@ -135,7 +153,9 @@ class FileReadTool(BaseTool):
             # Otherwise use standard line-based reading
             else:
                 content, lines_read, total_lines = self._read_with_limits(
-                    file_path, start_line, max_lines
+                    file_path,
+                    start_line,
+                    max_lines,
                 )
                 is_partial = lines_read < total_lines
 
@@ -201,7 +221,7 @@ class FileReadTool(BaseTool):
             Number of lines in the file
         """
         lines = 0
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             # Use buffer read and count newlines for efficiency
             buf_size = 1024 * 1024
             read_f = f.read
@@ -212,8 +232,11 @@ class FileReadTool(BaseTool):
         return lines
 
     def _read_with_limits(
-        self, file_path: str, start_line: int, max_lines: int
-    ) -> Tuple[str, int, int]:
+        self,
+        file_path: str,
+        start_line: int,
+        max_lines: int,
+    ) -> tuple[str, int, int]:
         """Read a file with line limits.
 
         Args:
@@ -228,7 +251,7 @@ class FileReadTool(BaseTool):
         current_line = 0
         lines_read = 0
 
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 if current_line >= start_line:
                     if max_lines > 0 and lines_read >= max_lines:
@@ -248,8 +271,11 @@ class FileReadTool(BaseTool):
         return result, lines_read, current_line
 
     def _read_with_delimiters(
-        self, file_path: str, from_delimiter: str, to_delimiter: str
-    ) -> Tuple[str, int, int]:
+        self,
+        file_path: str,
+        from_delimiter: str,
+        to_delimiter: str,
+    ) -> tuple[str, int, int]:
         """Read a file between specified delimiters.
 
         Args:
@@ -267,7 +293,7 @@ class FileReadTool(BaseTool):
             from_delimiter == ""
         )  # If no start delimiter, start capturing immediately
 
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 total_lines += 1
 
@@ -306,8 +332,10 @@ class FileReadTool(BaseTool):
         return result, lines_read, total_lines
 
     def _read_sections(
-        self, file_path: str, section_pattern: str
-    ) -> Tuple[str, int, int]:
+        self,
+        file_path: str,
+        section_pattern: str,
+    ) -> tuple[str, int, int]:
         """Extract sections matching a pattern from a file.
 
         Args:
@@ -328,7 +356,7 @@ class FileReadTool(BaseTool):
         current_section = []
         in_section = False
 
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 total_lines += 1
 
@@ -362,7 +390,7 @@ class FileReadTool(BaseTool):
         context_lines: int,
         start_line: int,
         max_lines: int,
-    ) -> Tuple[str, List[int], int]:
+    ) -> tuple[str, list[int], int]:
         """Read a file and extract sections matching a pattern.
 
         Args:
@@ -389,7 +417,7 @@ class FileReadTool(BaseTool):
         match_count = 0
 
         # First pass: find matching lines
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             lines = []
             for i, line in enumerate(f):
                 if i < start_line:
@@ -399,10 +427,12 @@ class FileReadTool(BaseTool):
                 total_lines = i + 1
 
                 # Check for pattern match
-                if pattern_re and pattern_re.search(line):
-                    matches.append(i)
-                    match_count += 1
-                elif pattern_re is None and pattern in line:
+                if (
+                    pattern_re
+                    and pattern_re.search(line)
+                    or pattern_re is None
+                    and pattern in line
+                ):
                     matches.append(i)
                     match_count += 1
 

@@ -4,7 +4,7 @@ Provides error handling and formatting utilities for agents.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 def format_error_message(
     error_msg: str,
     tool_name: str,
-    arguments: Dict[str, Any],
-    task_id: Optional[str] = None,
-    task_desc: Optional[str] = None,
-) -> Dict[str, Any]:
+    arguments: dict[str, Any],
+    task_id: str | None = None,
+    task_desc: str | None = None,
+) -> dict[str, Any]:
     """Format an error message with context details.
 
     Args:
@@ -63,9 +63,9 @@ def display_error(
     ui_manager,
     error_msg: str,
     tool_name: str,
-    arguments: Dict[str, Any],
-    task_id: Optional[str] = None,
-    task_desc: Optional[str] = None,
+    arguments: dict[str, Any],
+    task_id: str | None = None,
+    task_desc: str | None = None,
 ) -> None:
     """Display formatted error messages to the user.
 
@@ -82,7 +82,11 @@ def display_error(
 
     # Get formatted error messages
     formatted = format_error_message(
-        error_msg, tool_name, arguments, task_id, task_desc
+        error_msg,
+        tool_name,
+        arguments,
+        task_id,
+        task_desc,
     )
 
     # Use Rich formatting for the error note

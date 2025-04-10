@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Any, Dict
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -34,7 +34,7 @@ class FileEditTool(BaseTool):
         append: bool = False,
         prepend: bool = False,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Edit an existing file using various editing modes.
 
@@ -77,7 +77,7 @@ class FileEditTool(BaseTool):
                 }
 
             # Read the original file content
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
                 original_lines = content.splitlines()
 

@@ -7,12 +7,11 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from rich.table import Table
 
 from code_ally.config import ConfigManager
-from code_ally.prompts import get_system_message
 from code_ally.trust import TrustManager
 
 logger = logging.getLogger(__name__)
@@ -49,8 +48,11 @@ class CommandHandler:
         self.verbose = verbose
 
     def handle_command(
-        self, command: str, arg: str, messages: List[Dict[str, Any]]
-    ) -> Tuple[bool, List[Dict[str, Any]]]:
+        self,
+        command: str,
+        arg: str,
+        messages: list[dict[str, Any]],
+    ) -> tuple[bool, list[dict[str, Any]]]:
         """Handle a special command.
 
         Args:
@@ -83,7 +85,7 @@ class CommandHandler:
             self.token_manager.update_token_count(compacted)
             token_pct = self.token_manager.get_token_percentage()
             self.ui.print_success(
-                f"Conversation compacted: {token_pct}% of context window used"
+                f"Conversation compacted: {token_pct}% of context window used",
             )
             return True, compacted
 
@@ -123,8 +125,10 @@ class CommandHandler:
         return True, messages
 
     def handle_config_command(
-        self, arg: str, messages: List[Dict[str, Any]]
-    ) -> Tuple[bool, List[Dict[str, Any]]]:
+        self,
+        arg: str,
+        messages: list[dict[str, Any]],
+    ) -> tuple[bool, list[dict[str, Any]]]:
         """Handle the config command.
 
         Args:
@@ -154,7 +158,7 @@ class CommandHandler:
         parts = arg.split("=", 1)
         if len(parts) != 2:
             self.ui.print_error(
-                "Invalid format. Use /config key=value or /config to show all settings."
+                "Invalid format. Use /config key=value or /config to show all settings.",
             )
             return True, messages
 
@@ -172,7 +176,7 @@ class CommandHandler:
                     config["auto_confirm"] = False
                 else:
                     self.ui.print_error(
-                        "Invalid value for auto_confirm. Use 'true' or 'false'."
+                        "Invalid value for auto_confirm. Use 'true' or 'false'.",
                     )
                     return True, messages
 
@@ -188,7 +192,7 @@ class CommandHandler:
                     config["auto_dump"] = False
                 else:
                     self.ui.print_error(
-                        "Invalid value for auto_dump. Use 'true' or 'false'."
+                        "Invalid value for auto_dump. Use 'true' or 'false'.",
                     )
                     return True, messages
 
@@ -199,11 +203,11 @@ class CommandHandler:
                     self.agent.model_client.temperature = temp_value
                     config["temperature"] = temp_value
                     self.ui.print_success(
-                        f"Temperature updated to {temp_value} for current session"
+                        f"Temperature updated to {temp_value} for current session",
                     )
                 except ValueError:
                     self.ui.print_error(
-                        f"Invalid temperature value: {value}. Must be a number."
+                        f"Invalid temperature value: {value}. Must be a number.",
                     )
                     return True, messages
 
@@ -216,11 +220,11 @@ class CommandHandler:
                     )
                     config["context_size"] = ctx_value
                     self.ui.print_success(
-                        f"Context size updated to {ctx_value} for current session"
+                        f"Context size updated to {ctx_value} for current session",
                     )
                 except ValueError:
                     self.ui.print_error(
-                        f"Invalid context_size value: {value}. Must be a number."
+                        f"Invalid context_size value: {value}. Must be a number.",
                     )
                     return True, messages
 
@@ -230,11 +234,11 @@ class CommandHandler:
                     self.agent.model_client.max_tokens = max_tok_value
                     config["max_tokens"] = max_tok_value
                     self.ui.print_success(
-                        f"Max tokens updated to {max_tok_value} for current session"
+                        f"Max tokens updated to {max_tok_value} for current session",
                     )
                 except ValueError:
                     self.ui.print_error(
-                        f"Invalid max_tokens value: {value}. Must be a number."
+                        f"Invalid max_tokens value: {value}. Must be a number.",
                     )
                     return True, messages
 
@@ -242,7 +246,7 @@ class CommandHandler:
                 current_model = self.agent.model_client.model_name
                 self.ui.print_warning(
                     f"Model can't be changed in current session (current: {current_model}). "
-                    f"This setting will apply on restart."
+                    f"This setting will apply on restart.",
                 )
                 config["model"] = value
 
@@ -252,17 +256,17 @@ class CommandHandler:
                     self.agent.check_context_msg = True
                     config["check_context_msg"] = True
                     self.ui.print_success(
-                        "Check context message enabled for current session"
+                        "Check context message enabled for current session",
                     )
                 elif value_lower in ("false", "no", "n", "0"):
                     self.agent.check_context_msg = False
                     config["check_context_msg"] = False
                     self.ui.print_success(
-                        "Check context message disabled for current session"
+                        "Check context message disabled for current session",
                     )
                 else:
                     self.ui.print_error(
-                        "Invalid value for check_context_msg. Use 'true' or 'false'."
+                        "Invalid value for check_context_msg. Use 'true' or 'false'.",
                     )
                     return True, messages
 
@@ -278,7 +282,7 @@ class CommandHandler:
                     self.ui.print_success("Parallel tools disabled for current session")
                 else:
                     self.ui.print_error(
-                        "Invalid value for parallel_tools. Use 'true' or 'false'."
+                        "Invalid value for parallel_tools. Use 'true' or 'false'.",
                     )
                     return True, messages
 
@@ -288,11 +292,11 @@ class CommandHandler:
                     self.agent.token_manager.token_buffer_ratio = threshold / 100.0
                     config["compact_threshold"] = threshold
                     self.ui.print_success(
-                        f"Compact threshold updated to {threshold}% for current session"
+                        f"Compact threshold updated to {threshold}% for current session",
                     )
                 except ValueError:
                     self.ui.print_error(
-                        f"Invalid compact_threshold value: {value}. Must be a number."
+                        f"Invalid compact_threshold value: {value}. Must be a number.",
                     )
                     return True, messages
 
@@ -310,7 +314,7 @@ class CommandHandler:
                     self.ui.print_success("Verbose mode disabled for current session")
                 else:
                     self.ui.print_error(
-                        "Invalid value for verbose. Use 'true' or 'false'."
+                        "Invalid value for verbose. Use 'true' or 'false'.",
                     )
                     return True, messages
 
@@ -318,7 +322,7 @@ class CommandHandler:
                 # For other settings, just update the config file
                 config_manager.set_value(key, value)
                 self.ui.print_success(
-                    f"Configuration {key}={value} will apply on restart"
+                    f"Configuration {key}={value} will apply on restart",
                 )
 
         except Exception as e:
@@ -331,8 +335,9 @@ class CommandHandler:
         return True, messages
 
     def compact_conversation(
-        self, messages: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Compact the conversation to reduce context size by generating a summary.
 
         Args:
@@ -348,7 +353,7 @@ class CommandHandler:
             self.ui.console.print(
                 f"[dim cyan][Verbose] Starting conversation compaction. "
                 f"Current state: {message_count} messages, {tokens_before} tokens "
-                f"({percent_used}% of context)[/]"
+                f"({percent_used}% of context)[/]",
             )
 
         # Find the initial system message (if any)
@@ -362,7 +367,7 @@ class CommandHandler:
         if len(messages) < 3:
             if self.verbose:
                 self.ui.console.print(
-                    f"[dim yellow][Verbose] Not enough messages to compact (only {len(messages)} messages)[/]"
+                    f"[dim yellow][Verbose] Not enough messages to compact (only {len(messages)} messages)[/]",
                 )
             return messages
 
@@ -382,7 +387,7 @@ class CommandHandler:
             # Not enough to summarize meaningfully
             if self.verbose:
                 self.ui.console.print(
-                    f"[dim yellow][Verbose] Not enough messages to summarize meaningfully[/]"
+                    "[dim yellow][Verbose] Not enough messages to summarize meaningfully[/]",
                 )
             return messages
 
@@ -396,7 +401,7 @@ class CommandHandler:
                 "content": "You are an AI assistant helping to summarize a conversation. "
                 "Create a concise, short-hand summary of the key points discussed and any conclusions reached."
                 "Keep it brief and informative. Use sentence fragments and bullet points instead of full sentences.",
-            }
+            },
         )
 
         # Add messages to be summarized
@@ -408,7 +413,7 @@ class CommandHandler:
                 "role": "user",
                 "content": "Please provide a concise summary of this conversation that captures the important "
                 "points, questions, and answers. Keep it brief but include key details.",
-            }
+            },
         )
 
         # Generate animation to show we're creating a summary
@@ -430,7 +435,7 @@ class CommandHandler:
             # If summarization fails, use a default message
             if self.verbose:
                 self.ui.console.print(
-                    f"[dim red][Verbose] Error generating summary: {str(e)}[/]"
+                    f"[dim red][Verbose] Error generating summary: {str(e)}[/]",
                 )
             summary = "Conversation history has been compacted to save context space."
         finally:
@@ -440,7 +445,7 @@ class CommandHandler:
 
         # Add the generated summary as a system message
         compacted.append(
-            {"role": "system", "content": f"CONVERSATION SUMMARY: {summary}"}
+            {"role": "system", "content": f"CONVERSATION SUMMARY: {summary}"},
         )
 
         self.token_manager.last_compaction_time = time.time()
@@ -455,12 +460,12 @@ class CommandHandler:
             self.ui.console.print(
                 f"[dim green][Verbose] Compaction complete. Removed {messages_removed} messages, "
                 f"saved {tokens_saved} tokens. New usage: {tokens_after} tokens "
-                f"({new_percent}% of context)[/]"
+                f"({new_percent}% of context)[/]",
             )
 
         return compacted
 
-    def dump_conversation(self, messages: List[Dict[str, Any]], filename: str) -> None:
+    def dump_conversation(self, messages: list[dict[str, Any]], filename: str) -> None:
         """Dump the conversation history to a file.
 
         Args:
@@ -493,7 +498,7 @@ class CommandHandler:
 
         if self.trust_manager.auto_confirm:
             self.ui.print_warning(
-                "Auto-confirm is enabled - all actions are automatically approved"
+                "Auto-confirm is enabled - all actions are automatically approved",
             )
 
         for tool_name in sorted(self.trust_manager.trusted_tools.keys()):

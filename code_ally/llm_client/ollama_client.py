@@ -1,12 +1,12 @@
 """Ollama API client for function calling LLMs."""
 
-import inspect
 import json
 import logging
 import re
 import signal
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 import requests
 
@@ -29,7 +29,7 @@ class OllamaClient(ModelClient):
         temperature: float = 0.3,
         context_size: int = 16000,
         max_tokens: int = 5000,
-        keep_alive: Optional[int] = None,
+        keep_alive: int | None = None,
     ):
         """Initialize the Ollama client."""
         self._endpoint = endpoint
@@ -70,7 +70,7 @@ class OllamaClient(ModelClient):
         self._endpoint = value
         self.api_url = f"{value}/api/chat"
 
-    def _determine_param_type(self, annotation: Type) -> str:
+    def _determine_param_type(self, annotation: type) -> str:
         """Determine the JSON schema type from a Python type annotation."""
         # Basic types
         if annotation == str:
@@ -99,17 +99,19 @@ class OllamaClient(ModelClient):
         # Default to string for unknown types
         return "string"
 
-    def _generate_schema_from_function(self, func: Callable) -> Dict[str, Any]:
+    def _generate_schema_from_function(self, func: Callable) -> dict[str, Any]:
         """Generate a JSON schema for a function based on its signature and docstring."""
         # [Function body remains unchanged]
 
-    def _convert_tools_to_schemas(self, tools: List[Callable]) -> List[Dict[str, Any]]:
+    def _convert_tools_to_schemas(self, tools: list[Callable]) -> list[dict[str, Any]]:
         """Convert a list of tools (functions) to JSON schemas."""
         return [self._generate_schema_from_function(tool) for tool in tools]
 
     def _get_qwen_template_options(
-        self, messages: List[Dict[str, Any]], tools: Optional[List[Callable]] = None
-    ) -> Dict[str, Any]:
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[Callable] | None = None,
+    ) -> dict[str, Any]:
         """Generate Qwen-specific template options for function calling.
 
         Args:
@@ -149,7 +151,7 @@ class OllamaClient(ModelClient):
                         break
 
         logger.debug(
-            f"Using Qwen template options: {qwen_template}, parallel={enable_parallel}, chinese={use_chinese}"
+            f"Using Qwen template options: {qwen_template}, parallel={enable_parallel}, chinese={use_chinese}",
         )
 
         return {
@@ -160,7 +162,7 @@ class OllamaClient(ModelClient):
             },
         }
 
-    def _normalize_tool_calls_in_message(self, message: Dict[str, Any]) -> None:
+    def _normalize_tool_calls_in_message(self, message: dict[str, Any]) -> None:
         """Normalize tool calls in a message to ensure consistent format."""
         # First, check if tool_calls is already properly formatted
         if "tool_calls" in message and message["tool_calls"]:
@@ -191,7 +193,7 @@ class OllamaClient(ModelClient):
         ):
             self._extract_tool_calls_from_text(message)
 
-    def _standardize_existing_tool_calls(self, message: Dict[str, Any]) -> None:
+    def _standardize_existing_tool_calls(self, message: dict[str, Any]) -> None:
         """Standardize tool_calls that already exist in the message."""
         normalized_calls = []
         for call in message["tool_calls"]:
@@ -208,23 +210,23 @@ class OllamaClient(ModelClient):
                             "name": call.get("name"),
                             "arguments": call.get("arguments", {}),
                         },
-                    }
+                    },
                 )
             else:
                 normalized_calls.append(call)
         message["tool_calls"] = normalized_calls
 
-    def _convert_function_call_to_tool_calls(self, message: Dict[str, Any]) -> None:
+    def _convert_function_call_to_tool_calls(self, message: dict[str, Any]) -> None:
         """Convert legacy function_call format to tool_calls format."""
         message["tool_calls"] = [
             {
                 "id": f"function-{int(time.time())}",
                 "type": "function",
                 "function": message["function_call"],
-            }
+            },
         ]
 
-    def _extract_tool_calls_from_text(self, message: Dict[str, Any]) -> None:
+    def _extract_tool_calls_from_text(self, message: dict[str, Any]) -> None:
         """Extract tool calls from text content as a fallback."""
         content = message["content"]
         tool_calls = []
@@ -240,7 +242,7 @@ class OllamaClient(ModelClient):
             matches = re.findall(pattern, content, re.DOTALL)
             if matches:
                 logger.warning(
-                    f"Using regex fallback to extract tool calls with pattern: {pattern}"
+                    f"Using regex fallback to extract tool calls with pattern: {pattern}",
                 )
                 for match in matches:
                     try:
@@ -267,7 +269,7 @@ class OllamaClient(ModelClient):
                                             else arguments
                                         ),
                                     },
-                                }
+                                },
                             )
                         else:
                             # Hermes format - single JSON string
@@ -280,7 +282,7 @@ class OllamaClient(ModelClient):
                                         "name": tool_json.get("name", ""),
                                         "arguments": tool_json.get("arguments", {}),
                                     },
-                                }
+                                },
                             )
                     except Exception as e:
                         logger.warning(f"Error parsing tool call from text: {e}")
@@ -335,7 +337,11 @@ class OllamaClient(ModelClient):
         """Send a request to Ollama with messages and function definitions."""
         messages_copy = messages.copy()
         payload = self._prepare_payload(
-            messages_copy, functions, tools, stream, include_reasoning
+            messages_copy,
+            functions,
+            tools,
+            stream,
+            include_reasoning,
         )
 
         # Reset interruption flag before starting new request
@@ -347,7 +353,7 @@ class OllamaClient(ModelClient):
 
             def sigint_handler(sig, frame):
                 logger.warning(
-                    "SIGINT received during request. Interrupting Ollama request."
+                    "SIGINT received during request. Interrupting Ollama request.",
                 )
                 self.interrupted = True
 
@@ -377,7 +383,7 @@ class OllamaClient(ModelClient):
                 # If we got here and interruption flag is set, something went wrong with interruption
                 if self.interrupted:
                     logger.warning(
-                        "Request was interrupted but still returned a result"
+                        "Request was interrupted but still returned a result",
                     )
                     # Return a special response indicating interruption
                     return {
@@ -449,7 +455,8 @@ class OllamaClient(ModelClient):
 
             if self.is_qwen_model:
                 payload["options"]["parallel_function_calls"] = self.config.get(
-                    "qwen_parallel_calls", True
+                    "qwen_parallel_calls",
+                    True,
                 )
 
         return payload
@@ -463,7 +470,10 @@ class OllamaClient(ModelClient):
 
         try:
             response = self.current_session.post(
-                self.api_url, json=payload, timeout=240, stream=True
+                self.api_url,
+                json=payload,
+                timeout=240,
+                stream=True,
             )
             response.raise_for_status()
 
@@ -487,7 +497,7 @@ class OllamaClient(ModelClient):
                     result = json.loads(full_content)
                 except json.JSONDecodeError:
                     logger.error(
-                        f"Invalid JSON response from Ollama API: {full_content[:100]}..."
+                        f"Invalid JSON response from Ollama API: {full_content[:100]}...",
                     )
                     raise
 
@@ -512,7 +522,7 @@ class OllamaClient(ModelClient):
         except KeyboardInterrupt:
             # This will be raised by our signal handler
             raise
-        except Exception as e:
+        except Exception:
             # Close the session on error
             if self.current_session:
                 self.current_session.close()
@@ -546,5 +556,5 @@ class OllamaClient(ModelClient):
         logger.error(f"Invalid JSON response from Ollama API: {str(e)}")
         return {
             "role": "assistant",
-            "content": f"Error: Received invalid response from Ollama API",
+            "content": "Error: Received invalid response from Ollama API",
         }

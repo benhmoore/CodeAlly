@@ -1,8 +1,7 @@
 import ast
-import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -52,7 +51,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         exclude_dirs: str = "",
         max_files: int = 50,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze code structure in files or directories.
 
@@ -112,7 +111,11 @@ class CodeStructureAnalyzerTool(BaseTool):
 
                 # Collect files
                 files_to_analyze = self._collect_files(
-                    file_path, language_exts, recursive, excluded_directories, max_files
+                    file_path,
+                    language_exts,
+                    recursive,
+                    excluded_directories,
+                    max_files,
                 )
 
                 if not files_to_analyze:
@@ -146,11 +149,17 @@ class CodeStructureAnalyzerTool(BaseTool):
                     # Select the appropriate analyzer based on language
                     if language.lower() == "python":
                         file_structure = self._analyze_python_file(
-                            file, include_functions, include_classes, include_imports
+                            file,
+                            include_functions,
+                            include_classes,
+                            include_imports,
                         )
                     elif language.lower() in ["javascript", "typescript"]:
                         file_structure = self._analyze_js_ts_file(
-                            file, include_functions, include_classes, include_imports
+                            file,
+                            include_functions,
+                            include_classes,
+                            include_imports,
                         )
                     else:
                         # Generic analyzer for other languages
@@ -170,14 +179,16 @@ class CodeStructureAnalyzerTool(BaseTool):
                         )
                         structure[rel_path] = file_structure
                         successfully_analyzed.append(file)
-                except Exception as e:
+                except Exception:
                     # Skip files that can't be analyzed
                     continue
 
             # Analyze dependencies between files if requested
             if include_dependencies and len(successfully_analyzed) > 1:
                 dependencies = self._analyze_dependencies(
-                    successfully_analyzed, language, structure
+                    successfully_analyzed,
+                    language,
+                    structure,
                 )
                 structure["__dependencies__"] = dependencies
 
@@ -203,11 +214,11 @@ class CodeStructureAnalyzerTool(BaseTool):
     def _collect_files(
         self,
         directory: str,
-        extensions: List[str],
+        extensions: list[str],
         recursive: bool,
-        excluded_dirs: List[str],
+        excluded_dirs: list[str],
         max_files: int,
-    ) -> List[str]:
+    ) -> list[str]:
         """Collect files matching the given extensions.
 
         Args:
@@ -281,7 +292,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         include_functions: bool,
         include_classes: bool,
         include_imports: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze a Python file using the ast module.
 
         Args:
@@ -294,7 +305,7 @@ class CodeStructureAnalyzerTool(BaseTool):
             Dict with analysis results
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Parse the Python code
@@ -321,7 +332,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                     "asname": name.asname,
                                     "from_import": True,
                                     "module": module,
-                                }
+                                },
                             )
 
                 result["imports"] = imports
@@ -332,7 +343,8 @@ class CodeStructureAnalyzerTool(BaseTool):
 
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef) or isinstance(
-                        node, ast.AsyncFunctionDef
+                        node,
+                        ast.AsyncFunctionDef,
                     ):
                         # Skip methods (they'll be included in class analysis)
                         if not include_classes or not any(
@@ -377,7 +389,8 @@ class CodeStructureAnalyzerTool(BaseTool):
                         # Analyze methods and class variables
                         for child in node.body:
                             if isinstance(child, ast.FunctionDef) or isinstance(
-                                child, ast.AsyncFunctionDef
+                                child,
+                                ast.AsyncFunctionDef,
                             ):
                                 method_info = {
                                     "name": child.name,
@@ -397,7 +410,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                             ):
                                 for target in child.targets:
                                     class_info["class_variables"].append(
-                                        {"name": target.id, "line": child.lineno}
+                                        {"name": target.id, "line": child.lineno},
                                     )
 
                         classes.append(class_info)
@@ -408,7 +421,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         except Exception as e:
             return {"error": f"Failed to analyze Python file: {str(e)}"}
 
-    def _get_function_args(self, node: ast.FunctionDef) -> List[Dict[str, str]]:
+    def _get_function_args(self, node: ast.FunctionDef) -> list[dict[str, str]]:
         """Extract function arguments from a FunctionDef node.
 
         Args:
@@ -437,7 +450,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                         if node.args.kwarg.annotation
                         else ""
                     ),
-                }
+                },
             )
 
         # Handle varargs
@@ -450,7 +463,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                         if node.args.vararg.annotation
                         else ""
                     ),
-                }
+                },
             )
 
         return args
@@ -532,7 +545,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         include_functions: bool,
         include_classes: bool,
         include_imports: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze a JavaScript/TypeScript file using regex patterns.
 
         Args:
@@ -545,7 +558,7 @@ class CodeStructureAnalyzerTool(BaseTool):
             Dict with analysis results
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             result = {}
@@ -567,13 +580,14 @@ class CodeStructureAnalyzerTool(BaseTool):
                                 "name": default_import.strip(),
                                 "module": module,
                                 "type": "default",
-                            }
+                            },
                         )
 
                     if named_imports:
                         # Extract individual named imports
                         for named_import in re.finditer(
-                            r"([^,{\s]+)(?:\s+as\s+([^,}\s]+))?", named_imports
+                            r"([^,{\s]+)(?:\s+as\s+([^,}\s]+))?",
+                            named_imports,
                         ):
                             original, alias = named_import.groups()
                             imports.append(
@@ -582,7 +596,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                     "asname": alias.strip() if alias else None,
                                     "module": module,
                                     "type": "named",
-                                }
+                                },
                             )
 
                 # CommonJS require statements
@@ -596,13 +610,14 @@ class CodeStructureAnalyzerTool(BaseTool):
                                 "name": variable_name.strip(),
                                 "module": module,
                                 "type": "require",
-                            }
+                            },
                         )
 
                     if named_imports:
                         # Extract individual named imports
                         for named_import in re.finditer(
-                            r"([^,{\s]+)(?:\s*:\s*([^,}\s]+))?", named_imports
+                            r"([^,{\s]+)(?:\s*:\s*([^,}\s]+))?",
+                            named_imports,
                         ):
                             original, alias = named_import.groups()
                             imports.append(
@@ -611,7 +626,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                     "asname": alias.strip() if alias else None,
                                     "module": module,
                                     "type": "require-destructured",
-                                }
+                                },
                             )
 
                 result["imports"] = imports
@@ -630,7 +645,8 @@ class CodeStructureAnalyzerTool(BaseTool):
                     pos = match.start()
                     jsdoc_match = re.search(r"/\*\*([\s\S]*?)\*/", content[:pos])
                     if jsdoc_match and not re.search(
-                        r"[^\s]", content[jsdoc_match.end() : pos]
+                        r"[^\s]",
+                        content[jsdoc_match.end() : pos],
                     ):
                         docstring = jsdoc_match.group(1).strip()
 
@@ -644,7 +660,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                             "async": "async" in match.group(0),
                             "docstring": docstring,
                             "line": content[: match.start()].count("\n") + 1,
-                        }
+                        },
                     )
 
                 # Arrow functions with explicit names (const/let/var assignments)
@@ -657,7 +673,8 @@ class CodeStructureAnalyzerTool(BaseTool):
                     pos = match.start()
                     jsdoc_match = re.search(r"/\*\*([\s\S]*?)\*/", content[:pos])
                     if jsdoc_match and not re.search(
-                        r"[^\s]", content[jsdoc_match.end() : pos]
+                        r"[^\s]",
+                        content[jsdoc_match.end() : pos],
                     ):
                         docstring = jsdoc_match.group(1).strip()
 
@@ -672,7 +689,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                             "is_arrow": True,
                             "docstring": docstring,
                             "line": content[: match.start()].count("\n") + 1,
-                        }
+                        },
                     )
 
                 result["functions"] = functions
@@ -691,7 +708,8 @@ class CodeStructureAnalyzerTool(BaseTool):
                     pos = match.start()
                     jsdoc_match = re.search(r"/\*\*([\s\S]*?)\*/", content[:pos])
                     if jsdoc_match and not re.search(
-                        r"[^\s]", content[jsdoc_match.end() : pos]
+                        r"[^\s]",
+                        content[jsdoc_match.end() : pos],
                     ):
                         docstring = jsdoc_match.group(1).strip()
 
@@ -727,7 +745,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                         else []
                                     ),
                                     "is_constructor": True,
-                                }
+                                },
                             )
 
                         # Regular methods
@@ -754,7 +772,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                     "async": "async" in method_match.group(0),
                                     "getter": "get " in method_match.group(0),
                                     "setter": "set " in method_match.group(0),
-                                }
+                                },
                             )
 
                         # Class properties
@@ -775,7 +793,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                     "name": prop_name.strip(),
                                     "type": prop_type.strip() if prop_type else "",
                                     "static": "static" in prop_match.group(0),
-                                }
+                                },
                             )
 
                         classes.append(
@@ -786,7 +804,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                 "properties": properties,
                                 "docstring": docstring,
                                 "line": content[: match.start()].count("\n") + 1,
-                            }
+                            },
                         )
 
                 result["classes"] = classes
@@ -802,7 +820,7 @@ class CodeStructureAnalyzerTool(BaseTool):
         include_functions: bool,
         include_classes: bool,
         include_imports: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze a file in a language without specific support using regex patterns.
 
         Args:
@@ -816,7 +834,7 @@ class CodeStructureAnalyzerTool(BaseTool):
             Dict with analysis results
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             result = {}
@@ -867,7 +885,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                 "type": "function",
                                 "name": function_name,
                                 "line": content[: match.start()].count("\n") + 1,
-                            }
+                            },
                         )
 
             if include_classes:
@@ -888,7 +906,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                                 "type": "class",
                                 "name": class_name,
                                 "line": content[: match.start()].count("\n") + 1,
-                            }
+                            },
                         )
 
             if include_imports:
@@ -914,7 +932,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                             {
                                 "name": import_name,
                                 "line": content[: match.start()].count("\n") + 1,
-                            }
+                            },
                         )
                     result["imports"] = imports
 
@@ -925,8 +943,11 @@ class CodeStructureAnalyzerTool(BaseTool):
             return {"error": f"Failed to analyze file: {str(e)}"}
 
     def _analyze_dependencies(
-        self, files: List[str], language: str, structure: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self,
+        files: list[str],
+        language: str,
+        structure: dict[str, Any],
+    ) -> dict[str, Any]:
         """Analyze dependencies between files.
 
         Args:
@@ -976,8 +997,10 @@ class CodeStructureAnalyzerTool(BaseTool):
         return dependencies
 
     def _generate_summary(
-        self, structure: Dict[str, Any], language: str
-    ) -> Dict[str, Any]:
+        self,
+        structure: dict[str, Any],
+        language: str,
+    ) -> dict[str, Any]:
         """Generate a summary of the code structure.
 
         Args:
@@ -1014,7 +1037,7 @@ class CodeStructureAnalyzerTool(BaseTool):
                 # Add top-level classes to the components list
                 for cls in file_struct["classes"]:
                     summary["top_level_components"].append(
-                        {"type": "class", "name": cls["name"], "file": file_key}
+                        {"type": "class", "name": cls["name"], "file": file_key},
                     )
 
             # Count imports
@@ -1034,7 +1057,11 @@ class CodeStructureAnalyzerTool(BaseTool):
                         for cls in file_struct["classes"]
                     ):
                         summary["top_level_components"].append(
-                            {"type": "function", "name": func["name"], "file": file_key}
+                            {
+                                "type": "function",
+                                "name": func["name"],
+                                "file": file_key,
+                            },
                         )
 
         return summary

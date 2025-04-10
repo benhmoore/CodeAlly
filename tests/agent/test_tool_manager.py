@@ -5,23 +5,23 @@ validation, and execution in the CodeAlly system.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
 from unittest.mock import MagicMock, patch
+from typing import Union
 
 import pytest
 
+from code_ally.agent.tool_manager import ToolManager
+from code_ally.tools.base import BaseTool
+from code_ally.trust import PermissionDeniedError
+
+# Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
 
 setup_mocks()
-
-from code_ally.agent.tool_manager import ToolManager
-from code_ally.tools.base import BaseTool
-from code_ally.trust import PermissionDeniedError
 
 
 # Create a concrete test tool class
@@ -39,7 +39,7 @@ class SampleTool(BaseTool):
     def execute(self, param1=None, param2=None):
         """Execute the test tool."""
         return self._format_success_response(
-            result=f"Executed with {param1} and {param2}"
+            result=f"Executed with {param1} and {param2}",
         )
 
 
@@ -130,7 +130,8 @@ def test_execute_tool_basic(tool_manager):
     """Test basic tool execution."""
     # Execute a tool
     result = tool_manager.execute_tool(
-        "test_tool", {"param1": "value1", "param2": "value2"}
+        "test_tool",
+        {"param1": "value1", "param2": "value2"},
     )
 
     # Check the result
@@ -156,7 +157,7 @@ def test_execute_tool_permission_denied(tool_manager, trust_manager):
     """Test tool execution when permission is denied."""
     # Set up the trust manager to deny permission
     trust_manager.prompt_for_permission.side_effect = PermissionDeniedError(
-        "Permission denied"
+        "Permission denied",
     )
 
     # Execute a protected tool - should raise PermissionDeniedError
@@ -191,7 +192,7 @@ def test_execute_tool_error_handling(tool_manager):
     """Test error handling during tool execution."""
     # Make the tool raise an exception
     tool_manager.tools["test_tool"].execute = MagicMock(
-        side_effect=Exception("Test error")
+        side_effect=Exception("Test error"),
     )
 
     # Execute the tool

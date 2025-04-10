@@ -5,23 +5,18 @@ of the CodeAlly system that manages conversations and handles tool execution.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-# Import and setup mocks
-from tests.test_helper import setup_mocks
-
-setup_mocks()
-
-# Now we can import our modules
 from code_ally.agent.agent import Agent
 from code_ally.service_registry import ServiceRegistry
+from tests.test_helper import setup_mocks
+
+# Import and setup mocks
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+setup_mocks()
 
 
 @pytest.fixture
@@ -114,7 +109,7 @@ def test_process_llm_response_text(agent):
 
     # Check that the UI was used to print the response
     agent.ui.print_assistant_response.assert_called_once_with(
-        "This is a test response."
+        "This is a test response.",
     )
 
 
@@ -154,7 +149,7 @@ def test_process_llm_response_with_tool_calls(agent, mock_tools):
 
     # Check that the follow-up response was processed
     agent.ui.print_assistant_response.assert_called_with(
-        "The tool was executed successfully."
+        "The tool was executed successfully.",
     )
 
     # Check that the messages include the tool call and its result

@@ -9,10 +9,8 @@ and initializing the agent with the appropriate tools and models.
 import argparse
 import json
 import logging
-import os
 import signal
 import sys
-from typing import Any, Dict, Optional, Tuple
 
 import requests
 from rich.console import Console
@@ -20,7 +18,7 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 
 from code_ally.agent import Agent
-from code_ally.config import DEFAULT_CONFIG, ConfigManager
+from code_ally.config import ConfigManager
 from code_ally.llm_client import OllamaClient
 from code_ally.prompts import get_main_system_prompt
 from code_ally.service_registry import ServiceRegistry
@@ -37,7 +35,7 @@ logger = logging.getLogger("code_ally")
 
 # Global reference to the agent for signal handling - needed to differentiate
 # Ctrl+C during requests vs. Ctrl+C when idle.
-_global_agent: Optional[Agent] = None
+_global_agent: Agent | None = None
 
 
 def handle_interrupt(signum, frame):
@@ -54,7 +52,7 @@ def handle_interrupt(signum, frame):
         # If a request is in progress, we now want to propagate the signal
         # to the OllamaClient which will handle it properly
         logger.debug(
-            "SIGINT caught by main handler during request. Propagating to client..."
+            "SIGINT caught by main handler during request. Propagating to client...",
         )
         # We don't return here - let the signal propagate to the client
     else:
@@ -79,8 +77,9 @@ def configure_logging(verbose: bool) -> None:
 
 
 def check_ollama_availability(
-    endpoint: str, model: str
-) -> Tuple[bool, bool, Optional[str]]:
+    endpoint: str,
+    model: str,
+) -> tuple[bool, bool, str | None]:
     """Check if Ollama is running and the specified model is available.
 
     Makes an HTTP request to the Ollama API to check if the server is running
@@ -124,8 +123,8 @@ def check_ollama_availability(
         logger.error(f"Could not connect to Ollama at {endpoint}")
         return False, False, f"Could not connect to Ollama at {endpoint}"
     except requests.exceptions.Timeout:
-        logger.error(f"Connection to Ollama timed out")
-        return False, False, f"Connection to Ollama timed out"
+        logger.error("Connection to Ollama timed out")
+        return False, False, "Connection to Ollama timed out"
     except requests.exceptions.RequestException as e:
         logger.error(f"Error connecting to Ollama: {str(e)}")
         return False, False, f"Error connecting to Ollama: {str(e)}"
@@ -169,7 +168,7 @@ Current error: {error_message}
             title="[bold yellow]⚠️ Ollama Configuration Required[/]",
             border_style="yellow",
             expand=False,
-        )
+        ),
     )
 
 
@@ -186,30 +185,32 @@ def parse_args() -> argparse.Namespace:
     # Model and API settings
     model_group = parser.add_argument_group("Model Settings")
     model_group.add_argument(
-        "--model", default=config.get("model"), help=f"The model to use"
+        "--model",
+        default=config.get("model"),
+        help="The model to use",
     )
     model_group.add_argument(
         "--endpoint",
         default=config.get("endpoint"),
-        help=f"The Ollama API endpoint URL",
+        help="The Ollama API endpoint URL",
     )
     model_group.add_argument(
         "--temperature",
         type=float,
         default=config.get("temperature"),
-        help=f"Temperature for text generation (0.0-1.0)",
+        help="Temperature for text generation (0.0-1.0)",
     )
     model_group.add_argument(
         "--context-size",
         type=int,
         default=config.get("context_size"),
-        help=f"Context size in tokens",
+        help="Context size in tokens",
     )
     model_group.add_argument(
         "--max-tokens",
         type=int,
         default=config.get("max_tokens"),
-        help=f"Maximum tokens to generate",
+        help="Maximum tokens to generate",
     )
 
     # Configuration management
@@ -220,10 +221,14 @@ def parse_args() -> argparse.Namespace:
         help="Save the current command line options as config defaults",
     )
     config_group.add_argument(
-        "--config-show", action="store_true", help="Show the current configuration"
+        "--config-show",
+        action="store_true",
+        help="Show the current configuration",
     )
     config_group.add_argument(
-        "--config-reset", action="store_true", help="Reset configuration to defaults"
+        "--config-reset",
+        action="store_true",
+        help="Reset configuration to defaults",
     )
 
     # Security and behavior settings
@@ -298,7 +303,7 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
                 "auto_confirm": args.yes_to_all,
                 "check_context_msg": args.check_context_msg,
                 "auto_dump": args.auto_dump,
-            }
+            },
         )
         for key, value in new_config.items():
             config_manager.set_value(key, value)
@@ -327,7 +332,8 @@ def main() -> None:
     if not args.skip_ollama_check:
         console.print("[bold]Checking Ollama availability...[/]")
         is_running, model_available, error_message = check_ollama_availability(
-            args.endpoint, args.model
+            args.endpoint,
+            args.model,
         )
 
         if not is_running or not model_available:
@@ -338,14 +344,14 @@ def main() -> None:
             continue_anyway = input("Do you want to continue anyway? (y/n): ").lower()
             if continue_anyway not in ("y", "yes"):
                 console.print(
-                    "[yellow]Exiting. Please configure Ollama and try again.[/]"
+                    "[yellow]Exiting. Please configure Ollama and try again.[/]",
                 )
                 return
 
             console.print("[yellow]Continuing without validated Ollama setup...[/]")
         else:
             console.print(
-                f"[green]✓ Ollama is running and model '{args.model}' is available[/]"
+                f"[green]✓ Ollama is running and model '{args.model}' is available[/]",
             )
 
     # Determine client type based on model name
@@ -413,7 +419,7 @@ def main() -> None:
         # This catches KeyboardInterrupt raised when the user cancels the input prompt
         # or if the signal handler decided to exit (i.e., no request was active).
         logger.debug(
-            "KeyboardInterrupt caught in main execution block (likely prompt cancellation or idle interrupt)."
+            "KeyboardInterrupt caught in main execution block (likely prompt cancellation or idle interrupt).",
         )
         if agent.auto_dump:
             try:
@@ -440,7 +446,7 @@ def main() -> None:
                     traceback.format_exc(),
                     title="[bold red]Error Details[/]",
                     border_style="red",
-                )
+                ),
             )
         sys.exit(1)
 

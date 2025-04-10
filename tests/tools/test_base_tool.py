@@ -5,21 +5,20 @@ in the CodeAlly system.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from typing import Union
 
 import pytest
 
+# Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
+from code_ally.tools.base import BaseTool
 from tests.test_helper import setup_mocks
 
 setup_mocks()
-
-from code_ally.tools.base import BaseTool
 
 
 # Create concrete tool classes for testing
@@ -99,7 +98,9 @@ def test_tool_without_description():
 
 
 def test_tool_without_confirmation_flag():
-    """Test that a tool without a requires_confirmation attribute raises a ValueError."""
+    """Test that a tool without a requires_confirmation attribute raises a
+    ValueError.
+    """
     with pytest.raises(ValueError) as excinfo:
         NoConfirmationTool()
     assert "must define a 'requires_confirmation' class variable" in str(excinfo.value)
@@ -139,7 +140,8 @@ def test_format_success_response():
 
     # Success response with additional fields
     response = tool._format_success_response(
-        result="Test result", data={"key": "value"}
+        result="Test result",
+        data={"key": "value"},
     )
     assert response["success"] is True
     assert response["error"] == ""

@@ -1,6 +1,6 @@
 import glob
 import os
-from typing import Any, Dict
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -34,7 +34,7 @@ class GlobTool(BaseTool):
         show_content: bool = False,
         content_lines: int = 10,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find files matching a glob pattern with content preview options to save context.
 
@@ -137,7 +137,7 @@ class GlobTool(BaseTool):
 
                         # Read first few lines to check if binary
                         try:
-                            with open(file_path, "r", encoding="utf-8") as f:
+                            with open(file_path, encoding="utf-8") as f:
                                 preview_lines = []
                                 for i, line in enumerate(f):
                                     if i >= content_lines:

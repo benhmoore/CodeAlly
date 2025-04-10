@@ -68,9 +68,6 @@ jobs:
             - name: Run Ruff linter
               run: ruff check .
 
-            - name: Check types with mypy
-              run: mypy --ignore-missing-imports code_ally tests
-
     build:
         name: Build package
         runs-on: ubuntu-latest

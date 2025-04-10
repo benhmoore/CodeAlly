@@ -5,21 +5,19 @@ interface for interacting with different language model backends.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
-from unittest.mock import MagicMock
 
 import pytest
 
+from code_ally.llm_client.model_client import ModelClient
+
+# Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
 
 setup_mocks()
-
-from code_ally.llm_client.model_client import ModelClient
 
 
 # Create a concrete ModelClient implementation for testing
@@ -133,7 +131,7 @@ def test_concrete_model_client():
                     "name": "test_function",
                     "arguments": '{"param": "value"}',
                 },
-            }
+            },
         ],
     }
     client = SampleModelClient(custom_response)

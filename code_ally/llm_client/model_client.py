@@ -6,7 +6,8 @@ language model backends through a common API.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -22,12 +23,12 @@ class ModelClient(ABC):
     @abstractmethod
     def send(
         self,
-        messages: List[Dict[str, Any]],
-        functions: Optional[List[Dict[str, Any]]] = None,
-        tools: Optional[List[Callable]] = None,
+        messages: list[dict[str, Any]],
+        functions: list[dict[str, Any]] | None = None,
+        tools: list[Callable] | None = None,
         stream: bool = False,
         include_reasoning: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send a request to the LLM with messages and function definitions.
 
         Args:

@@ -1,12 +1,11 @@
-"""File: tool_manager.py
+"""File: tool_manager.py.
 
 Manages tool registration, validation, and execution.
 """
 
 import inspect
-import json
 import logging
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from code_ally.agent.permission_manager import PermissionManager
 from code_ally.tools.base import BaseTool
@@ -20,10 +19,10 @@ class ToolManager:
 
     def __init__(
         self,
-        tools: List[BaseTool],
+        tools: list[BaseTool],
         trust_manager: TrustManager,
         permission_manager: PermissionManager = None,
-    ):
+    ) -> None:
         """Initialize the tool manager.
 
         Args:
@@ -39,13 +38,13 @@ class ToolManager:
         self.client_type = None  # Will be set by the Agent when initialized
 
         # Track recent tool calls to avoid redundancy
-        self.recent_tool_calls: List[Tuple[str, Tuple]] = []
+        self.recent_tool_calls: list[tuple[str, tuple]] = []
         self.max_recent_calls = 5  # Remember last 5 calls
-        self.current_turn_tool_calls: List[Tuple[str, Tuple]] = (
+        self.current_turn_tool_calls: list[tuple[str, tuple]] = (
             []
         )  # For the current conversation turn only
 
-    def get_function_definitions(self) -> List[Dict[str, Any]]:
+    def get_function_definitions(self) -> list[dict[str, Any]]:
         """Create function definitions for tools in the format expected by the LLM.
 
         Returns:
@@ -58,7 +57,8 @@ class ToolManager:
 
             # Extract information from the method
             sig = inspect.signature(execute_method)
-            doc = inspect.getdoc(execute_method) or ""
+            # get docstring but not used here
+            _ = inspect.getdoc(execute_method) or ""
 
             # Build parameter schema
             parameters = {"type": "object", "properties": {}, "required": []}
@@ -71,42 +71,42 @@ class ToolManager:
                 param_type = "string"
 
                 # Try to determine type from annotation
-                if param.annotation != inspect.Parameter.empty:
-                    if param.annotation == str:
+                if param.annotation is not inspect.Parameter.empty:
+                    if param.annotation is str:
                         param_type = "string"
-                    elif param.annotation == int:
+                    elif param.annotation is int:
                         param_type = "integer"
-                    elif param.annotation == float:
+                    elif param.annotation is float:
                         param_type = "number"
-                    elif param.annotation == bool:
+                    elif param.annotation is bool:
                         param_type = "boolean"
                     elif (
-                        param.annotation == list
+                        param.annotation is list
                         or hasattr(param.annotation, "__origin__")
-                        and param.annotation.__origin__ == list
+                        and param.annotation.__origin__ is list
                     ):
                         param_type = "array"
                     # Handle Optional/Union types
                     elif (
                         hasattr(param.annotation, "__origin__")
-                        and param.annotation.__origin__ == Union
+                        and param.annotation.__origin__ is Union
                     ):
                         args = param.annotation.__args__
                         if type(None) in args:  # This is an Optional
                             for arg in args:
-                                if arg != type(None):
-                                    if arg == str:
+                                if arg is not type(None):
+                                    if arg is str:
                                         param_type = "string"
-                                    elif arg == int:
+                                    elif arg is int:
                                         param_type = "integer"
-                                    elif arg == float:
+                                    elif arg is float:
                                         param_type = "number"
-                                    elif arg == bool:
+                                    elif arg is bool:
                                         param_type = "boolean"
                                     elif (
-                                        arg == list
+                                        arg is list
                                         or hasattr(arg, "__origin__")
-                                        and arg.__origin__ == list
+                                        and arg.__origin__ is list
                                     ):
                                         param_type = "array"
 
@@ -120,7 +120,7 @@ class ToolManager:
                 }
 
                 # If the parameter has no default value, it's required
-                if param.default == inspect.Parameter.empty:
+                if param.default is inspect.Parameter.empty:
                     parameters["required"].append(param_name)
 
             # Create the function definition
@@ -138,12 +138,12 @@ class ToolManager:
 
     def execute_tool(
         self,
-        tool_name,
-        arguments,
-        check_context_msg=True,
-        client_type=None,
-        pre_approved=False,
-    ):
+        tool_name: str,
+        arguments: dict[str, Any],
+        check_context_msg: bool = True,
+        client_type: str | None = None,
+        pre_approved: bool = False,
+    ) -> dict[str, Any]:
         """Execute a tool with the given arguments after checking trust.
 
         Args:
@@ -164,7 +164,7 @@ class ToolManager:
         if verbose_mode:
             args_str = ", ".join(f"{k}={repr(v)}" for k, v in arguments.items())
             self.ui.console.print(
-                f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]"
+                f"[dim magenta][Verbose] Starting tool execution: {tool_name}({args_str})[/]",
             )
 
         # Validate tool existence
@@ -191,10 +191,11 @@ class ToolManager:
 
                     # Prompt for permission (this may raise PermissionDeniedError)
                     if not self.trust_manager.prompt_for_permission(
-                        tool_name, permission_path
+                        tool_name,
+                        permission_path,
                     ):
                         return self._create_error_result(
-                            f"Permission denied for {tool_name}"
+                            f"Permission denied for {tool_name}",
                         )
             except PermissionDeniedError:
                 # Let exceptions propagate upward
@@ -203,7 +204,7 @@ class ToolManager:
         # Execute the tool
         return self._perform_tool_execution(tool_name, arguments)
 
-    def _is_valid_tool(self, tool_name):
+    def _is_valid_tool(self, tool_name: str) -> bool:
         """Check if a tool exists."""
         valid = tool_name in self.tools
 
@@ -212,7 +213,7 @@ class ToolManager:
 
         return valid
 
-    def _is_redundant_call(self, tool_name, arguments):
+    def _is_redundant_call(self, tool_name: str, arguments: dict[str, Any]) -> bool:
         """Check if a tool call is redundant.
 
         Only considers calls made in the current conversation turn as redundant.
@@ -223,7 +224,11 @@ class ToolManager:
         # Only check for redundancy within the current conversation turn
         return current_call in self.current_turn_tool_calls
 
-    def _handle_redundant_call(self, tool_name, check_context_msg):
+    def _handle_redundant_call(
+        self,
+        tool_name: str,
+        check_context_msg: bool,
+    ) -> dict[str, Any]:
         """Handle a redundant tool call."""
         # Simple consistent message for redundancy
         error_msg = f"Identical {tool_name} call was already executed in this conversation turn."
@@ -234,7 +239,7 @@ class ToolManager:
 
         if self.ui and getattr(self.ui, "verbose", False):
             self.ui.console.print(
-                f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]"
+                f"[dim yellow][Verbose] Redundant tool call detected: {tool_name}[/]",
             )
 
         return {
@@ -242,7 +247,7 @@ class ToolManager:
             "error": error_msg,
         }
 
-    def _record_tool_call(self, tool_name, arguments):
+    def _record_tool_call(self, tool_name: str, arguments: dict[str, Any]) -> None:
         """Record a tool call to avoid redundancy."""
         current_call = (tool_name, tuple(sorted(arguments.items())))
 
@@ -254,7 +259,11 @@ class ToolManager:
         if len(self.recent_tool_calls) > self.max_recent_calls:
             self.recent_tool_calls = self.recent_tool_calls[-self.max_recent_calls :]
 
-    def _get_permission_path(self, tool_name, arguments):
+    def _get_permission_path(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> str | None:
         """Get the permission path for a tool."""
         # For bash tool, pass arguments.command as the path
         if tool_name == "bash" and "command" in arguments:
@@ -271,7 +280,11 @@ class ToolManager:
 
         return None
 
-    def _perform_tool_execution(self, tool_name, arguments):
+    def _perform_tool_execution(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute a tool with the given arguments."""
         import time
 
@@ -282,7 +295,7 @@ class ToolManager:
         try:
             if verbose_mode:
                 self.ui.console.print(
-                    f"[dim green][Verbose] Executing tool: {tool_name}[/]"
+                    f"[dim green][Verbose] Executing tool: {tool_name}[/]",
                 )
 
             result = tool.execute(**arguments)
@@ -291,7 +304,7 @@ class ToolManager:
             if verbose_mode:
                 self.ui.console.print(
                     f"[dim green][Verbose] Tool {tool_name} executed in {execution_time:.2f}s "
-                    f"(success: {result.get('success', False)})[/]"
+                    f"(success: {result.get('success', False)})[/]",
                 )
 
             logger.debug("Tool %s executed in %.2fs", tool_name, execution_time)
@@ -300,11 +313,11 @@ class ToolManager:
             logger.exception("Error executing tool %s", tool_name)
             if verbose_mode:
                 self.ui.console.print(
-                    f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]"
+                    f"[dim red][Verbose] Error executing {tool_name}: {str(exc)}[/]",
                 )
             return self._create_error_result(f"Error executing {tool_name}: {str(exc)}")
 
-    def _create_error_result(self, error_message):
+    def _create_error_result(self, error_message: str) -> dict[str, Any]:
         """Create a standardized error result."""
         return {
             "success": False,
@@ -312,8 +325,10 @@ class ToolManager:
         }
 
     def format_tool_result(
-        self, result: Dict[str, Any], client_type: str = None
-    ) -> Dict[str, Any]:
+        self,
+        result: dict[str, Any],
+        client_type: str = None,
+    ) -> dict[str, Any]:
         """Format the tool result.
 
         Args:

@@ -1,4 +1,4 @@
-"""File: ui_manager.py
+"""File: ui_manager.py.
 
 Manages UI rendering and user interaction.
 """
@@ -6,10 +6,11 @@ Manages UI rendering and user interaction.
 import os
 import threading
 import time
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -22,13 +23,19 @@ from rich.text import Text
 class UIManager:
     """Manages UI rendering and user interaction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the UI manager."""
         self.console = Console()
         self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
         self.thinking_event = threading.Event()
         self.verbose = False
-        self.active_live_display = None  # Track the current active Live display
+        self.active_live_display: Live | None = (
+            None  # Track the current active Live display
+        )
+        self.plan_tasks_table: Table | None = None
+        self.plan_panel: Panel | None = None
+        self.plan_panel_group: Any | None = None
+        self.agent = None
 
         # Create history directory if it doesn't exist
         history_dir = os.path.expanduser("~/.ally")
@@ -38,7 +45,7 @@ class UIManager:
         kb = KeyBindings()
 
         @kb.add("c-c")
-        def _(event):
+        def _(event: "KeyPressEvent") -> None:
             """Custom Ctrl+C handler.
 
             Clear buffer if not empty, otherwise exit.
@@ -52,20 +59,18 @@ class UIManager:
 
         # Initialize prompt session with command history and custom key bindings
         history_file = os.path.join(history_dir, "command_history")
-        self.prompt_session = PromptSession(
-            history=FileHistory(history_file), key_bindings=kb
+        self.prompt_session: PromptSession = PromptSession(
+            history=FileHistory(history_file),
+            key_bindings=kb,
         )
 
         # Interactive planning state
-        self.current_interactive_plan = None
-        self.current_interactive_plan_tasks = []
+        self.current_interactive_plan: dict[str, str] | None = None
+        self.current_interactive_plan_tasks: list[dict[str, Any]] = []
 
         # Add these attributes
-        self.active_live_display = None
-        self.plan_panel = None  # Store the entire panel
-        self.plan_tasks_table = None
-        self.plan_panel_group = None  # This is important
-        self._thinking_thread = None
+        # These are already defined above with proper types, so remove duplicates
+        self._thinking_thread: threading.Thread | None = None
         self._stop_thinking_flag = False
 
     def set_verbose(self, verbose: bool) -> None:
@@ -85,7 +90,7 @@ class UIManager:
 
         self.thinking_event.clear()
 
-        def animate():
+        def animate() -> None:
             # Determine display color based on token percentage
             if token_percentage > 80:
                 color = "red"
@@ -108,11 +113,12 @@ class UIManager:
             start_time = time.time()
             try:
                 with Live(
-                    self.thinking_spinner, refresh_per_second=10, console=self.console
+                    self.thinking_spinner,
+                    refresh_per_second=10,
+                    console=self.console,
                 ) as live:
-                    self.active_live_display = (
-                        live  # Store reference to current live display
-                    )
+                    # Store reference to current live display
+                    self.active_live_display = live
                     while not self.thinking_event.is_set():
                         elapsed_seconds = int(time.time() - start_time)
                         if token_percentage > 0:
@@ -146,19 +152,20 @@ class UIManager:
         """
         # prompt_toolkit will raise KeyboardInterrupt if Ctrl+C is pressed
         # when the input buffer is empty, which is caught by Agent.run_conversation
-        return self.prompt_session.prompt("\n> ")
+        result = self.prompt_session.prompt("\n> ")
+        return str(result)
 
     def print_content(
         self,
         content: str,
-        style: str = None,
+        style: str | None = None,
         panel: bool = False,
-        title: str = None,
-        border_style: str = None,
+        title: str | None = None,
+        border_style: str | None = None,
         use_markdown: bool = False,
     ) -> None:
         """Print content with optional styling and panel."""
-        renderable = content
+        renderable: Any = content
         if isinstance(content, str):
             if use_markdown:
                 renderable = Markdown(content)
@@ -250,7 +257,7 @@ class UIManager:
         else:
             # For invalid responses, fall back to default
             self.print_warning(
-                f"Invalid response '{response}'. Using default: {default}"
+                f"Invalid response '{response}'. Using default: {default}",
             )
             return default
 
@@ -287,50 +294,57 @@ Use up/down arrow keys to navigate through command history.
         self.current_interactive_plan_tasks = []
 
         # Create the initial table for tasks
-        from rich.table import Table
-
-        self.plan_tasks_table = Table(box=None, expand=False, show_header=True)
+        table = Table(box=None, expand=False, show_header=True)
 
         # We'll show a full set of columns so the single panel can carry
         # everything from creation to finalization:
-        self.plan_tasks_table.add_column("#", style="dim", width=3)
-        self.plan_tasks_table.add_column("Task ID", style="cyan")
-        self.plan_tasks_table.add_column("Tool", style="green")
-        self.plan_tasks_table.add_column("Description", style="yellow")
-        self.plan_tasks_table.add_column("Dependencies", style="blue")
-        self.plan_tasks_table.add_column("Conditional", style="magenta")
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Task ID", style="cyan")
+        table.add_column("Tool", style="green")
+        table.add_column("Description", style="yellow")
+        table.add_column("Dependencies", style="blue")
+        table.add_column("Conditional", style="magenta")
+
+        self.plan_tasks_table = table
 
         # Create the header text
         from rich.console import Group
         from rich.text import Text
 
         header_content = Text.assemble(
-            Text(f"Name: ", style="bold"),
+            Text("Name: ", style="bold"),
             Text(name),
             Text("\n"),
-            Text(f"Description: ", style="bold"),
+            Text("Description: ", style="bold"),
             Text(description),
             Text("\n\n"),
             Text("Tasks:", style="bold cyan"),
         )
 
         # Group the header and tasks table - store this separately
-        self.plan_panel_group = Group(header_content, self.plan_tasks_table)
+        if self.plan_tasks_table:
+            panel_group = Group(header_content, self.plan_tasks_table)
+            self.plan_panel_group = panel_group
 
         # Create the panel - use the group
         from rich.panel import Panel
 
         title_text = Text("📋 Creating Task Plan", style="bold blue")
-        self.plan_panel = Panel(
-            self.plan_panel_group, title=title_text, border_style="blue", expand=False
-        )
+        if self.plan_panel_group:
+            self.plan_panel = Panel(
+                self.plan_panel_group,
+                title=title_text,
+                border_style="blue",
+                expand=False,
+            )
 
         # Start the live display with the panel
         from rich.live import Live
 
-        live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
-        self.active_live_display = live
-        live.start()
+        if self.plan_panel:
+            live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
+            self.active_live_display = live
+            live.start()
 
     def update_plan_panel_title(self, new_title: str) -> None:
         """Update the title of the plan panel if active."""
@@ -351,8 +365,18 @@ Use up/down arrow keys to navigate through command history.
         depends_on: list,
         condition: dict,
     ) -> None:
+        """Update the interactive plan display with a newly added task.
+
+        Args:
+            task_index: Index of the task in the plan
+            task_id: Unique identifier for the task
+            tool_name: Name of the tool to execute
+            description: Description of what the task does
+            depends_on: List of task IDs this task depends on
+            condition: Dictionary defining the condition for this task to run
+        """
         self.current_interactive_plan_tasks.append(
-            {"index": task_index, "id": task_id, "description": description}
+            {"index": task_index, "id": task_id, "description": description},
         )
 
         depends_txt = ", ".join(depends_on) if depends_on else "—"
@@ -368,14 +392,15 @@ Use up/down arrow keys to navigate through command history.
             else:
                 condition_str = "Yes (custom)"
 
-        self.plan_tasks_table.add_row(
-            str(task_index),
-            task_id,
-            tool_name or "???",
-            description,
-            depends_txt,
-            condition_str,
-        )
+        if self.plan_tasks_table:
+            self.plan_tasks_table.add_row(
+                str(task_index),
+                task_id,
+                tool_name or "???",
+                description,
+                depends_txt,
+                condition_str,
+            )
 
         if self.active_live_display:
             self.active_live_display.update(self.plan_panel)
@@ -404,14 +429,13 @@ Use up/down arrow keys to navigate through command history.
 
         self._stop_thinking_flag = False
         self._thinking_thread = threading.Thread(
-            target=self._plan_spinner_loop, daemon=True
+            target=self._plan_spinner_loop,
+            daemon=True,
         )
         self._thinking_thread.start()
 
     def stop_plan_thinking(self) -> None:
-        """
-        Stop the plan spinner thread, restore the title back to normal.
-        """
+        """Stop the plan spinner thread, restore the title back to normal."""
         self._stop_thinking_flag = True
         if self._thinking_thread and self._thinking_thread.is_alive():
             self._thinking_thread.join(timeout=2.0)

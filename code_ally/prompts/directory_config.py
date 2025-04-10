@@ -5,7 +5,7 @@ This module provides a clean interface between the config system and the directo
 generator, helping to avoid circular imports.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Default configuration values - must match those in config.py
 DEFAULT_DIR_TREE_ENABLED = True
@@ -13,7 +13,7 @@ DEFAULT_DIR_TREE_MAX_DEPTH = 3
 DEFAULT_DIR_TREE_MAX_FILES = 100
 
 
-def get_directory_tree_config() -> Dict[str, Any]:
+def get_directory_tree_config() -> dict[str, Any]:
     """
     Get the directory tree configuration from the global config.
 
@@ -27,10 +27,12 @@ def get_directory_tree_config() -> Dict[str, Any]:
         return {
             "enabled": get_config_value("dir_tree_enable", DEFAULT_DIR_TREE_ENABLED),
             "max_depth": get_config_value(
-                "dir_tree_max_depth", DEFAULT_DIR_TREE_MAX_DEPTH
+                "dir_tree_max_depth",
+                DEFAULT_DIR_TREE_MAX_DEPTH,
             ),
             "max_files": get_config_value(
-                "dir_tree_max_files", DEFAULT_DIR_TREE_MAX_FILES
+                "dir_tree_max_files",
+                DEFAULT_DIR_TREE_MAX_FILES,
             ),
         }
     except ImportError:

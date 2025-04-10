@@ -7,14 +7,13 @@ other directory-related utilities for use in system prompts and context building
 
 import fnmatch
 import os
-from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 def generate_truncated_tree(
     root_path: str,
     max_depth: int = 3,
     max_files: int = 100,
-    exclude_patterns: Optional[List[str]] = None,
+    exclude_patterns: list[str] | None = None,
     indent_char: str = "  ",
 ) -> str:
     """
@@ -83,14 +82,13 @@ def generate_truncated_tree(
     def should_exclude(path: str) -> bool:
         """Check if a path should be excluded based on patterns."""
         basename = os.path.basename(path)
-        for pattern in exclude_patterns:
-            if fnmatch.fnmatch(basename, pattern):
-                return True
-        return False
+        return any(fnmatch.fnmatch(basename, pattern) for pattern in exclude_patterns)
 
     def walk_directory(
-        current_path: str, current_depth: int, prefix: str
-    ) -> Tuple[int, bool]:
+        current_path: str,
+        current_depth: int,
+        prefix: str,
+    ) -> tuple[int, bool]:
         """
         Walk through directory recursively, adding entries to output_lines.
 
@@ -135,7 +133,9 @@ def generate_truncated_tree(
 
                 # Recursively process subdirectory
                 file_count, should_continue = walk_directory(
-                    dir_path, current_depth + 1, f"{prefix}{indent_char}"
+                    dir_path,
+                    current_depth + 1,
+                    f"{prefix}{indent_char}",
                 )
 
                 if not should_continue or file_count >= max_files:
@@ -165,7 +165,7 @@ def generate_truncated_tree(
     return "\n".join(output_lines)
 
 
-def get_gitignore_patterns(root_path: str) -> List[str]:
+def get_gitignore_patterns(root_path: str) -> list[str]:
     """
     Extract patterns from .gitignore files in the given directory.
 
@@ -180,7 +180,7 @@ def get_gitignore_patterns(root_path: str) -> List[str]:
 
     if os.path.exists(gitignore_path) and os.path.isfile(gitignore_path):
         try:
-            with open(gitignore_path, "r") as f:
+            with open(gitignore_path) as f:
                 for line in f:
                     line = line.strip()
                     # Skip comments and empty lines
@@ -191,7 +191,7 @@ def get_gitignore_patterns(root_path: str) -> List[str]:
                         if line.endswith("/"):
                             line = line[:-1] + "*"  # Convert directory pattern
                         patterns.append(line)
-        except (IOError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError):
             pass
 
     return patterns

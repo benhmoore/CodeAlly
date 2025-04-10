@@ -5,7 +5,7 @@ It ensures that tools are automatically registered and can be easily accessed.
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, cast
+from typing import TypeVar
 
 from code_ally.tools.base import BaseTool
 
@@ -13,7 +13,7 @@ from code_ally.tools.base import BaseTool
 logger = logging.getLogger(__name__)
 
 # Type variable for decorator type checking
-T = TypeVar("T", bound=Type[BaseTool])
+T = TypeVar("T", bound=type[BaseTool])
 
 
 class ToolRegistry:
@@ -28,7 +28,7 @@ class ToolRegistry:
     """
 
     _instance = None
-    _tools: Dict[str, Type[BaseTool]] = {}
+    _tools: dict[str, type[BaseTool]] = {}
 
     def __new__(cls) -> "ToolRegistry":
         """Create a singleton instance.
@@ -38,7 +38,7 @@ class ToolRegistry:
         """
         if cls._instance is None:
             logger.debug("Creating new ToolRegistry singleton instance")
-            cls._instance = super(ToolRegistry, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     @classmethod
@@ -68,7 +68,7 @@ class ToolRegistry:
 
             # Otherwise, this is a conflict
             raise ValueError(
-                f"Tool name '{tool_name}' is already registered for {cls._tools[tool_name].__name__}"
+                f"Tool name '{tool_name}' is already registered for {cls._tools[tool_name].__name__}",
             )
 
         logger.debug(f"Registering tool: {tool_name} ({tool_class.__name__})")
@@ -76,7 +76,7 @@ class ToolRegistry:
         return tool_class
 
     @classmethod
-    def get_tool_classes(cls) -> Dict[str, Type[BaseTool]]:
+    def get_tool_classes(cls) -> dict[str, type[BaseTool]]:
         """Get all registered tool classes.
 
         Returns:
@@ -85,7 +85,7 @@ class ToolRegistry:
         return cls._tools.copy()
 
     @classmethod
-    def get_tool_instances(cls) -> List[BaseTool]:
+    def get_tool_instances(cls) -> list[BaseTool]:
         """Create instances of all registered tools.
 
         Returns:
@@ -104,7 +104,7 @@ class ToolRegistry:
         return instances
 
     @classmethod
-    def get_tool_by_name(cls, name: str) -> Optional[Type[BaseTool]]:
+    def get_tool_by_name(cls, name: str) -> type[BaseTool] | None:
         """Get a specific tool class by name.
 
         Args:
@@ -127,7 +127,7 @@ class ToolRegistry:
             return "No tools available"
 
         tools_text = []
-        for i, (name, tool_class) in enumerate(sorted(cls._tools.items()), 1):
+        for i, (_name, tool_class) in enumerate(sorted(cls._tools.items()), 1):
             # Extract the tool's display name
             display_name = tool_class.name.lower()
 

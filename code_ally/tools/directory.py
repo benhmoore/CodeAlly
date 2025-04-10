@@ -1,14 +1,12 @@
-"""File: directory.py
+"""File: directory.py.
 
 Operations for managing directories and project structure.
 """
 
 import fnmatch
-import json
 import os
-import re
 import shutil
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -35,17 +33,25 @@ class DirectoryTool(BaseTool):
 
     def execute(
         self,
-        operation: str,
-        path: str = ".",
-        dest_path: str = "",
-        pattern: str = "*",
-        exclude: str = "",
-        recursive: bool = False,
-        create_parents: bool = True,
-        structure: Optional[Dict[str, Any]] = None,
-        dry_run: bool = True,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
+        """Execute the directory tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with operation results
+        """
+        operation = str(kwargs.get("operation", ""))
+        path = str(kwargs.get("path", "."))
+        dest_path = str(kwargs.get("dest_path", ""))
+        pattern = str(kwargs.get("pattern", "*"))
+        exclude = str(kwargs.get("exclude", ""))
+        recursive = bool(kwargs.get("recursive", False))
+        create_parents = bool(kwargs.get("create_parents", True))
+        structure = kwargs.get("structure")
+        dry_run = bool(kwargs.get("dry_run", True))
         """
         Execute a directory operation.
 
@@ -116,7 +122,7 @@ class DirectoryTool(BaseTool):
 
             # Verify source path exists for operations that require it
             if operation in ["move", "copy", "analyze"] and not os.path.exists(
-                source_path
+                source_path,
             ):
                 return {
                     "success": False,
@@ -128,7 +134,10 @@ class DirectoryTool(BaseTool):
             # Execute the appropriate operation
             if operation == "create":
                 return self._create_directory_structure(
-                    source_path, structure, create_parents, dry_run
+                    source_path,
+                    structure,
+                    create_parents,
+                    dry_run,
                 )
             elif operation == "move":
                 return self._move_files(
@@ -181,10 +190,10 @@ class DirectoryTool(BaseTool):
     def _create_directory_structure(
         self,
         base_path: str,
-        structure: Optional[Dict[str, Any]],
+        structure: dict[str, Any] | None,
         create_parents: bool,
         dry_run: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a directory structure from a specification.
 
@@ -216,7 +225,7 @@ class DirectoryTool(BaseTool):
                         "action": "create_directory",
                         "path": base_path,
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -249,8 +258,8 @@ class DirectoryTool(BaseTool):
     def _process_directory_structure(
         self,
         current_path: str,
-        structure: Dict[str, Any],
-        changes: List[Dict[str, Any]],
+        structure: dict[str, Any],
+        changes: list[dict[str, Any]],
         dry_run: bool,
     ) -> None:
         """
@@ -277,7 +286,7 @@ class DirectoryTool(BaseTool):
                         "path": file_path,
                         "content_size": len(value),
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -291,7 +300,7 @@ class DirectoryTool(BaseTool):
                         "action": "create_directory",
                         "path": item_path,
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -310,7 +319,7 @@ class DirectoryTool(BaseTool):
                         "path": item_path,
                         "content_size": len(content),
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -325,7 +334,7 @@ class DirectoryTool(BaseTool):
                         "action": "create_directory",
                         "path": item_path,
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -342,7 +351,7 @@ class DirectoryTool(BaseTool):
                                 "path": file_path,
                                 "content_size": 0,
                                 "applied": not dry_run,
-                            }
+                            },
                         )
 
                         if not dry_run:
@@ -360,7 +369,7 @@ class DirectoryTool(BaseTool):
                                     "path": file_path,
                                     "content_size": len(content),
                                     "applied": not dry_run,
-                                }
+                                },
                             )
 
                             if not dry_run:
@@ -376,7 +385,7 @@ class DirectoryTool(BaseTool):
         recursive: bool,
         create_parents: bool,
         dry_run: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Move files from source to destination with pattern matching.
 
@@ -393,7 +402,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -413,7 +421,7 @@ class DirectoryTool(BaseTool):
                             "action": "create_directory",
                             "path": dest_path,
                             "applied": not dry_run,
-                        }
+                        },
                     )
 
                     if not dry_run:
@@ -428,7 +436,10 @@ class DirectoryTool(BaseTool):
 
             # Find matching files
             matches = self._find_matching_items(
-                source_path, pattern, exclude, recursive
+                source_path,
+                pattern,
+                exclude,
+                recursive,
             )
 
             for item_path in matches:
@@ -444,7 +455,7 @@ class DirectoryTool(BaseTool):
                             "action": "create_directory",
                             "path": parent_dir,
                             "applied": not dry_run,
-                        }
+                        },
                     )
 
                     if not dry_run:
@@ -458,7 +469,7 @@ class DirectoryTool(BaseTool):
                         "destination": target_path,
                         "is_directory": os.path.isdir(item_path),
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 # Execute the move if not a dry run
@@ -510,7 +521,7 @@ class DirectoryTool(BaseTool):
         recursive: bool,
         create_parents: bool,
         dry_run: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Copy files from source to destination with pattern matching.
 
@@ -527,7 +538,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -547,7 +557,7 @@ class DirectoryTool(BaseTool):
                             "action": "create_directory",
                             "path": dest_path,
                             "applied": not dry_run,
-                        }
+                        },
                     )
 
                     if not dry_run:
@@ -562,7 +572,10 @@ class DirectoryTool(BaseTool):
 
             # Find matching files
             matches = self._find_matching_items(
-                source_path, pattern, exclude, recursive
+                source_path,
+                pattern,
+                exclude,
+                recursive,
             )
 
             for item_path in matches:
@@ -578,7 +591,7 @@ class DirectoryTool(BaseTool):
                             "action": "create_directory",
                             "path": parent_dir,
                             "applied": not dry_run,
-                        }
+                        },
                     )
 
                     if not dry_run:
@@ -592,7 +605,7 @@ class DirectoryTool(BaseTool):
                         "destination": target_path,
                         "is_directory": os.path.isdir(item_path),
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 # Execute the copy if not a dry run
@@ -605,7 +618,9 @@ class DirectoryTool(BaseTool):
                                 item_dest = os.path.join(target_path, item)
                                 if os.path.isdir(item_source):
                                     shutil.copytree(
-                                        item_source, item_dest, dirs_exist_ok=True
+                                        item_source,
+                                        item_dest,
+                                        dirs_exist_ok=True,
                                     )
                                 else:
                                     shutil.copy2(item_source, item_dest)
@@ -643,7 +658,7 @@ class DirectoryTool(BaseTool):
         recursive: bool,
         pattern: str,
         exclude: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze a directory structure.
 
@@ -756,15 +771,19 @@ class DirectoryTool(BaseTool):
                     ext = ext.lower()
 
                     # Update stats
-                    analysis["total_files"] += 1
-                    analysis["total_size"] += file_size
-                    dir_info["file_count"] += 1
-                    dir_info["size"] += file_size
+                    analysis["total_files"] = int(analysis["total_files"]) + 1
+                    analysis["total_size"] = int(analysis["total_size"]) + file_size
+                    dir_info["file_count"] = int(dir_info["file_count"]) + 1
+                    dir_info["size"] = int(dir_info["size"]) + file_size
 
                     # Update file extension stats
                     if ext in analysis["file_extensions"]:
-                        analysis["file_extensions"][ext]["count"] += 1
-                        analysis["file_extensions"][ext]["size"] += file_size
+                        ext_count = analysis["file_extensions"][ext]["count"]
+                        ext_size = analysis["file_extensions"][ext]["size"]
+                        analysis["file_extensions"][ext]["count"] = int(ext_count) + 1
+                        analysis["file_extensions"][ext]["size"] = (
+                            int(ext_size) + file_size
+                        )
                     else:
                         analysis["file_extensions"][ext] = {
                             "count": 1,
@@ -774,8 +793,14 @@ class DirectoryTool(BaseTool):
                     # Update language stats
                     language = extension_to_language.get(ext, "Other")
                     if language in analysis["language_stats"]:
-                        analysis["language_stats"][language]["count"] += 1
-                        analysis["language_stats"][language]["size"] += file_size
+                        lang_count = analysis["language_stats"][language]["count"]
+                        lang_size = analysis["language_stats"][language]["size"]
+                        analysis["language_stats"][language]["count"] = (
+                            int(lang_count) + 1
+                        )
+                        analysis["language_stats"][language]["size"] = (
+                            int(lang_size) + file_size
+                        )
                     else:
                         analysis["language_stats"][language] = {
                             "count": 1,
@@ -790,7 +815,7 @@ class DirectoryTool(BaseTool):
                             "size": file_size,
                             "extension": ext,
                             "language": language,
-                        }
+                        },
                     )
 
                 # Add directory info
@@ -816,7 +841,7 @@ class DirectoryTool(BaseTool):
                     }
 
             # Convert sets to lists for JSON serialization
-            for file_type, stats in analysis["file_types"].items():
+            for _file_type, stats in analysis["file_types"].items():
                 stats["extensions"] = list(stats["extensions"])
 
             return {
@@ -838,12 +863,12 @@ class DirectoryTool(BaseTool):
         self,
         source_path: str,
         dest_path: str,
-        structure: Optional[Dict[str, Any]],
+        structure: dict[str, Any] | None,
         pattern: str,
         exclude: str,
         recursive: bool,
         dry_run: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Reorganize a project according to a new structure.
 
@@ -860,7 +885,6 @@ class DirectoryTool(BaseTool):
             Dict with operation results
         """
         changes = []
-        error = ""
 
         try:
             # Check if source exists
@@ -879,7 +903,7 @@ class DirectoryTool(BaseTool):
                         "action": "create_directory",
                         "path": dest_path,
                         "applied": not dry_run,
-                    }
+                    },
                 )
 
                 if not dry_run:
@@ -887,7 +911,10 @@ class DirectoryTool(BaseTool):
 
             # First analyze the source directory to understand its structure
             analysis_result = self._analyze_directory(
-                source_path, recursive, pattern, exclude
+                source_path,
+                recursive,
+                pattern,
+                exclude,
             )
             if not analysis_result["success"]:
                 return analysis_result
@@ -896,7 +923,10 @@ class DirectoryTool(BaseTool):
             if structure:
                 # Create the target structure
                 structure_result = self._create_directory_structure(
-                    dest_path, structure, True, dry_run
+                    dest_path,
+                    structure,
+                    True,
+                    dry_run,
                 )
                 if not structure_result["success"]:
                     return structure_result
@@ -910,7 +940,9 @@ class DirectoryTool(BaseTool):
 
                     # Determine target based on file extension or pattern
                     target_file = self._map_file_to_new_structure(
-                        file_info, dest_path, structure
+                        file_info,
+                        dest_path,
+                        structure,
                     )
 
                     if target_file:
@@ -921,7 +953,7 @@ class DirectoryTool(BaseTool):
                                 "destination": target_file,
                                 "is_directory": False,
                                 "applied": not dry_run,
-                            }
+                            },
                         )
 
                         # Actually copy the file if not a dry run
@@ -946,7 +978,7 @@ class DirectoryTool(BaseTool):
                                 "action": "create_directory",
                                 "path": parent_dir,
                                 "applied": not dry_run,
-                            }
+                            },
                         )
 
                         if not dry_run:
@@ -959,7 +991,7 @@ class DirectoryTool(BaseTool):
                             "destination": target_file,
                             "is_directory": False,
                             "applied": not dry_run,
-                        }
+                        },
                     )
 
                     # Actually copy the file if not a dry run
@@ -993,7 +1025,7 @@ class DirectoryTool(BaseTool):
         pattern: str,
         exclude: str,
         recursive: bool,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Find items (files and directories) matching the given patterns.
 
@@ -1039,10 +1071,10 @@ class DirectoryTool(BaseTool):
 
     def _map_file_to_new_structure(
         self,
-        file_info: Dict[str, Any],
+        file_info: dict[str, Any],
         base_path: str,
-        structure: Dict[str, Any],
-    ) -> Optional[str]:
+        structure: dict[str, Any],
+    ) -> str | None:
         """
         Map a file from the old structure to the new structure.
 
@@ -1120,7 +1152,7 @@ class DirectoryTool(BaseTool):
                 return os.path.join(base_path, "test", filename)
 
         # 2. Check if there's a direct path match
-        for struct_path, struct_value in self._flatten_structure(structure).items():
+        for struct_path, _struct_value in self._flatten_structure(structure).items():
             if file_info["path"] == struct_path or filename == struct_path:
                 # Direct match
                 return os.path.join(base_path, struct_path)
@@ -1130,8 +1162,10 @@ class DirectoryTool(BaseTool):
         return os.path.join(base_path, relative_path)
 
     def _flatten_structure(
-        self, structure: Dict[str, Any], prefix: str = ""
-    ) -> Dict[str, Any]:
+        self,
+        structure: dict[str, Any],
+        prefix: str = "",
+    ) -> dict[str, Any]:
         """
         Flatten a nested directory structure into paths.
 

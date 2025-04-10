@@ -1,6 +1,11 @@
+"""Glob tool for finding files by pattern.
+
+Provides file pattern matching functionality to locate files by name patterns.
+"""
+
 import glob
 import os
-from typing import Any, Dict
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -8,6 +13,8 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class GlobTool(BaseTool):
+    """Tool for finding files that match specific patterns with glob syntax."""
+
     name = "glob"
     description = """Find files matching a glob pattern with improved context efficiency.
 
@@ -28,13 +35,30 @@ class GlobTool(BaseTool):
     # pylint: disable=arguments-differ,too-many-arguments,too-many-locals,too-many-branches
     def execute(
         self,
-        pattern: str,
-        path: str = ".",
-        limit: int = 20,
-        show_content: bool = False,
-        content_lines: int = 10,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
+        """Execute the glob tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with glob search results
+        """
+        pattern = str(kwargs.get("pattern", ""))
+        path = str(kwargs.get("path", "."))
+
+        limit_val = kwargs.get("limit", 20)
+        limit = int(limit_val) if isinstance(limit_val, int | str | float) else 20
+
+        show_content = bool(kwargs.get("show_content", False))
+
+        content_lines_val = kwargs.get("content_lines", 10)
+        content_lines = (
+            int(content_lines_val)
+            if isinstance(content_lines_val, int | str | float)
+            else 10
+        )
         """
         Find files matching a glob pattern with content preview options to save context.
 
@@ -137,7 +161,7 @@ class GlobTool(BaseTool):
 
                         # Read first few lines to check if binary
                         try:
-                            with open(file_path, "r", encoding="utf-8") as f:
+                            with open(file_path, encoding="utf-8") as f:
                                 preview_lines = []
                                 for i, line in enumerate(f):
                                     if i >= content_lines:

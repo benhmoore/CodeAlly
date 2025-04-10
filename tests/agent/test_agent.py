@@ -5,27 +5,24 @@ of the CodeAlly system that manages conversations and handles tool execution.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Setup mocks FIRST before importing Agent
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-# Import and setup mocks
 from tests.test_helper import setup_mocks
 
 setup_mocks()
 
-# Now we can import our modules
+# Now import after mocks are set up
 from code_ally.agent.agent import Agent
 from code_ally.service_registry import ServiceRegistry
 
 
 @pytest.fixture
-def mock_model_client():
+def mock_model_client():  # type: ignore[no-untyped-def]
     """Create a mock model client for testing."""
     mock_client = MagicMock()
     mock_client.context_size = 4096
@@ -37,7 +34,7 @@ def mock_model_client():
 
 
 @pytest.fixture
-def mock_tools():
+def mock_tools():  # type: ignore[no-untyped-def]
     """Create mock tools for testing."""
     mock_tool = MagicMock()
     mock_tool.name = "test_tool"
@@ -48,38 +45,41 @@ def mock_tools():
 
 
 @pytest.fixture
-def agent(mock_model_client, mock_tools):
+def agent(mock_model_client, mock_tools):  # type: ignore[no-untyped-def]
     """Create an agent instance for testing."""
     # Create a new service registry for each test
     service_registry = ServiceRegistry()
 
-    # Create the agent
-    agent = Agent(
-        model_client=mock_model_client,
-        tools=mock_tools,
-        system_prompt="You are a test assistant.",
-        service_registry=service_registry,
-    )
+    # Mock the UIManager class before creating an agent
+    with patch("code_ally.agent.agent.UIManager") as mock_ui_manager:
+        # Configure the UI manager mock
+        mock_ui = MagicMock()
+        mock_ui_manager.return_value = mock_ui
 
-    # Mock the UI to avoid console output during tests
-    agent.ui = MagicMock()
+        # Create the agent
+        agent = Agent(
+            model_client=mock_model_client,
+            tools=mock_tools,
+            system_prompt="You are a test assistant.",
+            service_registry=service_registry,
+        )
 
-    # Mock the tool manager - we need to replace the entire attribute, not just the execute_tool method
-    agent.tool_manager = MagicMock()
-    agent.tool_manager.execute_tool.return_value = {
-        "success": True,
-        "result": "Tool executed",
-    }
-    agent.tool_manager.format_tool_result.return_value = {
-        "success": True,
-        "result": "Tool executed",
-    }
-    agent.tool_manager.get_function_definitions.return_value = []
+        # Mock the tool manager - we need to replace the entire attribute, not just the execute_tool method
+        agent.tool_manager = MagicMock()
+        agent.tool_manager.execute_tool.return_value = {
+            "success": True,
+            "result": "Tool executed",
+        }
+        agent.tool_manager.format_tool_result.return_value = {
+            "success": True,
+            "result": "Tool executed",
+        }
+        agent.tool_manager.get_function_definitions.return_value = []
 
-    return agent
+        return agent
 
 
-def test_agent_initialization(agent, mock_model_client, mock_tools):
+def test_agent_initialization(agent, mock_model_client, mock_tools):  # type: ignore[no-untyped-def]
     """Test that the agent initializes correctly."""
     # Check that the agent was initialized with the correct components
     assert agent.model_client == mock_model_client
@@ -97,7 +97,7 @@ def test_agent_initialization(agent, mock_model_client, mock_tools):
     assert agent.service_registry.get("command_handler") is not None
 
 
-def test_process_llm_response_text(agent):
+def test_process_llm_response_text(agent):  # type: ignore[no-untyped-def]
     """Test processing a simple text response from the LLM."""
     # Create a response with just text
     response = {
@@ -114,11 +114,11 @@ def test_process_llm_response_text(agent):
 
     # Check that the UI was used to print the response
     agent.ui.print_assistant_response.assert_called_once_with(
-        "This is a test response."
+        "This is a test response.",
     )
 
 
-def test_process_llm_response_with_tool_calls(agent, mock_tools):
+def test_process_llm_response_with_tool_calls(agent, mock_tools):  # type: ignore[no-untyped-def]
     """Test processing a response with tool calls."""
     # Create a tool call
     tool_call = {
@@ -154,7 +154,7 @@ def test_process_llm_response_with_tool_calls(agent, mock_tools):
 
     # Check that the follow-up response was processed
     agent.ui.print_assistant_response.assert_called_with(
-        "The tool was executed successfully."
+        "The tool was executed successfully.",
     )
 
     # Check that the messages include the tool call and its result
@@ -163,7 +163,7 @@ def test_process_llm_response_with_tool_calls(agent, mock_tools):
     )  # System message + assistant message + tool result + follow-up
 
 
-def test_normalize_tool_call(agent):
+def test_normalize_tool_call(agent):  # type: ignore[no-untyped-def]
     """Test normalizing different tool call formats."""
     # Standard format
     standard_tool_call = {
@@ -208,7 +208,7 @@ def test_normalize_tool_call(agent):
 
 
 @patch("code_ally.agent.agent.time")
-def test_process_sequential_tool_calls(mock_time, agent):
+def test_process_sequential_tool_calls(mock_time, agent):  # type: ignore[no-untyped-def]
     """Test processing multiple tool calls sequentially."""
     mock_time.time.return_value = 12345
 

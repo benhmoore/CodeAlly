@@ -1,4 +1,4 @@
-"""File: token_manager.py
+"""File: token_manager.py.
 
 Manages token counting and context window utilization.
 """
@@ -6,13 +6,13 @@ Manages token counting and context window utilization.
 import hashlib
 import json
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 
 class TokenManager:
     """Manages token counting and context window utilization."""
 
-    def __init__(self, context_size: int):
+    def __init__(self, context_size: int) -> None:
         """Initialize the token manager.
 
         Args:
@@ -28,14 +28,14 @@ class TokenManager:
         self.min_compaction_interval = 300  # Seconds between auto-compactions
         self.ui = None  # Will be set by the Agent class
         # Cache for token counts to avoid re-estimation
-        self._token_cache = {}
+        self._token_cache: dict[tuple[str, str], int] = {}
         # Track file content hashes to avoid duplicate reads
-        self._file_content_hashes = {}  # Maps file path to content hash
-        self._file_message_ids = (
+        self._file_content_hashes: dict[str, str] = {}  # Maps file path to content hash
+        self._file_message_ids: dict[str, str] = (
             {}
         )  # Maps file path to message id containing its content
 
-    def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
+    def estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         """Estimate token usage for a list of messages.
 
         Args:
@@ -69,18 +69,20 @@ class TokenManager:
             # Count tokens for content (4 chars per token approximation)
             if "content" in message and message["content"]:
                 content = message["content"]
-                message_tokens += len(content) / self.chars_per_token
+                message_tokens += int(len(content) / self.chars_per_token)
 
             # Count tokens for function calls
             if "function_call" in message and message["function_call"]:
                 function_call = message["function_call"]
                 # Count function name
                 if "name" in function_call:
-                    message_tokens += len(function_call["name"]) / self.chars_per_token
+                    message_tokens += int(
+                        len(function_call["name"]) / self.chars_per_token,
+                    )
                 # Count arguments
                 if "arguments" in function_call:
-                    message_tokens += (
-                        len(function_call["arguments"]) / self.chars_per_token
+                    message_tokens += int(
+                        len(function_call["arguments"]) / self.chars_per_token,
                     )
 
             # Count tokens for tool calls
@@ -89,18 +91,18 @@ class TokenManager:
                     if "function" in tool_call:
                         function = tool_call["function"]
                         if "name" in function:
-                            message_tokens += (
-                                len(function["name"]) / self.chars_per_token
+                            message_tokens += int(
+                                len(function["name"]) / self.chars_per_token,
                             )
                         if "arguments" in function:
                             if isinstance(function["arguments"], str):
-                                message_tokens += (
-                                    len(function["arguments"]) / self.chars_per_token
+                                message_tokens += int(
+                                    len(function["arguments"]) / self.chars_per_token,
                                 )
                             elif isinstance(function["arguments"], dict):
-                                message_tokens += (
+                                message_tokens += int(
                                     len(json.dumps(function["arguments"]))
-                                    / self.chars_per_token
+                                    / self.chars_per_token,
                                 )
 
             # Store in cache if we have a key
@@ -129,8 +131,11 @@ class TokenManager:
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     def register_file_read(
-        self, file_path: str, content: str, message_id: str
-    ) -> Optional[str]:
+        self,
+        file_path: str,
+        content: str,
+        message_id: str,
+    ) -> str | None:
         """Register a file that has been read and track its hash.
 
         Args:
@@ -160,8 +165,10 @@ class TokenManager:
         return None
 
     def get_existing_file_message_id(
-        self, file_path: str, content: str
-    ) -> Optional[str]:
+        self,
+        file_path: str,
+        content: str,
+    ) -> str | None:
         """Check if a file has been previously read with same content.
 
         Args:
@@ -180,7 +187,7 @@ class TokenManager:
 
         return None
 
-    def update_token_count(self, messages: List[Dict[str, Any]]) -> None:
+    def update_token_count(self, messages: list[dict[str, Any]]) -> None:
         """Update the token count for the current messages.
 
         Args:
@@ -190,15 +197,19 @@ class TokenManager:
         self.estimated_tokens = self.estimate_tokens(messages)
 
         # Log in verbose mode if there's a significant change
-        if self.ui and hasattr(self.ui, "verbose") and self.ui.verbose:
-            if abs(self.estimated_tokens - previous_tokens) > 100:
-                token_percentage = self.get_token_percentage()
-                change = self.estimated_tokens - previous_tokens
-                change_sign = "+" if change > 0 else ""
-                self.ui.console.print(
-                    f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} "
-                    f"({token_percentage}% of context) [{change_sign}{change} tokens][/]"
-                )
+        if (
+            self.ui
+            and hasattr(self.ui, "verbose")
+            and self.ui.verbose
+            and abs(self.estimated_tokens - previous_tokens) > 100
+        ):
+            token_percentage = self.get_token_percentage()
+            change = self.estimated_tokens - previous_tokens
+            change_sign = "+" if change > 0 else ""
+            self.ui.console.print(
+                f"[dim yellow][Verbose] Token usage: {self.estimated_tokens} "
+                f"({token_percentage}% of context) [{change_sign}{change} tokens][/]",
+            )
 
     def should_compact(self) -> bool:
         """Check if the conversation should be compacted.

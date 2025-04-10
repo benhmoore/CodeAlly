@@ -1,0 +1,872 @@
+code_ally/agent/agent.py:396:17: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `result`
+    |
+394 |         self,
+395 |         tool_name: str,
+396 |         result: Any,
+    |                 ^^^ ANN401
+397 |     ) -> str:
+398 |         """Convert a tool result dict into a user-readable string if appropriate."""
+    |
+
+code_ally/agent/command_handler.py:25:21: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `ui_manager`
+   |
+23 |     def __init__(
+24 |         self,
+25 |         ui_manager: Any,
+   |                     ^^^ ANN401
+26 |         token_manager: Any,
+27 |         trust_manager: TrustManager,
+   |
+
+code_ally/agent/command_handler.py:26:24: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `token_manager`
+   |
+24 |         self,
+25 |         ui_manager: Any,
+26 |         token_manager: Any,
+   |                        ^^^ ANN401
+27 |         trust_manager: TrustManager,
+28 |     ) -> None:
+   |
+
+code_ally/agent/error_handler.py:63:17: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `ui_manager`
+   |
+62 | def display_error(
+63 |     ui_manager: Any,
+   |                 ^^^ ANN401
+64 |     error_msg: str,
+65 |     tool_name: str,
+   |
+
+code_ally/agent/permission_manager.py:161:67: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `path_info`
+    |
+159 |                 )
+160 |
+161 |     def _verify_directory_access(self, tool_name: str, path_info: Any) -> None:
+    |                                                                   ^^^ ANN401
+162 |         """Verify that the operation doesn't access files outside the starting directory.
+    |
+
+code_ally/agent/permission_manager.py:248:82: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `_get_permission_path`
+    |
+246 |         return resolved_paths
+247 |
+248 |     def _get_permission_path(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    |                                                                                  ^^^ ANN401
+249 |         """Extract the path from tool arguments for permission checking."""
+250 |         # Handle bash commands differently
+    |
+
+code_ally/agent/task_planner.py:36:38: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `tool_manager`
+   |
+34 |     """
+35 |
+36 |     def __init__(self, tool_manager: Any) -> None:
+   |                                      ^^^ ANN401
+37 |         """Initialize the task planner.
+   |
+
+code_ally/agent/ui_manager.py:42:22: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `event`
+   |
+41 |         @kb.add("c-c")
+42 |         def _(event: Any) -> None:
+   |                      ^^^ ANN401
+43 |             """Custom Ctrl+C handler.
+   |
+
+code_ally/agent/ui_manager.py:351:9: D102 Missing docstring in public method
+    |
+349 |             self.active_live_display.update(self.plan_panel)
+350 |
+351 |     def display_interactive_plan_task_added(
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ D102
+352 |         self,
+353 |         task_index: int,
+    |
+
+code_ally/config.py:125:32: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+    |
+123 |                         # Try to convert the value to the expected type
+124 |                         try:
+125 |                             if expected_type == bool and isinstance(value, str):
+    |                                ^^^^^^^^^^^^^^^^^^^^^ E721
+126 |                                 # Handle string boolean conversion separately
+127 |                                 value = value.lower() in ("true", "yes", "y", "1")
+    |
+
+code_ally/config.py:184:9: ANN206 Missing return type annotation for classmethod `get_instance`
+    |
+183 |     @classmethod
+184 |     def get_instance(cls):
+    |         ^^^^^^^^^^^^ ANN206
+185 |         """Get the singleton instance."""
+186 |         if cls._instance is None:
+    |
+    = help: Add return type annotation
+
+code_ally/config.py:196:9: ANN201 Missing return type annotation for public function `get_config`
+    |
+194 |             ConfigManager._config = load_config()
+195 |
+196 |     def get_config(self):
+    |         ^^^^^^^^^^ ANN201
+197 |         """Get the complete configuration dictionary."""
+198 |         return ConfigManager._config
+    |
+    = help: Add return type annotation
+
+code_ally/config.py:200:9: ANN201 Missing return type annotation for public function `get_value`
+    |
+198 |         return ConfigManager._config
+199 |
+200 |     def get_value(self, key, default=None):
+    |         ^^^^^^^^^ ANN201
+201 |         """Get a specific configuration value."""
+202 |         if default is None:
+    |
+    = help: Add return type annotation
+
+code_ally/config.py:200:25: ANN001 Missing type annotation for function argument `key`
+    |
+198 |         return ConfigManager._config
+199 |
+200 |     def get_value(self, key, default=None):
+    |                         ^^^ ANN001
+201 |         """Get a specific configuration value."""
+202 |         if default is None:
+    |
+
+code_ally/config.py:200:30: ANN001 Missing type annotation for function argument `default`
+    |
+198 |         return ConfigManager._config
+199 |
+200 |     def get_value(self, key, default=None):
+    |                              ^^^^^^^ ANN001
+201 |         """Get a specific configuration value."""
+202 |         if default is None:
+    |
+
+code_ally/config.py:206:25: ANN001 Missing type annotation for function argument `key`
+    |
+204 |         return ConfigManager._config.get(key, default)
+205 |
+206 |     def set_value(self, key, value) -> None:
+    |                         ^^^ ANN001
+207 |         """Set a specific configuration value."""
+208 |         # Validate the value type
+    |
+
+code_ally/config.py:206:30: ANN001 Missing type annotation for function argument `value`
+    |
+204 |         return ConfigManager._config.get(key, default)
+205 |
+206 |     def set_value(self, key, value) -> None:
+    |                              ^^^^^ ANN001
+207 |         """Set a specific configuration value."""
+208 |         # Validate the value type
+    |
+
+code_ally/config.py:213:16: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+    |
+212 |             # For booleans, accept string representations
+213 |             if expected_type == bool and isinstance(value, str):
+    |                ^^^^^^^^^^^^^^^^^^^^^ E721
+214 |                 value = value.lower() in ("true", "yes", "y", "1")
+215 |             elif not isinstance(value, expected_type):
+    |
+
+code_ally/config.py:219:21: B904 Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+    |
+217 |                       value = expected_type(value)
+218 |                   except (ValueError, TypeError):
+219 | /                     raise ValueError(
+220 | |                         f"Invalid type for config key '{key}': "
+221 | |                         f"expected {expected_type.__name__}, got {type(value).__name__}",
+222 | |                     )
+    | |_____________________^ B904
+223 |
+224 |           # Update the config
+    |
+
+code_ally/config.py:231:41: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `default`
+    |
+231 | def get_config_value(key: str, default: Any = None) -> Any:
+    |                                         ^^^ ANN401
+232 |     """Get a specific configuration value.
+    |
+
+code_ally/config.py:231:56: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `get_config_value`
+    |
+231 | def get_config_value(key: str, default: Any = None) -> Any:
+    |                                                        ^^^ ANN401
+232 |     """Get a specific configuration value.
+    |
+
+code_ally/config.py:246:39: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `value`
+    |
+246 | def set_config_value(key: str, value: Any) -> None:
+    |                                       ^^^ ANN401
+247 |     """Set a specific configuration value.
+    |
+
+code_ally/llm_client/ollama_client.py:76:12: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+74 |         """Determine the JSON schema type from a Python type annotation."""
+75 |         # Basic types
+76 |         if annotation == str:
+   |            ^^^^^^^^^^^^^^^^^ E721
+77 |             return "string"
+78 |         elif annotation == int:
+   |
+
+code_ally/llm_client/ollama_client.py:78:14: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+76 |         if annotation == str:
+77 |             return "string"
+78 |         elif annotation == int:
+   |              ^^^^^^^^^^^^^^^^^ E721
+79 |             return "integer"
+80 |         elif annotation == float:
+   |
+
+code_ally/llm_client/ollama_client.py:80:14: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+78 |         elif annotation == int:
+79 |             return "integer"
+80 |         elif annotation == float:
+   |              ^^^^^^^^^^^^^^^^^^^ E721
+81 |             return "number"
+82 |         elif annotation == bool:
+   |
+
+code_ally/llm_client/ollama_client.py:82:14: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+80 |         elif annotation == float:
+81 |             return "number"
+82 |         elif annotation == bool:
+   |              ^^^^^^^^^^^^^^^^^^ E721
+83 |             return "boolean"
+84 |         elif annotation == list or (
+   |
+
+code_ally/llm_client/ollama_client.py:84:14: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+82 |         elif annotation == bool:
+83 |             return "boolean"
+84 |         elif annotation == list or (
+   |              ^^^^^^^^^^^^^^^^^^ E721
+85 |             hasattr(annotation, "__origin__") and annotation.__origin__ == list
+86 |         ):
+   |
+
+code_ally/llm_client/ollama_client.py:85:51: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+83 |             return "boolean"
+84 |         elif annotation == list or (
+85 |             hasattr(annotation, "__origin__") and annotation.__origin__ == list
+   |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E721
+86 |         ):
+87 |             return "array"
+   |
+
+code_ally/llm_client/ollama_client.py:96:24: E721 Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+   |
+94 |                 # Find the non-None type
+95 |                 for arg in args:
+96 |                     if arg != type(None):
+   |                        ^^^^^^^^^^^^^^^^^ E721
+97 |                         return self._determine_param_type(arg)
+   |
+
+code_ally/llm_client/ollama_client.py:145:17: SIM102 Use a single `if` statement instead of nested `if` statements
+    |
+143 |           if not self.config.get("qwen_chinese_explicit", False):
+144 |               for msg in messages:
+145 | /                 if msg.get("role") in ["system", "user"] and msg.get("content"):
+146 | |                     # Simple heuristic: if there are Chinese characters in the message
+147 | |                     if any(
+148 | |                         "\u4e00" <= char <= "\u9fff" for char in msg.get("content", "")
+149 | |                     ):
+    | |______________________^ SIM102
+150 |                           use_chinese = True
+151 |                           break
+    |
+    = help: Combine `if` statements using `and`
+
+code_ally/llm_client/ollama_client.py:329:9: ANN201 Missing return type annotation for public function `send`
+    |
+327 |         return cleaned_content.strip()
+328 |
+329 |     def send(
+    |         ^^^^ ANN201
+330 |         self,
+331 |         messages,
+    |
+    = help: Add return type annotation
+
+code_ally/llm_client/ollama_client.py:331:9: ANN001 Missing type annotation for function argument `messages`
+    |
+329 |     def send(
+330 |         self,
+331 |         messages,
+    |         ^^^^^^^^ ANN001
+332 |         functions=None,
+333 |         tools=None,
+    |
+
+code_ally/llm_client/ollama_client.py:332:9: ANN001 Missing type annotation for function argument `functions`
+    |
+330 |         self,
+331 |         messages,
+332 |         functions=None,
+    |         ^^^^^^^^^ ANN001
+333 |         tools=None,
+334 |         stream=False,
+    |
+
+code_ally/llm_client/ollama_client.py:333:9: ANN001 Missing type annotation for function argument `tools`
+    |
+331 |         messages,
+332 |         functions=None,
+333 |         tools=None,
+    |         ^^^^^ ANN001
+334 |         stream=False,
+335 |         include_reasoning=False,
+    |
+
+code_ally/llm_client/ollama_client.py:334:9: ANN001 Missing type annotation for function argument `stream`
+    |
+332 |         functions=None,
+333 |         tools=None,
+334 |         stream=False,
+    |         ^^^^^^ ANN001
+335 |         include_reasoning=False,
+336 |     ):
+    |
+
+code_ally/llm_client/ollama_client.py:335:9: ANN001 Missing type annotation for function argument `include_reasoning`
+    |
+333 |         tools=None,
+334 |         stream=False,
+335 |         include_reasoning=False,
+    |         ^^^^^^^^^^^^^^^^^ ANN001
+336 |     ):
+337 |         """Send a request to Ollama with messages and function definitions."""
+    |
+
+code_ally/llm_client/ollama_client.py:354:32: ANN001 Missing type annotation for function argument `sig`
+    |
+352 |             original_sigint_handler = signal.getsignal(signal.SIGINT)
+353 |
+354 |             def sigint_handler(sig, frame) -> NoReturn:
+    |                                ^^^ ANN001
+355 |                 logger.warning(
+356 |                     "SIGINT received during request. Interrupting Ollama request.",
+    |
+
+code_ally/llm_client/ollama_client.py:354:37: ANN001 Missing type annotation for function argument `frame`
+    |
+352 |             original_sigint_handler = signal.getsignal(signal.SIGINT)
+353 |
+354 |             def sigint_handler(sig, frame) -> NoReturn:
+    |                                     ^^^^^ ANN001
+355 |                 logger.warning(
+356 |                     "SIGINT received during request. Interrupting Ollama request.",
+    |
+
+code_ally/llm_client/ollama_client.py:418:9: ANN202 Missing return type annotation for private function `_prepare_payload`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |         ^^^^^^^^^^^^^^^^ ANN202
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+    = help: Add return type annotation
+
+code_ally/llm_client/ollama_client.py:418:32: ANN001 Missing type annotation for function argument `messages`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |                                ^^^^^^^^ ANN001
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+
+code_ally/llm_client/ollama_client.py:418:42: ANN001 Missing type annotation for function argument `functions`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |                                          ^^^^^^^^^ ANN001
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+
+code_ally/llm_client/ollama_client.py:418:53: ANN001 Missing type annotation for function argument `tools`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |                                                     ^^^^^ ANN001
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+
+code_ally/llm_client/ollama_client.py:418:60: ANN001 Missing type annotation for function argument `stream`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |                                                            ^^^^^^ ANN001
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+
+code_ally/llm_client/ollama_client.py:418:68: ANN001 Missing type annotation for function argument `include_reasoning`
+    |
+416 |             return self._handle_json_error(e)
+417 |
+418 |     def _prepare_payload(self, messages, functions, tools, stream, include_reasoning):
+    |                                                                    ^^^^^^^^^^^^^^^^^ ANN001
+419 |         """Prepare the request payload."""
+420 |         payload = {
+    |
+
+code_ally/llm_client/ollama_client.py:464:9: ANN202 Missing return type annotation for private function `_execute_request`
+    |
+462 |         return payload
+463 |
+464 |     def _execute_request(self, payload, stream):
+    |         ^^^^^^^^^^^^^^^^ ANN202
+465 |         """Execute the request to the Ollama API."""
+466 |         logger.debug(f"Sending request to Ollama: {self.api_url}")
+    |
+    = help: Add return type annotation
+
+code_ally/llm_client/ollama_client.py:464:32: ANN001 Missing type annotation for function argument `payload`
+    |
+462 |         return payload
+463 |
+464 |     def _execute_request(self, payload, stream):
+    |                                ^^^^^^^ ANN001
+465 |         """Execute the request to the Ollama API."""
+466 |         logger.debug(f"Sending request to Ollama: {self.api_url}")
+    |
+
+code_ally/llm_client/ollama_client.py:464:41: ANN001 Missing type annotation for function argument `stream`
+    |
+462 |         return payload
+463 |
+464 |     def _execute_request(self, payload, stream):
+    |                                         ^^^^^^ ANN001
+465 |         """Execute the request to the Ollama API."""
+466 |         logger.debug(f"Sending request to Ollama: {self.api_url}")
+    |
+
+code_ally/llm_client/ollama_client.py:532:9: ANN202 Missing return type annotation for private function `_handle_request_error`
+    |
+530 |             raise
+531 |
+532 |     def _handle_request_error(self, e):
+    |         ^^^^^^^^^^^^^^^^^^^^^ ANN202
+533 |         """Handle request exceptions.
+    |
+    = help: Add return type annotation
+
+code_ally/llm_client/ollama_client.py:532:37: ANN001 Missing type annotation for function argument `e`
+    |
+530 |             raise
+531 |
+532 |     def _handle_request_error(self, e):
+    |                                     ^ ANN001
+533 |         """Handle request exceptions.
+    |
+
+code_ally/llm_client/ollama_client.py:547:9: ANN202 Missing return type annotation for private function `_handle_json_error`
+    |
+545 |         }
+546 |
+547 |     def _handle_json_error(self, e):
+    |         ^^^^^^^^^^^^^^^^^^ ANN202
+548 |         """Handle JSON decoding errors.
+    |
+    = help: Add return type annotation
+
+code_ally/llm_client/ollama_client.py:547:34: ANN001 Missing type annotation for function argument `e`
+    |
+545 |         }
+546 |
+547 |     def _handle_json_error(self, e):
+    |                                  ^ ANN001
+548 |         """Handle JSON decoding errors.
+    |
+
+code_ally/main.py:41:22: ANN001 Missing type annotation for function argument `signum`
+   |
+41 | def handle_interrupt(signum, frame) -> None:
+   |                      ^^^^^^ ANN001
+42 |     """Handle keyboard interrupt (SIGINT) signals.
+   |
+
+code_ally/main.py:41:30: ANN001 Missing type annotation for function argument `frame`
+   |
+41 | def handle_interrupt(signum, frame) -> None:
+   |                              ^^^^^ ANN001
+42 |     """Handle keyboard interrupt (SIGINT) signals.
+   |
+
+code_ally/prompts/__init__.py:18:5: ANN201 Missing return type annotation for public function `get_main_system_prompt`
+   |
+17 | # Use lazy loading for other imports
+18 | def get_main_system_prompt():
+   |     ^^^^^^^^^^^^^^^^^^^^^^ ANN201
+19 |     """Get the main system prompt."""
+20 |     from code_ally.prompts.system_messages import (
+   |
+   = help: Add return type annotation
+
+code_ally/prompts/__init__.py:27:5: ANN201 Missing return type annotation for public function `generate_truncated_tree`
+   |
+27 | def generate_truncated_tree(*args, **kwargs):
+   |     ^^^^^^^^^^^^^^^^^^^^^^^ ANN201
+28 |     """Generate a truncated directory tree."""
+29 |     from code_ally.prompts.directory_utils import (
+   |
+   = help: Add return type annotation
+
+code_ally/prompts/__init__.py:27:29: ANN002 Missing type annotation for `*args`
+   |
+27 | def generate_truncated_tree(*args, **kwargs):
+   |                             ^^^^^ ANN002
+28 |     """Generate a truncated directory tree."""
+29 |     from code_ally.prompts.directory_utils import (
+   |
+
+code_ally/prompts/__init__.py:27:36: ANN003 Missing type annotation for `**kwargs`
+   |
+27 | def generate_truncated_tree(*args, **kwargs):
+   |                                    ^^^^^^^^ ANN003
+28 |     """Generate a truncated directory tree."""
+29 |     from code_ally.prompts.directory_utils import (
+   |
+
+code_ally/prompts/__init__.py:36:5: ANN201 Missing return type annotation for public function `get_gitignore_patterns`
+   |
+36 | def get_gitignore_patterns(*args, **kwargs):
+   |     ^^^^^^^^^^^^^^^^^^^^^^ ANN201
+37 |     """Extract patterns from .gitignore files."""
+38 |     from code_ally.prompts.directory_utils import (
+   |
+   = help: Add return type annotation
+
+code_ally/prompts/__init__.py:36:28: ANN002 Missing type annotation for `*args`
+   |
+36 | def get_gitignore_patterns(*args, **kwargs):
+   |                            ^^^^^ ANN002
+37 |     """Extract patterns from .gitignore files."""
+38 |     from code_ally.prompts.directory_utils import (
+   |
+
+code_ally/prompts/__init__.py:36:35: ANN003 Missing type annotation for `**kwargs`
+   |
+36 | def get_gitignore_patterns(*args, **kwargs):
+   |                                   ^^^^^^^^ ANN003
+37 |     """Extract patterns from .gitignore files."""
+38 |     from code_ally.prompts.directory_utils import (
+   |
+
+code_ally/prompts/__init__.py:45:5: ANN201 Missing return type annotation for public function `get_directory_tree_config`
+   |
+45 | def get_directory_tree_config():
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^ ANN201
+46 |     """Get directory tree configuration."""
+47 |     from code_ally.prompts.directory_config import (
+   |
+   = help: Add return type annotation
+
+code_ally/service_registry.py:15:9: ANN206 Missing return type annotation for classmethod `get_instance`
+   |
+14 |     @classmethod
+15 |     def get_instance(cls):
+   |         ^^^^^^^^^^^^ ANN206
+16 |         """Get the singleton instance of the ServiceRegistry.
+   |
+   = help: Add return type annotation
+
+code_ally/service_registry.py:29:24: ANN001 Missing type annotation for function argument `name`
+   |
+27 |         self._services = {}
+28 |
+29 |     def register(self, name, service) -> None:
+   |                        ^^^^ ANN001
+30 |         """Register a service with the given name.
+   |
+
+code_ally/service_registry.py:29:30: ANN001 Missing type annotation for function argument `service`
+   |
+27 |         self._services = {}
+28 |
+29 |     def register(self, name, service) -> None:
+   |                              ^^^^^^^ ANN001
+30 |         """Register a service with the given name.
+   |
+
+code_ally/service_registry.py:38:9: ANN201 Missing return type annotation for public function `get`
+   |
+36 |         self._services[name] = service
+37 |
+38 |     def get(self, name):
+   |         ^^^ ANN201
+39 |         """Get a service by name.
+   |
+   = help: Add return type annotation
+
+code_ally/service_registry.py:38:19: ANN001 Missing type annotation for function argument `name`
+   |
+36 |         self._services[name] = service
+37 |
+38 |     def get(self, name):
+   |                   ^^^^ ANN001
+39 |         """Get a service by name.
+   |
+
+code_ally/service_registry.py:49:9: ANN201 Missing return type annotation for public function `has_service`
+   |
+47 |         return self._services.get(name)
+48 |
+49 |     def has_service(self, name):
+   |         ^^^^^^^^^^^ ANN201
+50 |         """Check if a service exists in the registry.
+   |
+   = help: Add return type annotation
+
+code_ally/service_registry.py:49:27: ANN001 Missing type annotation for function argument `name`
+   |
+47 |         return self._services.get(name)
+48 |
+49 |     def has_service(self, name):
+   |                           ^^^^ ANN001
+50 |         """Check if a service exists in the registry.
+   |
+
+code_ally/tools/base.py:50:23: ANN003 Missing type annotation for `**kwargs`
+   |
+49 |     @abstractmethod
+50 |     def execute(self, **kwargs) -> dict[str, Any]:
+   |                       ^^^^^^^^ ANN003
+51 |         """Execute the tool with the given parameters.
+   |
+
+code_ally/tools/base.py:77:40: ANN003 Missing type annotation for `**kwargs`
+   |
+75 |         return {"success": False, "error": error_message}
+76 |
+77 |     def _format_success_response(self, **kwargs) -> dict[str, Any]:
+   |                                        ^^^^^^^^ ANN003
+78 |         """Format a standard success response.
+   |
+
+code_ally/tools/bash.py:1:1: D100 Missing docstring in public module
+code_ally/tools/bash.py:42:9: ANN003 Missing type annotation for `**kwargs`
+   |
+40 |         timeout: int = DEFAULT_TIMEOUT,
+41 |         working_dir: str = "",
+42 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+43 |     ) -> dict[str, Any]:
+44 |         """Execute a shell command and return its output.
+   |
+
+code_ally/tools/batch.py:49:9: ANN003 Missing type annotation for `**kwargs`
+   |
+47 |         max_files: int = 100,
+48 |         create_backup: bool = True,
+49 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+50 |     ) -> dict[str, Any]:
+51 |         """
+   |
+
+code_ally/tools/code.py:1:1: D100 Missing docstring in public module
+code_ally/tools/code.py:11:7: D101 Missing docstring in public class
+   |
+10 | @register_tool
+11 | class CodeStructureAnalyzerTool(BaseTool):
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^ D101
+12 |     name = "code_structure"
+13 |     description = """Analyze code structure in files or directories.
+   |
+
+code_ally/tools/code.py:53:9: ANN003 Missing type annotation for `**kwargs`
+   |
+51 |         exclude_dirs: str = "",
+52 |         max_files: int = 50,
+53 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+54 |     ) -> dict[str, Any]:
+55 |         """
+   |
+
+code_ally/tools/code.py:345:21: SIM102 Use a single `if` statement instead of nested `if` statements
+    |
+344 |                   for node in ast.walk(tree):
+345 | /                     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+346 | |                         # Skip methods (they'll be included in class analysis)
+347 | |                         if not include_classes or not any(
+348 | |                             isinstance(parent, ast.ClassDef)
+349 | |                             for parent in ast.iter_child_nodes(tree)
+350 | |                             if hasattr(parent, "body") and node in parent.body
+351 | |                         ):
+    | |__________________________^ SIM102
+352 |                               func_info = {
+353 |                                   "name": node.name,
+    |
+    = help: Combine `if` statements using `and`
+
+code_ally/tools/directory.py:45:9: ANN003 Missing type annotation for `**kwargs`
+   |
+43 |         structure: dict[str, Any] | None = None,
+44 |         dry_run: bool = True,
+45 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+46 |     ) -> dict[str, Any]:
+47 |         """
+   |
+
+code_ally/tools/directory.py:826:17: B007 Loop control variable `file_type` not used within loop body
+    |
+825 |             # Convert sets to lists for JSON serialization
+826 |             for file_type, stats in analysis["file_types"].items():
+    |                 ^^^^^^^^^ B007
+827 |                 stats["extensions"] = list(stats["extensions"])
+    |
+    = help: Rename unused `file_type` to `_file_type`
+
+code_ally/tools/edit.py:42:9: ANN003 Missing type annotation for `**kwargs`
+   |
+40 |         append: bool = False,
+41 |         prepend: bool = False,
+42 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+43 |     ) -> dict[str, Any]:
+44 |         """
+   |
+
+code_ally/tools/glob.py:42:9: ANN003 Missing type annotation for `**kwargs`
+   |
+40 |         show_content: bool = False,
+41 |         content_lines: int = 10,
+42 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+43 |     ) -> dict[str, Any]:
+44 |         """
+   |
+
+code_ally/tools/grep.py:49:9: ANN003 Missing type annotation for `**kwargs`
+   |
+47 |         preview_replace: bool = False,
+48 |         max_results: int = 100,
+49 |         **kwargs,
+   |         ^^^^^^^^ ANN003
+50 |     ) -> dict[str, Any]:
+51 |         """
+   |
+
+tests/agent/test_agent.py:20:1: E402 Module level import not at top of file
+   |
+19 | # Now import after mocks are set up
+20 | from code_ally.agent.agent import Agent
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+21 | from code_ally.service_registry import ServiceRegistry
+   |
+
+tests/agent/test_agent.py:21:1: E402 Module level import not at top of file
+   |
+19 | # Now import after mocks are set up
+20 | from code_ally.agent.agent import Agent
+21 | from code_ally.service_registry import ServiceRegistry
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+   |
+
+tests/agent/test_agent.py:54:54: N806 Variable `MockUIManager` in function should be lowercase
+   |
+53 |     # Mock the UIManager class before creating an agent
+54 |     with patch("code_ally.agent.agent.UIManager") as MockUIManager:
+   |                                                      ^^^^^^^^^^^^^ N806
+55 |         # Configure the UI manager mock
+56 |         mock_ui = MagicMock()
+   |
+
+tests/test_helper.py:16:28: ANN002 Missing type annotation for `*args`
+   |
+14 |     # This fixes issues with Python 3.13's stricter isinstance() checks
+15 |     class StdoutProxy:
+16 |         def __init__(self, *args, **kwargs):
+   |                            ^^^^^ ANN002
+17 |             self.original_stdout = sys.stdout
+   |
+
+tests/test_helper.py:16:35: ANN003 Missing type annotation for `**kwargs`
+   |
+14 |     # This fixes issues with Python 3.13's stricter isinstance() checks
+15 |     class StdoutProxy:
+16 |         def __init__(self, *args, **kwargs):
+   |                                   ^^^^^^^^ ANN003
+17 |             self.original_stdout = sys.stdout
+   |
+
+tests/test_helper.py:34:28: ANN002 Missing type annotation for `*args`
+   |
+32 |     # Add PromptSession class that returns a simple mock
+33 |     class MockPromptSession:
+34 |         def __init__(self, *args, **kwargs):
+   |                            ^^^^^ ANN002
+35 |             pass
+   |
+
+tests/test_helper.py:34:35: ANN003 Missing type annotation for `**kwargs`
+   |
+32 |     # Add PromptSession class that returns a simple mock
+33 |     class MockPromptSession:
+34 |         def __init__(self, *args, **kwargs):
+   |                                   ^^^^^^^^ ANN003
+35 |             pass
+   |
+
+tests/test_helper.py:37:26: ANN002 Missing type annotation for `*args`
+   |
+35 |             pass
+36 |         
+37 |         def prompt(self, *args, **kwargs):
+   |                          ^^^^^ ANN002
+38 |             return "Mock user input"
+   |
+
+tests/test_helper.py:37:33: ANN003 Missing type annotation for `**kwargs`
+   |
+35 |             pass
+36 |         
+37 |         def prompt(self, *args, **kwargs):
+   |                                 ^^^^^^^^ ANN003
+38 |             return "Mock user input"
+   |
+
+tests/test_helper.py:56:28: ANN002 Missing type annotation for `*args`
+   |
+55 |     # Replace the problematic create_output function
+56 |     def mock_create_output(*args, **kwargs):
+   |                            ^^^^^ ANN002
+57 |         return MagicMock()
+   |
+
+tests/test_helper.py:56:35: ANN003 Missing type annotation for `**kwargs`
+   |
+55 |     # Replace the problematic create_output function
+56 |     def mock_create_output(*args, **kwargs):
+   |                                   ^^^^^^^^ ANN003
+57 |         return MagicMock()
+   |
+
+Found 93 errors.

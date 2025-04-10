@@ -6,11 +6,11 @@ and functions for dynamically providing tool-specific guidance. Tool guidance
 details are modularized under the 'tool_guidance' package.
 """
 
+import contextlib
 import os
 import platform
 import sys
 from datetime import datetime
-from typing import Dict, List, Optional
 
 # --- Core Agent Directives ---
 
@@ -94,10 +94,8 @@ def get_main_system_prompt() -> str:
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     working_dir = ""
 
-    try:
+    with contextlib.suppress(Exception):
         working_dir = os.getcwd()
-    except Exception:
-        pass
 
     # Generate directory tree with limits if enabled
     directory_tree = ""

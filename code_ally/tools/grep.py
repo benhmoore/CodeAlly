@@ -1,7 +1,12 @@
+"""Grep tool for searching file contents.
+
+Provides pattern-based search functionality across files with filtering capabilities.
+"""
+
 import fnmatch
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -9,6 +14,8 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class GrepTool(BaseTool):
+    """Tool for searching file contents with pattern matching and filtering capabilities."""
+
     name = "grep"
     description = """Search for a pattern in files with sophisticated filtering.
 
@@ -29,19 +36,38 @@ class GrepTool(BaseTool):
 
     def execute(
         self,
-        pattern: str,
-        path: str = ".",
-        include: str = "*",
-        exclude: str = "",
-        file_types: str = "",
-        max_depth: int = -1,
-        case_sensitive: bool = False,
-        whole_words: bool = False,
-        replace: str = "",
-        preview_replace: bool = False,
-        max_results: int = 100,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
+        """Execute the grep tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with grep search results
+        """
+        pattern = str(kwargs.get("pattern", ""))
+        path = str(kwargs.get("path", "."))
+        include = str(kwargs.get("include", "*"))
+        exclude = str(kwargs.get("exclude", ""))
+        file_types = str(kwargs.get("file_types", ""))
+
+        max_depth_val = kwargs.get("max_depth", -1)
+        max_depth = (
+            int(max_depth_val) if isinstance(max_depth_val, int | str | float) else -1
+        )
+
+        case_sensitive = bool(kwargs.get("case_sensitive", False))
+        whole_words = bool(kwargs.get("whole_words", False))
+        replace = str(kwargs.get("replace", ""))
+        preview_replace = bool(kwargs.get("preview_replace", False))
+
+        max_results_val = kwargs.get("max_results", 100)
+        max_results = (
+            int(max_results_val)
+            if isinstance(max_results_val, int | str | float)
+            else 100
+        )
         """
         Search for a pattern in files with enhanced filtering options.
 
@@ -186,7 +212,7 @@ class GrepTool(BaseTool):
 
                     try:
                         # For search and replace, we need to read the entire file
-                        with open(file_path, "r", encoding="utf-8") as f:
+                        with open(file_path, encoding="utf-8") as f:
                             content = f.read()
 
                         # Check if pattern exists in content (for efficiency)
@@ -204,7 +230,7 @@ class GrepTool(BaseTool):
                                         "file": file_path,
                                         "line": i,
                                         "content": line.strip(),
-                                    }
+                                    },
                                 )
 
                         # Add matches to results
@@ -212,29 +238,30 @@ class GrepTool(BaseTool):
                         matched_files.add(file_path)
 
                         # Handle search and replace
-                        if replace or preview_replace:
-                            # Check if we have any matches to replace
-                            if file_matches:
-                                new_content = regex.sub(replace, content)
-                                # Only add to replacements if content actually changed
-                                if new_content != content:
-                                    replacements.append(
-                                        {
-                                            "file": file_path,
-                                            "matches": len(file_matches),
-                                            "preview": self._get_replacement_preview(
-                                                content, new_content
-                                            ),
-                                        }
-                                    )
+                        if (replace or preview_replace) and file_matches:
+                            new_content = regex.sub(replace, content)
+                            # Only add to replacements if content actually changed
+                            if new_content != content:
+                                replacements.append(
+                                    {
+                                        "file": file_path,
+                                        "matches": len(file_matches),
+                                        "preview": self._get_replacement_preview(
+                                            content,
+                                            new_content,
+                                        ),
+                                    },
+                                )
 
-                                    # If this is not just a preview, write changes back to file
-                                    if replace and not preview_replace:
-                                        with open(
-                                            file_path, "w", encoding="utf-8"
-                                        ) as f:
-                                            f.write(new_content)
-                    except Exception as e:
+                                # If this is not just a preview, write changes back to file
+                                if replace and not preview_replace:
+                                    with open(
+                                        file_path,
+                                        "w",
+                                        encoding="utf-8",
+                                    ) as f:
+                                        f.write(new_content)
+                    except Exception:
                         # Skip files that can't be read
                         continue
 
@@ -248,7 +275,9 @@ class GrepTool(BaseTool):
 
             # Sort matches by file modification time (newest first)
             sorted_matches = sorted(
-                matches, key=lambda m: os.path.getmtime(m["file"]), reverse=True
+                matches,
+                key=lambda m: os.path.getmtime(str(m["file"])),
+                reverse=True,
             )
 
             return {
@@ -284,8 +313,11 @@ class GrepTool(BaseTool):
             return True
 
     def _get_replacement_preview(
-        self, original: str, modified: str, context_lines: int = 2
-    ) -> List[Dict[str, Any]]:
+        self,
+        original: str,
+        modified: str,
+        context_lines: int = 2,
+    ) -> list[dict[str, Any]]:
         """Generate a preview of replacements with surrounding context."""
         original_lines = original.splitlines()
         modified_lines = modified.splitlines()
@@ -296,11 +328,13 @@ class GrepTool(BaseTool):
         if len(original_lines) != len(modified_lines):
             return [
                 {
-                    "summary": f"Changed from {len(original_lines)} to {len(modified_lines)} lines"
-                }
+                    "summary": f"Changed from {len(original_lines)} to {len(modified_lines)} lines",
+                },
             ]
 
-        for i, (orig, mod) in enumerate(zip(original_lines, modified_lines)):
+        for i, (orig, mod) in enumerate(
+            zip(original_lines, modified_lines, strict=False),
+        ):
             if orig != mod:
                 # Collect context lines
                 start = max(0, i - context_lines)

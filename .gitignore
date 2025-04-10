@@ -54,3 +54,9 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+
+# Ruff
+# .ruff_cache
+
+# Pytest
+# .pytest_cache/

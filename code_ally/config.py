@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def get_config_file_path() -> Path:
     return get_config_dir() / "config.json"
 
 
-def load_config() -> Dict[str, Any]:
+def load_config() -> dict[str, Any]:
     """Load configuration from file or use defaults.
 
     Returns:
@@ -112,7 +112,7 @@ def load_config() -> Dict[str, Any]:
 
     if config_file.exists():
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
+            with open(config_file, encoding="utf-8") as f:
                 user_config = json.load(f)
 
                 # Validate and type-check user config values
@@ -122,7 +122,11 @@ def load_config() -> Dict[str, Any]:
 
                         # Try to convert the value to the expected type
                         try:
-                            if expected_type == bool and isinstance(value, str):
+                            if (
+                                isinstance(expected_type, type)
+                                and issubclass(expected_type, bool)
+                                and isinstance(value, str)
+                            ):
                                 # Handle string boolean conversion separately
                                 value = value.lower() in ("true", "yes", "y", "1")
                             else:
@@ -133,7 +137,7 @@ def load_config() -> Dict[str, Any]:
                         except (ValueError, TypeError):
                             logger.warning(
                                 f"Invalid type for config key '{key}': "
-                                f"expected {expected_type.__name__}, got {type(value).__name__}"
+                                f"expected {expected_type.__name__}, got {type(value).__name__}",
                             )
                     else:
                         # Include unknown keys but log a warning
@@ -143,7 +147,7 @@ def load_config() -> Dict[str, Any]:
                 logger.debug("Configuration loaded successfully")
         except json.JSONDecodeError:
             logger.warning(
-                f"Invalid JSON in config file at {config_file}. Using defaults."
+                f"Invalid JSON in config file at {config_file}. Using defaults.",
             )
         except Exception as e:
             logger.warning(f"Error loading config: {str(e)}. Using defaults.")
@@ -153,7 +157,7 @@ def load_config() -> Dict[str, Any]:
     return config
 
 
-def save_config(config: Dict[str, Any]) -> None:
+def save_config(config: dict[str, Any]) -> None:
     """Save configuration to file.
 
     Args:
@@ -181,36 +185,67 @@ class ConfigManager:
     _config = None
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "ConfigManager":
         """Get the singleton instance."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the configuration manager."""
         # Only load config once
         if ConfigManager._config is None:
             ConfigManager._config = load_config()
 
-    def get_config(self):
+    def get_config(self) -> dict[str, Any]:
         """Get the complete configuration dictionary."""
+        if ConfigManager._config is None:
+            return {}
         return ConfigManager._config
 
-    def get_value(self, key, default=None):
+    def get_value(
+        self,
+        key: str,
+        default: str | int | float | bool | None = None,
+    ) -> str | int | float | bool | None:
         """Get a specific configuration value."""
         if default is None:
             default = DEFAULT_CONFIG.get(key)
-        return ConfigManager._config.get(key, default)
+        if ConfigManager._config is None:
+            return default
 
-    def set_value(self, key, value):
+        # Get the value, handle type safety
+        value = ConfigManager._config.get(key, default)
+
+        # Handle type checking for expected return types
+        if value is None:
+            return default
+        elif isinstance(value, str | int | float | bool):
+            return value
+        else:
+            # Try to convert to appropriate type
+            if key in CONFIG_TYPES:
+                expected_type = CONFIG_TYPES[key]
+                try:  # type: ignore[misc]
+                    typed_value: str | int | float | bool | None = expected_type(value)
+                    return typed_value
+                except (ValueError, TypeError):
+                    return default
+            # If there's no explicit type, return default since we can't guarantee type safety
+            return default
+
+    def set_value(self, key: str, value: str | int | float | bool) -> None:
         """Set a specific configuration value."""
         # Validate the value type
         if key in CONFIG_TYPES:
             expected_type = CONFIG_TYPES[key]
 
             # For booleans, accept string representations
-            if expected_type == bool and isinstance(value, str):
+            if (
+                isinstance(expected_type, type)
+                and issubclass(expected_type, bool)
+                and isinstance(value, str)
+            ):
                 value = value.lower() in ("true", "yes", "y", "1")
             elif not isinstance(value, expected_type):
                 try:
@@ -218,17 +253,32 @@ class ConfigManager:
                 except (ValueError, TypeError):
                     raise ValueError(
                         f"Invalid type for config key '{key}': "
-                        f"expected {expected_type.__name__}, got {type(value).__name__}"
-                    )
+                        f"expected {expected_type.__name__}, got {type(value).__name__}",
+                    ) from None
 
         # Update the config
+        if ConfigManager._config is None:
+            ConfigManager._config = {}
         ConfigManager._config[key] = value
         save_config(ConfigManager._config)
 
         logger.debug(f"Config value updated: {key} = {value}")
 
+    def reset(self) -> dict[str, bool | str]:
+        """Reset the configuration to default values."""
+        ConfigManager._config = DEFAULT_CONFIG.copy()
+        save_config(ConfigManager._config)
+        logger.info("Configuration reset to defaults")
+        return {
+            "success": True,
+            "error": "",
+        }
 
-def get_config_value(key: str, default: Any = None) -> Any:
+
+def get_config_value(
+    key: str,
+    default: str | int | float | bool | None = None,
+) -> str | int | float | bool | None:
     """Get a specific configuration value.
 
     Args:
@@ -243,7 +293,7 @@ def get_config_value(key: str, default: Any = None) -> Any:
     return config_manager.get_value(key, default)
 
 
-def set_config_value(key: str, value: Any) -> None:
+def set_config_value(key: str, value: str | int | float | bool) -> None:
     """Set a specific configuration value.
 
     Args:

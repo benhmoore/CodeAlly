@@ -1,0 +1,247 @@
+code_ally/config.py:213: error: Incompatible types in assignment (expression has type "object", variable has type "str | int | float | bool | None")  [assignment]
+code_ally/tools/refactor.py:939: error: "Sequence[str]" has no attribute "append"  [attr-defined]
+code_ally/tools/read.py:477: error: No overload variant of "__add__" of "tuple" matches argument type "int"  [operator]
+code_ally/tools/read.py:477: note: Possible overload variants:
+code_ally/tools/read.py:477: note:     def __add__(self, tuple[int | str, ...], /) -> tuple[int | str, ...]
+code_ally/tools/read.py:477: note:     def [_T] __add__(self, tuple[_T, ...], /) -> tuple[int | str | _T, ...]
+code_ally/tools/read.py:478: error: Argument 1 to "append" of "list" has incompatible type "tuple[int, int]"; expected "list[tuple[int, str]]"  [arg-type]
+code_ally/tools/read.py:481: error: Unsupported operand types for > ("int" and "tuple[int, str]")  [operator]
+code_ally/tools/read.py:482: error: Argument 1 to "append" of "list" has incompatible type "tuple[int, int]"; expected "list[tuple[int, str]]"  [arg-type]
+code_ally/tools/read.py:485: error: No overload variant of "__setitem__" of "list" matches argument types "int", "tuple[tuple[int, str], int]"  [call-overload]
+code_ally/tools/read.py:485: note: Possible overload variants:
+code_ally/tools/read.py:485: note:     def __setitem__(self, SupportsIndex, list[tuple[int, str]], /) -> None
+code_ally/tools/read.py:485: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[list[tuple[int, str]]], /) -> None
+code_ally/tools/read.py:489: error: Incompatible types in assignment (expression has type "tuple[int, str]", variable has type "int")  [assignment]
+code_ally/tools/edit.py:186: error: Incompatible types in assignment (expression has type "int", variable has type "list[str]")  [assignment]
+code_ally/tools/edit.py:189: error: Name "lines_changed" already defined on line 99  [no-redef]
+code_ally/tools/directory.py:774: error: No overload variant of "int" matches argument type "object"  [call-overload]
+code_ally/tools/directory.py:774: note: Possible overload variants:
+code_ally/tools/directory.py:774: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+code_ally/tools/directory.py:774: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+code_ally/tools/directory.py:775: error: No overload variant of "int" matches argument type "object"  [call-overload]
+code_ally/tools/directory.py:775: note: Possible overload variants:
+code_ally/tools/directory.py:775: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+code_ally/tools/directory.py:775: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+code_ally/tools/directory.py:776: error: No overload variant of "int" matches argument type "object"  [call-overload]
+code_ally/tools/directory.py:776: note: Possible overload variants:
+code_ally/tools/directory.py:776: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+code_ally/tools/directory.py:776: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+code_ally/tools/directory.py:777: error: No overload variant of "int" matches argument type "object"  [call-overload]
+code_ally/tools/directory.py:777: note: Possible overload variants:
+code_ally/tools/directory.py:777: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+code_ally/tools/directory.py:777: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+code_ally/tools/directory.py:780: error: Unsupported right operand type for in ("object")  [operator]
+code_ally/tools/directory.py:781: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:782: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:783: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:784: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:788: error: Unsupported target for indexed assignment ("object")  [index]
+code_ally/tools/directory.py:795: error: Unsupported right operand type for in ("object")  [operator]
+code_ally/tools/directory.py:796: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:797: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:798: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:801: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:805: error: Unsupported target for indexed assignment ("object")  [index]
+code_ally/tools/directory.py:811: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/directory.py:822: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/directory.py:823: error: Unsupported operand types for + ("object" and "int")  [operator]
+code_ally/tools/directory.py:830: error: "object" has no attribute "items"  [attr-defined]
+code_ally/tools/directory.py:832: error: Unsupported right operand type for in ("object")  [operator]
+code_ally/tools/directory.py:833: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:834: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:835: error: Value of type "object" is not indexable  [index]
+code_ally/tools/directory.py:837: error: Unsupported target for indexed assignment ("object")  [index]
+code_ally/tools/directory.py:844: error: "object" has no attribute "items"  [attr-defined]
+code_ally/tools/code.py:53: error: Signature of "execute" incompatible with supertype "BaseTool"  [override]
+code_ally/tools/code.py:53: note:      Superclass:
+code_ally/tools/code.py:53: note:          def execute(self, **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/code.py:53: note:      Subclass:
+code_ally/tools/code.py:53: note:          def execute(self, path: str, language: str = ..., include_functions: bool = ..., include_classes: bool = ..., include_imports: bool = ..., include_dependencies: bool = ..., recursive: bool = ..., exclude_dirs: str = ..., max_files: int = ..., **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/code.py:344: error: Dict entry 2 has incompatible type "str": "bool"; expected "str": "str | None"  [dict-item]
+code_ally/tools/code.py:370: error: Argument 1 to "_get_function_args" of "CodeStructureAnalyzerTool" has incompatible type "FunctionDef | AsyncFunctionDef"; expected "FunctionDef"  [arg-type]
+code_ally/tools/code.py:371: error: Argument 1 to "_get_return_annotation" of "CodeStructureAnalyzerTool" has incompatible type "FunctionDef | AsyncFunctionDef"; expected "FunctionDef"  [arg-type]
+code_ally/tools/code.py:377: error: Incompatible types in assignment (expression has type "list[dict[str, object]]", target has type "list[dict[str, str | None]]")  [assignment]
+code_ally/tools/code.py:410: error: Argument 1 to "_get_function_args" of "CodeStructureAnalyzerTool" has incompatible type "FunctionDef | AsyncFunctionDef"; expected "FunctionDef"  [arg-type]
+code_ally/tools/code.py:411: error: Argument 1 to "_get_return_annotation" of "CodeStructureAnalyzerTool" has incompatible type "FunctionDef | AsyncFunctionDef"; expected "FunctionDef"  [arg-type]
+code_ally/tools/code.py:415: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/code.py:420: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/code.py:421: error: "expr" has no attribute "id"  [attr-defined]
+code_ally/tools/code.py:426: error: Incompatible types in assignment (expression has type "list[dict[str, object]]", target has type "list[dict[str, str | None]]")  [assignment]
+code_ally/tools/code.py:495: error: "Index" has no attribute "value"  [attr-defined]
+code_ally/tools/code.py:945: error: Incompatible types in assignment (expression has type "list[dict[str, int | str | Any]]", target has type "int")  [assignment]
+code_ally/tools/code.py:947: error: Incompatible types in assignment (expression has type "list[dict[str, int | str | Any]]", target has type "int")  [assignment]
+code_ally/tools/code.py:969: error: Need type annotation for "dependencies"  [var-annotated]
+code_ally/tools/code.py:1035: error: Unsupported operand types for + ("object" and "int")  [operator]
+code_ally/tools/code.py:1039: error: Unsupported operand types for + ("object" and "int")  [operator]
+code_ally/tools/code.py:1043: error: Unsupported operand types for + ("object" and "int")  [operator]
+code_ally/tools/code.py:1047: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/code.py:1053: error: Unsupported operand types for + ("object" and "int")  [operator]
+code_ally/tools/code.py:1067: error: "object" has no attribute "append"  [attr-defined]
+code_ally/tools/batch.py:35: error: Signature of "execute" incompatible with supertype "BaseTool"  [override]
+code_ally/tools/batch.py:35: note:      Superclass:
+code_ally/tools/batch.py:35: note:          def execute(self, **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/batch.py:35: note:      Subclass:
+code_ally/tools/batch.py:35: note:          def execute(self, operation: str, path: str = ..., file_pattern: str = ..., exclude_pattern: str = ..., find: str = ..., replace: str = ..., template: str = ..., template_vars: dict[str, str] | None = ..., recursive: bool = ..., preview: bool = ..., max_files: int = ..., create_backup: bool = ..., **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/batch.py:190: error: Need type annotation for "matching_files" (hint: "matching_files: list[<type>] = ...")  [var-annotated]
+tests/test_directory_tree.py:30: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:54: error: Function is missing a return type annotation  [no-untyped-def]
+tests/test_directory_tree.py:54: note: Use "-> None" if function does not return a value
+tests/test_directory_tree.py:90: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:149: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:178: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:222: error: Function is missing a return type annotation  [no-untyped-def]
+tests/test_directory_tree.py:222: note: Use "-> None" if function does not return a value
+tests/test_directory_tree.py:237: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:268: error: Function is missing a return type annotation  [no-untyped-def]
+tests/test_directory_tree.py:272: error: Function is missing a type annotation  [no-untyped-def]
+tests/test_directory_tree.py:292: error: Function is missing a return type annotation  [no-untyped-def]
+tests/test_directory_tree.py:292: note: Use "-> None" if function does not return a value
+code_ally/tools/write.py:55: error: Argument 1 to "int" has incompatible type "dict[str, object] | str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+code_ally/trust.py:444: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:473: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:477: error: Argument 1 to "split" of "bytes" has incompatible type "str"; expected "Buffer | None"  [arg-type]
+code_ally/trust.py:484: error: Unsupported operand types for + ("str" and "bytes")  [operator]
+code_ally/trust.py:484: note: Right operand is of type "str | bytes"
+code_ally/trust.py:486: error: Argument 2 to "join" has incompatible type "str | bytes"; expected "str"  [arg-type]
+code_ally/trust.py:494: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:499: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:546: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:551: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:565: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+code_ally/trust.py:647: error: Argument 2 to "trust_tool" of "TrustManager" has incompatible type "str | dict[str, str] | str | bytes | PathLike[str] | None"; expected "str | None"  [arg-type]
+code_ally/tools/bash.py:39: error: Signature of "execute" incompatible with supertype "BaseTool"  [override]
+code_ally/tools/bash.py:39: note:      Superclass:
+code_ally/tools/bash.py:39: note:          def execute(self, **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/bash.py:39: note:      Subclass:
+code_ally/tools/bash.py:39: note:          def execute(self, command: str, timeout: int = ..., working_dir: str = ..., **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/bash.py:128: error: Argument "output" to "_format_success_response" of "BaseTool" has incompatible type "str"; expected "dict[str, object]"  [arg-type]
+code_ally/tools/bash.py:129: error: Argument "error" to "_format_success_response" of "BaseTool" has incompatible type "str"; expected "dict[str, object]"  [arg-type]
+code_ally/tools/bash.py:130: error: Argument "return_code" to "_format_success_response" of "BaseTool" has incompatible type "int"; expected "dict[str, object]"  [arg-type]
+code_ally/agent/task_planner.py:186: error: Incompatible default for argument "client_type" (default has type "None", argument has type "str")  [assignment]
+code_ally/agent/task_planner.py:186: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/agent/task_planner.py:186: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/agent/task_planner.py:641: error: Incompatible default for argument "client_type" (default has type "None", argument has type "str")  [assignment]
+code_ally/agent/task_planner.py:641: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/agent/task_planner.py:641: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/agent/task_planner.py:692: error: Returning Any from function declared to return "bool"  [no-any-return]
+code_ally/agent/task_planner.py:694: error: Returning Any from function declared to return "bool"  [no-any-return]
+code_ally/agent/task_planner.py:773: error: Incompatible types in assignment (expression has type "dict[str, Any]", target has type "str")  [assignment]
+code_ally/agent/task_planner.py:796: error: Argument 1 to "append" of "list" has incompatible type "dict[str, Any]"; expected "str"  [arg-type]
+code_ally/agent/task_planner.py:800: error: Incompatible types in assignment (expression has type "list[str]", target has type "str")  [assignment]
+code_ally/agent/command_handler.py:25: error: Name "UIManager" is not defined  [name-defined]
+code_ally/agent/command_handler.py:26: error: Name "TokenManager" is not defined  [name-defined]
+code_ally/agent/command_handler.py:426: error: "None" has no attribute "model_client"  [attr-defined]
+code_ally/tools/plan.py:96: error: Signature of "execute" incompatible with supertype "BaseTool"  [override]
+code_ally/tools/plan.py:96: note:      Superclass:
+code_ally/tools/plan.py:96: note:          def execute(self, **kwargs: dict[str, object]) -> dict[str, Any]
+code_ally/tools/plan.py:96: note:      Subclass:
+code_ally/tools/plan.py:96: note:          def execute(self, plan: dict[str, Any] = ..., plan_json: str = ..., validate_only: bool = ..., client_type: str = ..., mode: str = ..., name: str = ..., description: str = ..., task: dict[str, Any] = ..., **kwargs: dict[str, Any]) -> dict[str, Any]
+code_ally/tools/plan.py:98: error: Incompatible default for argument "plan" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+code_ally/tools/plan.py:98: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:98: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:101: error: Incompatible default for argument "client_type" (default has type "None", argument has type "str")  [assignment]
+code_ally/tools/plan.py:101: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:101: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:102: error: Incompatible default for argument "mode" (default has type "None", argument has type "str")  [assignment]
+code_ally/tools/plan.py:102: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:102: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:105: error: Incompatible default for argument "task" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+code_ally/tools/plan.py:105: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:105: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:164: error: Argument "task_count" to "_format_success_response" of "BaseTool" has incompatible type "int"; expected "dict[str, object]"  [arg-type]
+code_ally/tools/plan.py:165: error: Argument "message" to "_format_success_response" of "BaseTool" has incompatible type "str"; expected "dict[str, object]"  [arg-type]
+code_ally/tools/plan.py:190: error: Incompatible default for argument "task" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+code_ally/tools/plan.py:190: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:190: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:191: error: Incompatible default for argument "client_type" (default has type "None", argument has type "str")  [assignment]
+code_ally/tools/plan.py:191: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/tools/plan.py:191: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/tools/plan.py:206: error: Item "None" of "TaskPlanner | None" has no attribute "start_interactive_plan"  [union-attr]
+code_ally/tools/plan.py:210: error: Item "None" of "TaskPlanner | None" has no attribute "add_task_to_interactive_plan"  [union-attr]
+code_ally/tools/plan.py:212: error: Item "None" of "TaskPlanner | None" has no attribute "finalize_interactive_plan"  [union-attr]
+code_ally/tools/plan.py:214: error: Item "None" of "TaskPlanner | None" has no attribute "execute_interactive_plan"  [union-attr]
+code_ally/agent/tool_manager.py:24: error: Incompatible default for argument "permission_manager" (default has type "None", argument has type "PermissionManager")  [assignment]
+code_ally/agent/tool_manager.py:24: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/agent/tool_manager.py:24: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/agent/tool_manager.py:117: error: Unsupported target for indexed assignment ("Collection[str]")  [index]
+code_ally/agent/tool_manager.py:124: error: "Collection[str]" has no attribute "append"  [attr-defined]
+code_ally/agent/tool_manager.py:270: error: Incompatible return value type (got "dict[str, Any]", expected "str | None")  [return-value]
+code_ally/agent/tool_manager.py:330: error: Incompatible default for argument "client_type" (default has type "None", argument has type "str")  [assignment]
+code_ally/agent/tool_manager.py:330: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+code_ally/agent/tool_manager.py:330: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+code_ally/prompts/__init__.py:38: error: Argument 1 to "generate_truncated_tree" has incompatible type "*tuple[tuple[object, ...], ...]"; expected "str"  [arg-type]
+code_ally/prompts/__init__.py:38: error: Argument 1 to "generate_truncated_tree" has incompatible type "*tuple[tuple[object, ...], ...]"; expected "int"  [arg-type]
+code_ally/prompts/__init__.py:38: error: Argument 1 to "generate_truncated_tree" has incompatible type "*tuple[tuple[object, ...], ...]"; expected "list[str] | None"  [arg-type]
+code_ally/prompts/__init__.py:38: error: Argument 2 to "generate_truncated_tree" has incompatible type "**dict[str, dict[str, object]]"; expected "str"  [arg-type]
+code_ally/prompts/__init__.py:38: error: Argument 2 to "generate_truncated_tree" has incompatible type "**dict[str, dict[str, object]]"; expected "int"  [arg-type]
+code_ally/prompts/__init__.py:38: error: Argument 2 to "generate_truncated_tree" has incompatible type "**dict[str, dict[str, object]]"; expected "list[str] | None"  [arg-type]
+code_ally/prompts/__init__.py:50: error: Argument 1 to "get_gitignore_patterns" has incompatible type "*tuple[tuple[object, ...], ...]"; expected "str"  [arg-type]
+code_ally/prompts/__init__.py:50: error: Argument 2 to "get_gitignore_patterns" has incompatible type "**dict[str, dict[str, object]]"; expected "str"  [arg-type]
+code_ally/llm_client/ollama_client.py:11: error: Library stubs not installed for "requests"  [import-untyped]
+code_ally/llm_client/ollama_client.py:11: note: Hint: "python3 -m pip install types-requests"
+code_ally/llm_client/ollama_client.py:11: note: (or run "mypy --install-types" to install all missing stub packages)
+code_ally/llm_client/ollama_client.py:11: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+code_ally/llm_client/ollama_client.py:92: error: "type" has no attribute "__args__"; maybe "__flags__"?  [attr-defined]
+code_ally/llm_client/ollama_client.py:102: error: Missing return statement  [empty-body]
+code_ally/llm_client/ollama_client.py:102: note: If the method is meant to be abstract, use @abc.abstractmethod
+code_ally/llm_client/ollama_client.py:200: error: Need type annotation for "normalized_calls" (hint: "normalized_calls: list[<type>] = ...")  [var-annotated]
+code_ally/llm_client/ollama_client.py:234: error: Need type annotation for "tool_calls" (hint: "tool_calls: list[<type>] = ...")  [var-annotated]
+code_ally/llm_client/ollama_client.py:313: error: Returning Any from function declared to return "str"  [no-any-return]
+code_ally/llm_client/ollama_client.py:316: error: Returning Any from function declared to return "str"  [no-any-return]
+code_ally/llm_client/ollama_client.py:356: error: Name "signal.FrameType" is not defined  [name-defined]
+code_ally/llm_client/ollama_client.py:446: error: Unsupported target for indexed assignment ("object")  [index]
+code_ally/llm_client/ollama_client.py:466: error: Unsupported target for indexed assignment ("object")  [index]
+code_ally/llm_client/ollama_client.py:481: error: "None" has no attribute "post"  [attr-defined]
+code_ally/llm_client/ollama_client.py:497: error: "None" has no attribute "close"  [attr-defined]
+code_ally/llm_client/ollama_client.py:520: error: "None" has no attribute "close"  [attr-defined]
+code_ally/llm_client/ollama_client.py:522: error: Returning Any from function declared to return "dict[str, Any]"  [no-any-return]
+code_ally/llm_client/ollama_client.py:525: error: "None" has no attribute "close"  [attr-defined]
+code_ally/llm_client/ollama_client.py:527: error: Returning Any from function declared to return "dict[str, Any]"  [no-any-return]
+code_ally/llm_client/ollama_client.py:530: error: Returning Any from function declared to return "dict[str, Any]"  [no-any-return]
+tests/conftest.py:11: error: Function is missing a return type annotation  [no-untyped-def]
+tests/conftest.py:19: error: Function is missing a type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:30: error: Function is missing a type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:41: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:52: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:63: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:76: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:76: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:84: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:84: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:91: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:91: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:98: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:98: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:107: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:107: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:120: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:120: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:130: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:130: note: Use "-> None" if function does not return a value
+tests/tools/test_base_tool.py:150: error: Function is missing a return type annotation  [no-untyped-def]
+tests/tools/test_base_tool.py:150: note: Use "-> None" if function does not return a value
+tests/llm_client/test_model_client.py:28: error: Function is missing a type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:40: error: Function is missing a type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:52: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:57: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:62: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:71: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:75: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:83: error: Function is missing a type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:94: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:102: error: Function is missing a type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:113: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:120: error: Function is missing a return type annotation  [no-untyped-def]
+tests/llm_client/test_model_client.py:120: note: Use "-> None" if function does not return a value
+tests/agent/test_tool_manager.py:35: error: Function is missing a return type annotation  [no-untyped-def]
+tests/agent/test_tool_manager.py:35: note: Use "-> None" if function does not return a value
+tests/agent/test_tool_manager.py:38: error: Function is missing a type annotation  [no-untyped-def]
+tests/agent/test_tool_manager.py:53: error: Function is missing a return type annotation  [no-untyped-def]
+tests/agent/test_tool_manager.py:53: note: Use "-> None" if function does not return a value
+tests/agent/test_tool_manager.py:56: error: Function is missing a type annotation  [no-untyped-def]
+tests/agent/test_tool_manager.py:91: error: Incompatible types in assignment (expression has type "MagicMock", variable has type "None")  [assignment]
+tests/agent/test_tool_manager.py:206: error: Cannot assign to a method  [method-assign]
+tests/agent/test_token_manager.py:29: error: Incompatible types in assignment (expression has type "MagicMock", variable has type "None")  [assignment]
+tests/agent/test_token_manager.py:93: error: Dict entry 2 has incompatible type "str": "list[dict[str, Collection[str]]]"; expected "str": "dict[str, str] | str | None"  [dict-item]
+tests/agent/test_token_manager.py:154: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
+Interrupted

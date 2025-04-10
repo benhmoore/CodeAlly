@@ -5,23 +5,22 @@ validation, and execution in the CodeAlly system.
 """
 
 import os
-
-# Add the root directory to the path for direct imports
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
+from code_ally.agent.tool_manager import ToolManager
+from code_ally.tools.base import BaseTool
+from code_ally.trust import PermissionDeniedError
+
+# Add the root directory to the path for direct imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import and setup mocks
 from tests.test_helper import setup_mocks
 
 setup_mocks()
-
-from code_ally.agent.tool_manager import ToolManager
-from code_ally.tools.base import BaseTool
-from code_ally.trust import PermissionDeniedError
 
 
 # Create a concrete test tool class
@@ -39,7 +38,7 @@ class SampleTool(BaseTool):
     def execute(self, param1=None, param2=None):
         """Execute the test tool."""
         return self._format_success_response(
-            result=f"Executed with {param1} and {param2}"
+            result=f"Executed with {param1} and {param2}",
         )
 
 
@@ -60,7 +59,7 @@ class SampleProtectedTool(BaseTool):
 
 
 @pytest.fixture
-def trust_manager():
+def trust_manager() -> MagicMock:
     """Create a mock trust manager for testing."""
     mock_trust = MagicMock()
     mock_trust.is_trusted.return_value = False
@@ -69,27 +68,34 @@ def trust_manager():
 
 
 @pytest.fixture
-def permission_manager(trust_manager):
+def permission_manager(trust_manager: MagicMock) -> MagicMock:
     """Create a mock permission manager for testing."""
     mock_permission = MagicMock()
     return mock_permission
 
 
 @pytest.fixture
-def tools():
+def tools() -> list[BaseTool]:
     """Create test tools for testing."""
     return [SampleTool(), SampleProtectedTool()]
 
 
 @pytest.fixture
-def tool_manager(tools, trust_manager, permission_manager):
+def tool_manager(
+    tools: list[BaseTool],
+    trust_manager: MagicMock,
+    permission_manager: MagicMock,
+) -> ToolManager:
     """Create a tool manager instance for testing."""
     manager = ToolManager(tools, trust_manager, permission_manager)
     manager.ui = MagicMock()
     return manager
 
 
-def test_tool_manager_initialization(tool_manager, tools):
+def test_tool_manager_initialization(
+    tool_manager: ToolManager,
+    tools: list[BaseTool],
+) -> None:
     """Test that the tool manager initializes correctly."""
     # Check that the tools were registered
     assert len(tool_manager.tools) == 2
@@ -101,7 +107,7 @@ def test_tool_manager_initialization(tool_manager, tools):
     assert isinstance(tool_manager.tools["protected_tool"], SampleProtectedTool)
 
 
-def test_get_function_definitions(tool_manager):
+def test_get_function_definitions(tool_manager: ToolManager) -> None:
     """Test getting function definitions for tools."""
     # Get function definitions
     func_defs = tool_manager.get_function_definitions()
@@ -126,11 +132,12 @@ def test_get_function_definitions(tool_manager):
         assert func_def["function"]["name"] in tool_manager.tools
 
 
-def test_execute_tool_basic(tool_manager):
+def test_execute_tool_basic(tool_manager: ToolManager) -> None:
     """Test basic tool execution."""
     # Execute a tool
     result = tool_manager.execute_tool(
-        "test_tool", {"param1": "value1", "param2": "value2"}
+        "test_tool",
+        {"param1": "value1", "param2": "value2"},
     )
 
     # Check the result
@@ -138,7 +145,10 @@ def test_execute_tool_basic(tool_manager):
     assert "Executed with value1 and value2" in result["result"]
 
 
-def test_execute_tool_with_permission(tool_manager, trust_manager):
+def test_execute_tool_with_permission(
+    tool_manager: ToolManager,
+    trust_manager: MagicMock,
+) -> None:
     """Test tool execution that requires permission."""
     # Execute a protected tool
     result = tool_manager.execute_tool("protected_tool", {"path": "/test/path"})
@@ -152,11 +162,14 @@ def test_execute_tool_with_permission(tool_manager, trust_manager):
     assert "Protected operation on /test/path" in result["result"]
 
 
-def test_execute_tool_permission_denied(tool_manager, trust_manager):
+def test_execute_tool_permission_denied(
+    tool_manager: ToolManager,
+    trust_manager: MagicMock,
+) -> None:
     """Test tool execution when permission is denied."""
     # Set up the trust manager to deny permission
     trust_manager.prompt_for_permission.side_effect = PermissionDeniedError(
-        "Permission denied"
+        "Permission denied",
     )
 
     # Execute a protected tool - should raise PermissionDeniedError
@@ -164,7 +177,7 @@ def test_execute_tool_permission_denied(tool_manager, trust_manager):
         tool_manager.execute_tool("protected_tool", {"path": "/test/path"})
 
 
-def test_execute_tool_invalid_tool(tool_manager):
+def test_execute_tool_invalid_tool(tool_manager: ToolManager) -> None:
     """Test executing an invalid tool."""
     # Execute a non-existent tool
     result = tool_manager.execute_tool("non_existent_tool", {})
@@ -174,7 +187,7 @@ def test_execute_tool_invalid_tool(tool_manager):
     assert "Unknown tool" in result["error"]
 
 
-def test_execute_tool_redundant_call(tool_manager):
+def test_execute_tool_redundant_call(tool_manager: ToolManager) -> None:
     """Test executing a redundant tool call."""
     # Execute a tool
     tool_manager.execute_tool("test_tool", {"param1": "value1"})
@@ -187,11 +200,11 @@ def test_execute_tool_redundant_call(tool_manager):
     assert "Identical test_tool call was already executed" in result["error"]
 
 
-def test_execute_tool_error_handling(tool_manager):
+def test_execute_tool_error_handling(tool_manager: ToolManager) -> None:
     """Test error handling during tool execution."""
     # Make the tool raise an exception
     tool_manager.tools["test_tool"].execute = MagicMock(
-        side_effect=Exception("Test error")
+        side_effect=Exception("Test error"),
     )
 
     # Execute the tool

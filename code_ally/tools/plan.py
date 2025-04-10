@@ -1,4 +1,4 @@
-"""File: plan.py
+"""File: plan.py.
 
 Task planning tool for the Code Ally agent.
 Allows the agent to execute complex multi-step operations.
@@ -6,7 +6,7 @@ Allows the agent to execute complex multi-step operations.
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from code_ally.agent.task_planner import TaskPlanner
 from code_ally.tools.base import BaseTool
@@ -80,10 +80,10 @@ class TaskPlanTool(BaseTool):
     """
     requires_confirmation = False
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the task plan tool."""
         super().__init__()
-        self.task_planner: Optional[TaskPlanner] = None
+        self.task_planner: TaskPlanner | None = None
 
     def set_task_planner(self, task_planner: TaskPlanner) -> None:
         """Set the task planner instance for this tool.
@@ -95,16 +95,16 @@ class TaskPlanTool(BaseTool):
 
     def execute(
         self,
-        plan: Dict[str, Any] = None,
+        plan: dict[str, Any] = None,
         plan_json: str = "",
         validate_only: bool = False,
         client_type: str = None,
         mode: str = None,
         name: str = "",
         description: str = "",
-        task: Dict[str, Any] = None,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        task: dict[str, Any] = None,
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute a task plan or perform an interactive planning operation.
 
@@ -124,13 +124,17 @@ class TaskPlanTool(BaseTool):
         """
         if not self.task_planner:
             return self._format_error_response(
-                "Task planner not initialized. This is an internal error."
+                "Task planner not initialized. This is an internal error.",
             )
 
         # Handle interactive planning operations
         if mode:
             return self._handle_interactive_planning(
-                mode, name, description, task, client_type
+                mode,
+                name,
+                description,
+                task,
+                client_type,
             )
 
         # Otherwise, handle direct plan execution (traditional mode)
@@ -144,7 +148,7 @@ class TaskPlanTool(BaseTool):
         # Validate plan existence
         if not plan:
             return self._format_error_response(
-                "No plan provided. Either 'plan' or 'plan_json' must be specified."
+                "No plan provided. Either 'plan' or 'plan_json' must be specified.",
             )
 
         # Validate plan structure
@@ -183,9 +187,9 @@ class TaskPlanTool(BaseTool):
         mode: str,
         name: str = "",
         description: str = "",
-        task: Dict[str, Any] = None,
+        task: dict[str, Any] = None,
         client_type: str = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle interactive planning modes.
 
         Args:
@@ -211,7 +215,7 @@ class TaskPlanTool(BaseTool):
         else:
             return self._format_error_response(f"Unknown planning mode: {mode}")
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """Get the schema for task plans.
 
         Returns:

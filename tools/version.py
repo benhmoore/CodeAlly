@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Simple version management script.
+"""Simple version management script.
 
 This script updates the version in code_ally/_version.py and creates a git tag.
 The version in pyproject.toml is dynamically linked to _version.py, so only one
@@ -12,18 +11,16 @@ Usage:
     python tools/version.py major  # Increments 0.4.5 to 1.0.0
 """
 
-import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 VERSION_FILE = "code_ally/_version.py"
 
 
-def get_current_version():
+def get_current_version() -> str:
     """Get the current version from the version file."""
-    with open(VERSION_FILE, "r") as f:
+    with open(VERSION_FILE) as f:
         content = f.read()
 
     match = re.search(r'__version__\s*=\s*"([^"]+)"', content)
@@ -33,7 +30,7 @@ def get_current_version():
     return match.group(1)
 
 
-def update_version(current, part):
+def update_version(current: str, part: str) -> str:
     """Update the version based on the part to increment."""
     major, minor, patch = map(int, current.split("."))
 
@@ -52,13 +49,15 @@ def update_version(current, part):
     return f"{major}.{minor}.{patch}"
 
 
-def set_version(new_version):
+def set_version(new_version: str) -> bool:
     """Update the version in the version file."""
-    with open(VERSION_FILE, "r") as f:
+    with open(VERSION_FILE) as f:
         content = f.read()
 
     content = re.sub(
-        r'__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"', content
+        r'__version__\s*=\s*"[^"]+"',
+        f'__version__ = "{new_version}"',
+        content,
     )
 
     with open(VERSION_FILE, "w") as f:
@@ -67,7 +66,7 @@ def set_version(new_version):
     return True
 
 
-def create_git_tag(version):
+def create_git_tag(version: str) -> bool:
     """Create a git tag for the new version."""
     tag = f"v{version}"
     try:
@@ -88,7 +87,7 @@ def create_git_tag(version):
         return False
 
 
-def main():
+def main() -> int:
     """Main function."""
     if len(sys.argv) != 2 or sys.argv[1] not in ["major", "minor", "patch"]:
         print("Usage: python tools/version.py [major|minor|patch]")
@@ -103,7 +102,8 @@ def main():
         print(f"Current version: {current_version}")
         print(f"New version: {new_version}")
         print(
-            "\nNOTE: Since pyproject.toml uses dynamic versioning, only _version.py needs updating."
+            "\nNOTE: Since pyproject.toml uses dynamic versioning, "
+            "only _version.py needs updating.",
         )
 
         confirm = input("\nContinue? [y/N] ")

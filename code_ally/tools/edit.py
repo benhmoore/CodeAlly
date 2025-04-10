@@ -1,6 +1,11 @@
+"""File edit tool for modifying file contents.
+
+Provides functionality for editing, appending to, or prepending to file contents.
+"""
+
 import os
 import re
-from typing import Any, Dict
+from typing import Any
 
 from code_ally.tools.base import BaseTool
 from code_ally.tools.registry import register_tool
@@ -8,6 +13,8 @@ from code_ally.tools.registry import register_tool
 
 @register_tool
 class FileEditTool(BaseTool):
+    """Tool for editing file contents with multiple editing modes."""
+
     name = "file_edit"
     description = """Edit an existing file with multiple editing modes.
 
@@ -25,16 +32,24 @@ class FileEditTool(BaseTool):
 
     def execute(
         self,
-        path: str,
-        old_text: str = "",
-        new_text: str = "",
-        line_range: str = "",
-        regex_pattern: str = "",
-        regex_replacement: str = "",
-        append: bool = False,
-        prepend: bool = False,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
+        """Execute the edit tool with the provided kwargs.
+
+        Args:
+            **kwargs: Tool-specific parameters
+
+        Returns:
+            A dictionary with edit operation results
+        """
+        path = str(kwargs.get("path", ""))
+        old_text = str(kwargs.get("old_text", ""))
+        new_text = str(kwargs.get("new_text", ""))
+        line_range = str(kwargs.get("line_range", ""))
+        regex_pattern = str(kwargs.get("regex_pattern", ""))
+        regex_replacement = str(kwargs.get("regex_replacement", ""))
+        append = bool(kwargs.get("append", False))
+        prepend = bool(kwargs.get("prepend", False))
         """
         Edit an existing file using various editing modes.
 
@@ -77,7 +92,7 @@ class FileEditTool(BaseTool):
                 }
 
             # Read the original file content
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
                 original_lines = content.splitlines()
 
@@ -169,9 +184,10 @@ class FileEditTool(BaseTool):
                 # Calculate lines changed
                 old_lines = len(old_text.splitlines()) or 1
                 new_lines = len(new_text.splitlines()) or 1
-                lines_changed = (
-                    abs(len(new_content.splitlines()) - len(original_lines))
-                    or (old_lines != new_lines) * matches
+                line_diff = abs(len(new_content.splitlines()) - len(original_lines))
+                change_multiplier = 1 if old_lines != new_lines else 0
+                lines_changed: int = (
+                    line_diff if line_diff > 0 else (change_multiplier * matches)
                 )
 
             else:

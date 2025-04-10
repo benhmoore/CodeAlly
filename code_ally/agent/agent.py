@@ -1,4 +1,4 @@
-"""File: agent.py
+"""File: agent.py.
 
 The main Agent class that manages the conversation and handles tool execution.
 """
@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from code_ally.agent.command_handler import CommandHandler
 from code_ally.agent.error_handler import display_error
@@ -29,14 +29,14 @@ class Agent:
     def __init__(
         self,
         model_client: ModelClient,
-        tools: List[Any],
-        client_type: str = None,
-        system_prompt: Optional[str] = None,
+        tools: list[Any],
+        client_type: str | None = None,
+        system_prompt: str | None = None,
         verbose: bool = False,
         check_context_msg: bool = True,
         auto_dump: bool = True,
-        service_registry: Optional[ServiceRegistry] = None,
-    ):
+        service_registry: ServiceRegistry | None = None,
+    ) -> None:
         """Initialize the agent.
 
         Args:
@@ -70,7 +70,7 @@ class Agent:
             self.messages.append({"role": "system", "content": system_prompt})
             self.token_manager.update_token_count(self.messages)
 
-    def _initialize_components(self, tools, verbose):
+    def _initialize_components(self, tools: list[Any], verbose: bool) -> None:
         """Initialize and register all agent components.
 
         Args:
@@ -78,10 +78,11 @@ class Agent:
             verbose: Whether to enable verbose mode
         """
         # Create UI Manager
-        self.ui = UIManager()
-        self.ui.set_verbose(verbose)
-        self.ui.agent = self
-        self.service_registry.register("ui_manager", self.ui)
+        ui_manager = UIManager()
+        ui_manager.set_verbose(verbose)
+        ui_manager.agent = self
+        self.ui: UIManager = ui_manager
+        self.service_registry.register("ui_manager", ui_manager)
 
         # Create Trust Manager
         self.trust_manager = TrustManager()
@@ -92,7 +93,9 @@ class Agent:
         self.service_registry.register("permission_manager", self.permission_manager)
 
         # Create Token Manager
-        self.token_manager = TokenManager(self.model_client.context_size)
+        # Get context size from model client if available
+        context_size = getattr(self.model_client, "context_size", 8192)
+        self.token_manager = TokenManager(context_size)
         self.token_manager.ui = self.ui
         self.service_registry.register("token_manager", self.token_manager)
 
@@ -110,13 +113,15 @@ class Agent:
 
         # Create Command Handler
         self.command_handler = CommandHandler(
-            self.ui, self.token_manager, self.trust_manager
+            self.ui,
+            self.token_manager,
+            self.trust_manager,
         )
         self.command_handler.set_verbose(verbose)
         self.command_handler.agent = self
         self.service_registry.register("command_handler", self.command_handler)
 
-    def process_llm_response(self, response: Dict[str, Any]) -> None:
+    def process_llm_response(self, response: dict[str, Any]) -> None:
         """Process the LLM's response and execute any tool calls if present.
 
         Args:
@@ -129,16 +134,15 @@ class Agent:
         if "tool_calls" in response:
             # Standard multi-call format
             tool_calls = response.get("tool_calls", [])
-        elif "function_call" in response:
+        elif "function_call" in response and response["function_call"]:
             # Qwen-Agent style single call
-            if response["function_call"]:
-                tool_calls = [
-                    {
-                        "id": f"manual-id-{int(time.time())}",
-                        "type": "function",
-                        "function": response["function_call"],
-                    }
-                ]
+            tool_calls = [
+                {
+                    "id": f"manual-id-{int(time.time())}",
+                    "type": "function",
+                    "function": response["function_call"],
+                },
+            ]
 
         if tool_calls:
             # Add assistant message with the tool calls
@@ -171,7 +175,7 @@ class Agent:
                     was_interrupted = follow_up_response.get("interrupted", False)
                 except KeyboardInterrupt:
                     logger.warning(
-                        "KeyboardInterrupt caught during model_client.send call."
+                        "KeyboardInterrupt caught during model_client.send call.",
                     )
                     was_interrupted = True
                 except Exception as e:
@@ -217,7 +221,7 @@ class Agent:
                     resp_type = "tool calls" if has_tool_calls else "text response"
                     tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
                     self.ui.console.print(
-                        f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]"
+                        f"[dim blue][Verbose] Received follow-up {resp_type}{tools_info} from LLM[/]",
                     )
 
                 self.ui.stop_thinking_animation()
@@ -234,8 +238,9 @@ class Agent:
             self.ui.print_assistant_response(content)
 
     def _normalize_tool_call(
-        self, tool_call: Dict[str, Any]
-    ) -> Tuple[str, str, Dict[str, Any]]:
+        self,
+        tool_call: dict[str, Any],
+    ) -> tuple[str, str, dict[str, Any]]:
         """Normalize a tool call dict to (call_id, tool_name, arguments)."""
         call_id = tool_call.get("id", f"auto-id-{int(time.time())}")
         function_call = tool_call.get("function", {})
@@ -265,14 +270,14 @@ class Agent:
 
         return call_id, tool_name, arguments
 
-    def _process_sequential_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> None:
+    def _process_sequential_tool_calls(self, tool_calls: list[dict[str, Any]]) -> None:
         """Process tool calls one by one."""
         for tool_call in tool_calls:
             try:
                 call_id, tool_name, arguments = self._normalize_tool_call(tool_call)
                 if not tool_name:
                     self.ui.print_warning(
-                        "Invalid tool call: missing tool name. Skipping."
+                        "Invalid tool call: missing tool name. Skipping.",
                     )
                     continue
 
@@ -282,7 +287,10 @@ class Agent:
                 # Execute
                 try:
                     raw_result = self.tool_manager.execute_tool(
-                        tool_name, arguments, self.check_context_msg, self.client_type
+                        tool_name,
+                        arguments,
+                        self.check_context_msg,
+                        self.client_type,
                     )
                 except PermissionDeniedError:
                     # User denied permission, add a special message to history
@@ -290,7 +298,7 @@ class Agent:
                         {
                             "role": "assistant",
                             "content": "[Request interrupted by user due to permission denial]",
-                        }
+                        },
                     )
                     self.token_manager.update_token_count(self.messages)
                     raise  # Re-raise to exit the entire process
@@ -303,10 +311,12 @@ class Agent:
                     display_error(self.ui, error_msg, tool_name, arguments)
 
                 result = self.tool_manager.format_tool_result(
-                    raw_result, self.client_type
+                    raw_result,
+                    self.client_type,
                 )
                 content = self._format_tool_result_as_natural_language(
-                    tool_name, result
+                    tool_name,
+                    result,
                 )
 
                 # Create tool response message
@@ -327,11 +337,22 @@ class Agent:
                 ):
                     # Check if we've seen this file before
                     file_path = raw_result.get("file_path")
+                    #  Try to convert to string or fail
+                    try:
+                        file_path = str(file_path)
+                    except Exception:
+                        raise ValueError(
+                            f"File path {file_path} is not a valid string.",
+                        ) from PermissionDeniedError
+
+                    # Get the file content
                     file_content = content
 
                     # If we register the file and it already exists, we'll get back the previous message ID
                     previous_message_id = self.token_manager.register_file_read(
-                        file_path, file_content, call_id
+                        file_path,
+                        file_content,
+                        call_id,
                     )
 
                     if (
@@ -341,7 +362,7 @@ class Agent:
                     ):
                         self.ui.console.print(
                             f"[dim yellow][Verbose] Detected duplicate file read for {file_path}. "
-                            f"Removing previous version from context.[/]"
+                            f"Removing previous version from context.[/]",
                         )
 
                 # Check if we need to remove a previous file read from context
@@ -369,7 +390,7 @@ class Agent:
                         token_pct = self.token_manager.get_token_percentage()
                         self.ui.console.print(
                             f"[dim green][Verbose] Updated context after duplicate removal. "
-                            f"Context usage: {token_pct}% of window[/]"
+                            f"Context usage: {token_pct}% of window[/]",
                         )
 
             except PermissionDeniedError:
@@ -382,23 +403,29 @@ class Agent:
         self.token_manager.update_token_count(self.messages)
 
     def _format_tool_result_as_natural_language(
-        self, tool_name: str, result: Any
+        self,
+        tool_name: str,
+        result: dict[str, Any] | str,
     ) -> str:
         """Convert a tool result dict into a user-readable string if appropriate."""
+        # First ensure result_str is definitely a string
         if not isinstance(result, str):
-            result_str = json.dumps(result)
+            try:
+                result_str = json.dumps(result)
+            except (TypeError, ValueError):
+                # Handle non-serializable objects
+                result_str = str(result)
         else:
             result_str = result
 
-        if isinstance(result_str, str) and (
-            "<tool_response>" in result_str or "<search_reminders>" in result_str
-        ):
+        # Now result_str is guaranteed to be a string, so this check is safe
+        if "<tool_response>" in result_str or "<search_reminders>" in result_str:
             # Attempt to strip out any leftover tags if a special client was used
             if hasattr(self.model_client, "_extract_tool_response"):
                 cleaned_result = self.model_client._extract_tool_response(result_str)
                 if isinstance(cleaned_result, dict):
                     return json.dumps(cleaned_result)
-                return cleaned_result
+                return str(cleaned_result)
             else:
                 # Fallback removal
                 result_str = re.sub(
@@ -454,7 +481,9 @@ class Agent:
                 cmd = parts[0].strip()
                 arg = parts[1].strip() if len(parts) > 1 else ""
                 handled, self.messages = self.command_handler.handle_command(
-                    cmd, arg, self.messages
+                    cmd,
+                    arg,
+                    self.messages,
                 )
                 if handled:
                     continue
@@ -479,7 +508,7 @@ class Agent:
 
             # Start "thinking" animation
             animation_thread = self.ui.start_thinking_animation(
-                self.token_manager.get_token_percentage()
+                self.token_manager.get_token_percentage(),
             )
 
             if self.ui.verbose:
@@ -488,7 +517,7 @@ class Agent:
                 tokens = self.token_manager.estimated_tokens
                 self.ui.console.print(
                     f"[dim blue][Verbose] Sending request to LLM with {message_count} messages, "
-                    f"{tokens} tokens, {functions_count} available functions[/]"
+                    f"{tokens} tokens, {functions_count} available functions[/]",
                 )
 
             response = None
@@ -508,7 +537,7 @@ class Agent:
                     was_interrupted = response.get("interrupted", False)
                 except KeyboardInterrupt:
                     logger.warning(
-                        "KeyboardInterrupt caught during model_client.send call."
+                        "KeyboardInterrupt caught during model_client.send call.",
                     )
                     was_interrupted = True
                 except Exception as e:
@@ -554,7 +583,7 @@ class Agent:
                     resp_type = "tool calls" if has_tool_calls else "text response"
                     tools_info = f" ({', '.join(tool_names)})" if tool_names else ""
                     self.ui.console.print(
-                        f"[dim blue][Verbose] Received {resp_type}{tools_info} from LLM[/]"
+                        f"[dim blue][Verbose] Received {resp_type}{tools_info} from LLM[/]",
                     )
 
                 self.ui.stop_thinking_animation()

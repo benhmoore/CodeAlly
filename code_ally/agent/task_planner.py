@@ -1,4 +1,4 @@
-"""File: task_planner.py
+"""File: task_planner.py.
 
 Provides task planning capabilities for the Code Ally agent.
 Enables the agent to define, validate, and execute multi-step plans.
@@ -7,12 +7,10 @@ Enables the agent to define, validate, and execute multi-step plans.
 import json
 import logging
 import time
-import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 # Import only what we need at the module level
 from code_ally.agent.error_handler import display_error
-from code_ally.tools.base import BaseTool
 from code_ally.trust import PermissionDeniedError
 
 # Forward references for type hints
@@ -35,20 +33,20 @@ class TaskPlanner:
     6. Interactive plan creation with user confirmation
     """
 
-    def __init__(self, tool_manager: Any):
+    def __init__(self, tool_manager: "ToolManager") -> None:
         """Initialize the task planner.
 
         Args:
             tool_manager: The tool manager instance for executing tools
         """
         self.tool_manager = tool_manager
-        self.execution_history: List[Dict[str, Any]] = []
+        self.execution_history: list[dict[str, Any]] = []
         self.ui = None  # Will be set by the Agent class
         self.verbose = False
 
         # Interactive planning state
-        self.interactive_plan: Optional[Dict[str, Any]] = None
-        self.interactive_plan_tasks: List[Dict[str, Any]] = []
+        self.interactive_plan: dict[str, Any] | None = None
+        self.interactive_plan_tasks: list[dict[str, Any]] = []
         self.interactive_plan_finalized = False
 
     def set_verbose(self, verbose: bool) -> None:
@@ -59,7 +57,7 @@ class TaskPlanner:
         """
         self.verbose = verbose
 
-    def validate_plan(self, plan: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def validate_plan(self, plan: dict[str, Any]) -> tuple[bool, str | None]:
         """Validate a task plan for structural correctness.
 
         Args:
@@ -162,7 +160,7 @@ class TaskPlanner:
 
         return True, None
 
-    def validate_task(self, task: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def validate_task(self, task: dict[str, Any]) -> tuple[bool, str | None]:
         """Validate a single task for structural correctness.
 
         Args:
@@ -178,13 +176,15 @@ class TaskPlanner:
             return False, f"Task references unknown tool '{task['tool_name']}'"
 
         if "arguments" in task and not isinstance(task["arguments"], dict):
-            return False, f"Task has invalid 'arguments' (must be a dictionary)"
+            return False, "Task has invalid 'arguments' (must be a dictionary)"
 
         return True, None
 
     def execute_plan(
-        self, plan: Dict[str, Any], client_type: str = None
-    ) -> Dict[str, Any]:
+        self,
+        plan: dict[str, Any],
+        client_type: str = None,
+    ) -> dict[str, Any]:
         """Execute a complete task plan.
 
         Args:
@@ -215,8 +215,9 @@ class TaskPlanner:
 
         if permission_operations:
             operations_text = f"The task plan '{plan['name']}' requires permission for the following operations:\n"
-            for i, (tool_name, path, description) in enumerate(
-                permission_operations, 1
+            for i, (_tool_name, _path, description) in enumerate(
+                permission_operations,
+                1,
             ):
                 operations_text += f"{i}. {description}\n"
 
@@ -226,7 +227,8 @@ class TaskPlanner:
                 ]
 
                 if self.tool_manager.trust_manager.prompt_for_parallel_operations(
-                    trust_operations, operations_text
+                    trust_operations,
+                    operations_text,
                 ):
                     operations_pre_approved = True
                 else:
@@ -253,7 +255,7 @@ class TaskPlanner:
         try:
             if self.verbose and self.ui:
                 self.ui.console.print(
-                    f"[dim cyan][Verbose] Starting execution of plan: {plan['name']}[/]"
+                    f"[dim cyan][Verbose] Starting execution of plan: {plan['name']}[/]",
                 )
 
             tasks_by_id = {task["id"]: task for task in plan["tasks"]}
@@ -265,7 +267,9 @@ class TaskPlanner:
                 from rich.table import Table
 
                 progress_table = Table(
-                    title="Task Execution Plan", box=None, pad_edge=False
+                    title="Task Execution Plan",
+                    box=None,
+                    pad_edge=False,
                 )
                 progress_table.add_column("#", style="dim", width=3)
                 progress_table.add_column("Status", width=8)
@@ -275,10 +279,14 @@ class TaskPlanner:
                 for i, task in enumerate(plan["tasks"], 1):
                     task_id = task.get("id", f"task{i}")
                     description = task.get(
-                        "description", f"Execute {task.get('tool_name', 'unknown')}"
+                        "description",
+                        f"Execute {task.get('tool_name', 'unknown')}",
                     )
                     progress_table.add_row(
-                        str(i), "[dim]Pending[/]", task_id, description
+                        str(i),
+                        "[dim]Pending[/]",
+                        task_id,
+                        description,
                     )
 
                 self.ui.console.print(progress_table)
@@ -297,7 +305,7 @@ class TaskPlanner:
                     if not dependencies_met:
                         if self.verbose and self.ui:
                             self.ui.console.print(
-                                f"[dim yellow][Verbose] Skipping task '{task_id}' due to unmet dependencies[/]"
+                                f"[dim yellow][Verbose] Skipping task '{task_id}' due to unmet dependencies[/]",
                             )
                         failed_tasks.append(task_id)
                         results[task_id] = {
@@ -314,7 +322,7 @@ class TaskPlanner:
                     if not condition_met:
                         if self.verbose and self.ui:
                             self.ui.console.print(
-                                f"[dim yellow][Verbose] Skipping task '{task_id}' as condition not met[/]"
+                                f"[dim yellow][Verbose] Skipping task '{task_id}' as condition not met[/]",
                             )
                         results[task_id] = {
                             "success": True,
@@ -333,7 +341,7 @@ class TaskPlanner:
 
                 if self.verbose and self.ui:
                     self.ui.console.print(
-                        f"[dim cyan][Verbose] Executing task '{task_id}' with tool '{task['tool_name']}'[/]"
+                        f"[dim cyan][Verbose] Executing task '{task_id}' with tool '{task['tool_name']}'[/]",
                     )
 
                 tool_name = task["tool_name"]
@@ -341,7 +349,9 @@ class TaskPlanner:
 
                 if "template_vars" in task:
                     arguments = self._process_template_vars(
-                        arguments, task["template_vars"], results
+                        arguments,
+                        task["template_vars"],
+                        results,
                     )
 
                 if self.ui:
@@ -349,11 +359,15 @@ class TaskPlanner:
 
                 batch_id = plan.get("batch_id", "default_batch")
                 logger.info(
-                    f"Executing task '{task_id}' with tool '{tool_name}' using batch_id: {batch_id}"
+                    f"Executing task '{task_id}' with tool '{tool_name}' using batch_id: {batch_id}",
                 )
                 try:
                     raw_result = self.tool_manager.execute_tool(
-                        tool_name, arguments, True, client_type, operations_pre_approved
+                        tool_name,
+                        arguments,
+                        True,
+                        client_type,
+                        operations_pre_approved,
                     )
                 except PermissionDeniedError:
                     failed_tasks.append(task_id)
@@ -391,21 +405,26 @@ class TaskPlanner:
 
                     if self.ui:
                         self.ui.print_content(
-                            f"[red]✗ Task '{task_id}' failed: {error_msg}[/]"
+                            f"[red]✗ Task '{task_id}' failed: {error_msg}[/]",
                         )
 
                         display_error(
-                            self.ui, error_msg, tool_name, arguments, task_id, task_desc
+                            self.ui,
+                            error_msg,
+                            tool_name,
+                            arguments,
+                            task_id,
+                            task_desc,
                         )
 
                     if plan.get("stop_on_failure", False):
                         if self.ui:
                             self.ui.print_content(
-                                f"[yellow]⚠ Stopping plan execution due to task failure (stop_on_failure=True)[/]"
+                                "[yellow]⚠ Stopping plan execution due to task failure (stop_on_failure=True)[/]",
                             )
                         if self.verbose and self.ui:
                             self.ui.console.print(
-                                f"[dim red][Verbose] Task '{task_id}' failed and stop_on_failure is set. Stopping plan execution.[/]"
+                                f"[dim red][Verbose] Task '{task_id}' failed and stop_on_failure is set. Stopping plan execution.[/]",
                             )
                         break
 
@@ -430,7 +449,7 @@ class TaskPlanner:
 
                 self.ui.print_content(
                     f"[{color}]{icon} {status} completed plan '{plan['name']}' in {execution_time:.2f}s. "
-                    f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]"
+                    f"Completed {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]",
                 )
 
                 if recovery_needed and failed_tasks:
@@ -441,10 +460,11 @@ class TaskPlanner:
                             task_tool = task.get("tool_name", "unknown")
                             task_desc = task.get("description", f"Execute {task_tool}")
                             error = results.get(task_id, {}).get(
-                                "error", "Unknown error"
+                                "error",
+                                "Unknown error",
                             )
                             failed_tasks_info.append(
-                                f"- Task '{task_id}' ({task_desc}): {error}"
+                                f"- Task '{task_id}' ({task_desc}): {error}",
                             )
 
                     if failed_tasks_info:
@@ -452,13 +472,13 @@ class TaskPlanner:
                         self.ui.print_content(
                             f"[yellow bold]Error Summary:[/]\n{failed_summary}\n\n"
                             f"[blue bold]Next Steps:[/] The LLM should analyze these errors and attempt recovery "
-                            f"by modifying the approach or creating a new plan."
+                            f"by modifying the approach or creating a new plan.",
                         )
 
             if self.verbose and self.ui:
                 self.ui.console.print(
                     f"[dim green][Verbose] Plan execution completed in {execution_time:.2f}s. "
-                    f"Completed: {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]"
+                    f"Completed: {len(completed_tasks)}/{len(plan['tasks'])} tasks.[/]",
                 )
 
             return {
@@ -480,7 +500,7 @@ class TaskPlanner:
             logger.exception(f"Error executing plan: {e}")
             if self.verbose and self.ui:
                 self.ui.console.print(
-                    f"[dim red][Verbose] Error executing plan: {str(e)}[/]"
+                    f"[dim red][Verbose] Error executing plan: {str(e)}[/]",
                 )
 
             return {
@@ -497,7 +517,7 @@ class TaskPlanner:
             if operations_pre_approved:
                 self.tool_manager.trust_manager.clear_approved_operations()
 
-    def start_interactive_plan(self, name: str, description: str) -> Dict[str, Any]:
+    def start_interactive_plan(self, name: str, description: str) -> dict[str, Any]:
         """Start an interactive planning session.
 
         Args:
@@ -526,7 +546,7 @@ class TaskPlanner:
             "task_count": 0,
         }
 
-    def add_task_to_interactive_plan(self, task: Dict[str, Any]) -> Dict[str, Any]:
+    def add_task_to_interactive_plan(self, task: dict[str, Any]) -> dict[str, Any]:
         """Add a task to the interactive plan.
 
         Args:
@@ -571,7 +591,7 @@ class TaskPlanner:
             "message": f"Added task {task['id']} to plan",
         }
 
-    def finalize_interactive_plan(self) -> Dict[str, Any]:
+    def finalize_interactive_plan(self) -> dict[str, Any]:
         """Finalize the interactive plan, preparing it for execution.
 
         Returns:
@@ -618,7 +638,7 @@ class TaskPlanner:
             "user_action": "confirmed",
         }
 
-    def execute_interactive_plan(self, client_type: str = None) -> Dict[str, Any]:
+    def execute_interactive_plan(self, client_type: str = None) -> dict[str, Any]:
         """Execute the finalized interactive plan.
 
         Args:
@@ -642,7 +662,9 @@ class TaskPlanner:
         return result
 
     def _evaluate_condition(
-        self, condition: Dict[str, Any], results: Dict[str, Any]
+        self,
+        condition: dict[str, Any],
+        results: dict[str, Any],
     ) -> bool:
         """Evaluate a condition to determine if a task should be executed.
 
@@ -678,10 +700,10 @@ class TaskPlanner:
 
     def _process_template_vars(
         self,
-        arguments: Dict[str, Any],
-        template_vars: Dict[str, Any],
-        results: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any],
+        template_vars: dict[str, Any],
+        results: dict[str, Any],
+    ) -> dict[str, Any]:
         """Process template variables in task arguments.
 
         Args:
@@ -720,7 +742,8 @@ class TaskPlanner:
                                             break
 
                                     replacement_value = str(field_value).replace(
-                                        "\n", ""
+                                        "\n",
+                                        "",
                                     )
                                 else:
                                     if isinstance(result_value, dict):
@@ -729,23 +752,28 @@ class TaskPlanner:
                                         replacement_value = str(result_value)
 
                                 processed_value = processed_value.replace(
-                                    placeholder, replacement_value
+                                    placeholder,
+                                    replacement_value,
                                 )
                             else:
                                 default_value = var_def.get("default", "")
                                 processed_value = processed_value.replace(
-                                    placeholder, str(default_value)
+                                    placeholder,
+                                    str(default_value),
                                 )
                         elif var_def.get("type") == "static":
                             static_value = var_def.get("value", "")
                             processed_value = processed_value.replace(
-                                placeholder, str(static_value)
+                                placeholder,
+                                str(static_value),
                             )
 
                 processed_args[key] = processed_value
             elif isinstance(value, dict):
                 processed_args[key] = self._process_template_vars(
-                    value, template_vars, results
+                    value,
+                    template_vars,
+                    results,
                 )
             elif isinstance(value, list):
                 processed_list = []
@@ -756,15 +784,16 @@ class TaskPlanner:
                             placeholder = f"${{{var_name}}}"
                             if placeholder in processed_item:
                                 replacement = str(
-                                    var_def.get("value", var_def.get("default", ""))
+                                    var_def.get("value", var_def.get("default", "")),
                                 )
                                 processed_item = processed_item.replace(
-                                    placeholder, replacement
+                                    placeholder,
+                                    replacement,
                                 )
                         processed_list.append(processed_item)
                     elif isinstance(item, dict):
                         processed_list.append(
-                            self._process_template_vars(item, template_vars, results)
+                            self._process_template_vars(item, template_vars, results),
                         )
                     else:
                         processed_list.append(item)
@@ -774,15 +803,12 @@ class TaskPlanner:
 
         return processed_args
 
-    def _display_plan_summary(self, plan: Dict[str, Any]) -> None:
+    def _display_plan_summary(self, plan: dict[str, Any]) -> None:
         """Display a summary of the plan to the user.
 
         Args:
             plan: The task plan to display
         """
-        import time
-
-        from rich.console import Console
         from rich.panel import Panel
         from rich.table import Table
         from rich.text import Text
@@ -817,7 +843,12 @@ class TaskPlanner:
                     conditional = "Yes (custom)"
 
             table.add_row(
-                str(i), task_id, tool_name, description, dependencies, conditional
+                str(i),
+                task_id,
+                tool_name,
+                description,
+                dependencies,
+                conditional,
             )
 
         panel_content = []
@@ -835,7 +866,7 @@ class TaskPlanner:
 
         panel_content.append(Text("Stop on Failure: ", style="bold"))
         panel_content.append(
-            Text("Yes" if plan.get("stop_on_failure", False) else "No")
+            Text("Yes" if plan.get("stop_on_failure", False) else "No"),
         )
 
         panel_text = Text.assemble(*panel_content)
@@ -859,8 +890,9 @@ class TaskPlanner:
             self.ui.console.print(execution_msg)
 
     def _collect_permission_operations(
-        self, plan: Dict[str, Any]
-    ) -> List[Tuple[str, Any, str]]:
+        self,
+        plan: dict[str, Any],
+    ) -> list[tuple[str, Any, str]]:
         """Collect all operations in the plan that require permission.
 
         Args:
@@ -885,7 +917,8 @@ class TaskPlanner:
                 if tool_name == "bash" and "command" in arguments:
                     permission_path = arguments
                     task_desc = task.get(
-                        "description", f"Execute command: {arguments.get('command')}"
+                        "description",
+                        f"Execute command: {arguments.get('command')}",
                     )
                 else:
                     permission_path = None
@@ -903,7 +936,7 @@ class TaskPlanner:
 
         return permission_operations
 
-    def get_plan_schema(self) -> Dict[str, Any]:
+    def get_plan_schema(self) -> dict[str, Any]:
         """Get the JSON schema for task plans.
 
         Returns:
@@ -975,7 +1008,7 @@ class TaskPlanner:
                                         "description": "Comparison operator",
                                     },
                                     "value": {
-                                        "description": "Value to compare against"
+                                        "description": "Value to compare against",
                                     },
                                 },
                             },
@@ -999,10 +1032,10 @@ class TaskPlanner:
                                             "description": "Field path in the task result to use (dot notation)",
                                         },
                                         "value": {
-                                            "description": "Static value (for static type)"
+                                            "description": "Static value (for static type)",
                                         },
                                         "default": {
-                                            "description": "Default value to use if the source is unavailable"
+                                            "description": "Default value to use if the source is unavailable",
                                         },
                                     },
                                 },

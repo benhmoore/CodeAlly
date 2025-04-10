@@ -5,7 +5,7 @@ Tools are the primary way for the agent to interact with the environment.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar
 
 
 class BaseTool(ABC):
@@ -33,21 +33,24 @@ class BaseTool(ABC):
         # Validate that required class variables are defined
         if not hasattr(self.__class__, "name") or not self.__class__.name:
             raise ValueError(
-                f"{self.__class__.__name__} must define a 'name' class variable"
+                f"{self.__class__.__name__} must define a 'name' class variable",
             )
 
         if not hasattr(self.__class__, "description") or not self.__class__.description:
             raise ValueError(
-                f"{self.__class__.__name__} must define a 'description' class variable"
+                f"{self.__class__.__name__} must define a 'description' class variable",
             )
 
         if not hasattr(self.__class__, "requires_confirmation"):
             raise ValueError(
-                f"{self.__class__.__name__} must define a 'requires_confirmation' class variable"
+                f"{self.__class__.__name__} must define a 'requires_confirmation' class variable",
             )
 
     @abstractmethod
-    def execute(self, **kwargs) -> Dict[str, Any]:
+    def execute(
+        self,
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
         """Execute the tool with the given parameters.
 
         Args:
@@ -63,7 +66,7 @@ class BaseTool(ABC):
         # Abstract method must be implemented by subclasses
         raise NotImplementedError("Subclasses must implement the execute method")
 
-    def _format_error_response(self, error_message: str) -> Dict[str, Any]:
+    def _format_error_response(self, error_message: str) -> dict[str, Any]:
         """Format a standard error response.
 
         Args:
@@ -74,7 +77,10 @@ class BaseTool(ABC):
         """
         return {"success": False, "error": error_message}
 
-    def _format_success_response(self, **kwargs) -> Dict[str, Any]:
+    def _format_success_response(
+        self,
+        **kwargs: dict[str, object],
+    ) -> dict[str, Any]:
         """Format a standard success response.
 
         Args:

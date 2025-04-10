@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "code_ally"
-version = "0.4.4"
+version = "0.4.5"
 description = "A local LLM-powered pair programming assistant"
 readme = "README.md"
 authors = [

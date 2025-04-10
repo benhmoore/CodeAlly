@@ -22,24 +22,32 @@ from code_ally.trust import PermissionDeniedError
 
 
 # Create a concrete test tool class
-class TestTool(BaseTool):
+# PyTest will not collect this class as a test class because it doesn't have a test_ prefix
+class SampleTool(BaseTool):
     """A test tool for testing the ToolManager."""
     
     name = "test_tool"
     description = "A tool for testing"
     requires_confirmation = False
     
+    def __init__(self):
+        super().__init__()
+    
     def execute(self, param1=None, param2=None):
         """Execute the test tool."""
         return self._format_success_response(result=f"Executed with {param1} and {param2}")
 
 
-class TestProtectedTool(BaseTool):
+# PyTest will not collect this class as a test class because it doesn't have a test_ prefix
+class SampleProtectedTool(BaseTool):
     """A protected test tool that requires confirmation."""
     
     name = "protected_tool"
     description = "A protected tool for testing"
     requires_confirmation = True
+    
+    def __init__(self):
+        super().__init__()
     
     def execute(self, path=None):
         """Execute the protected tool."""
@@ -65,7 +73,7 @@ def permission_manager(trust_manager):
 @pytest.fixture
 def tools():
     """Create test tools for testing."""
-    return [TestTool(), TestProtectedTool()]
+    return [SampleTool(), SampleProtectedTool()]
 
 
 @pytest.fixture
@@ -84,8 +92,8 @@ def test_tool_manager_initialization(tool_manager, tools):
     assert "protected_tool" in tool_manager.tools
     
     # Check that the tools are instances of the expected classes
-    assert isinstance(tool_manager.tools["test_tool"], TestTool)
-    assert isinstance(tool_manager.tools["protected_tool"], TestProtectedTool)
+    assert isinstance(tool_manager.tools["test_tool"], SampleTool)
+    assert isinstance(tool_manager.tools["protected_tool"], SampleProtectedTool)
 
 
 def test_get_function_definitions(tool_manager):

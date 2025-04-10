@@ -20,7 +20,8 @@ from code_ally.llm_client.model_client import ModelClient
 
 
 # Create a concrete ModelClient implementation for testing
-class TestModelClient(ModelClient):
+# PyTest will not collect this class as a test class because it doesn't have a test_ prefix
+class SampleModelClient(ModelClient):
     """A test implementation of the ModelClient."""
     
     def __init__(self, mock_response=None):
@@ -29,6 +30,7 @@ class TestModelClient(ModelClient):
         Args:
             mock_response: The response to return when send is called
         """
+        super().__init__()
         self._mock_response = mock_response or {
             "role": "assistant",
             "content": "This is a test response.",
@@ -117,7 +119,7 @@ def test_concrete_model_client():
             }
         ],
     }
-    client = TestModelClient(custom_response)
+    client = SampleModelClient(custom_response)
     
     # Test the send method
     messages = [

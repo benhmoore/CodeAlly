@@ -164,7 +164,7 @@ class RefactorTool(BaseTool):
             elif operation == "transform":
                 # Extract specific parameters for transform operation
                 max_replacements_val = kwargs.get("max_replacements")
-                max_replacements = int(max_replacements_val) if max_replacements_val is not None else 0
+                max_replacements = int(max_replacements_val) if max_replacements_val is not None and not isinstance(max_replacements_val, dict) else 0
                 whole_words = bool(kwargs.get("whole_words", False))
                 case_sensitive = bool(kwargs.get("case_sensitive", True))
                 result = self._transform_code(

@@ -186,7 +186,7 @@ class FileEditTool(BaseTool):
                 new_lines = len(new_text.splitlines()) or 1
                 line_diff = abs(len(new_content.splitlines()) - len(original_lines))
                 change_multiplier = 1 if old_lines != new_lines else 0
-                lines_changed = line_diff if line_diff > 0 else (change_multiplier * matches)
+                lines_changed: int = line_diff if line_diff > 0 else (change_multiplier * matches)
 
             else:
                 # No edit operation specified

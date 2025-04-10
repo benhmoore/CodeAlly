@@ -29,10 +29,11 @@ class UIManager:
         self.thinking_spinner = Spinner("dots2", text="[cyan]Thinking[/]")
         self.thinking_event = threading.Event()
         self.verbose = False
-        self.active_live_display = None  # Track the current active Live display
-        self.plan_tasks_table = None
-        self.plan_panel = None
-        self.plan_panel_group = None
+        self.active_live_display: Live | None = None  # Track the current active Live display
+        self.plan_tasks_table: Table | None = None
+        self.plan_panel: Panel | None = None
+        self.plan_panel_group: Any | None = None
+        self.agent = None
 
         # Create history directory if it doesn't exist
         history_dir = os.path.expanduser("~/.ally")
@@ -62,15 +63,12 @@ class UIManager:
         )
 
         # Interactive planning state
-        self.current_interactive_plan = None
+        self.current_interactive_plan: dict[str, str] | None = None
         self.current_interactive_plan_tasks: list[dict[str, Any]] = []
 
         # Add these attributes
-        self.active_live_display = None
-        self.plan_panel = None  # Store the entire panel
-        self.plan_tasks_table = None
-        self.plan_panel_group = None  # This is important
-        self._thinking_thread = None
+        # These are already defined above with proper types, so remove duplicates
+        self._thinking_thread: threading.Thread | None = None
         self._stop_thinking_flag = False
 
     def set_verbose(self, verbose: bool) -> None:
@@ -117,9 +115,8 @@ class UIManager:
                     refresh_per_second=10,
                     console=self.console,
                 ) as live:
-                    self.active_live_display: Live = (
-                        live  # Store reference to current live display
-                    )
+                    # Store reference to current live display
+                    self.active_live_display = live
                     while not self.thinking_event.is_set():
                         elapsed_seconds = int(time.time() - start_time)
                         if token_percentage > 0:
@@ -153,7 +150,8 @@ class UIManager:
         """
         # prompt_toolkit will raise KeyboardInterrupt if Ctrl+C is pressed
         # when the input buffer is empty, which is caught by Agent.run_conversation
-        return self.prompt_session.prompt("\n> ")
+        result = self.prompt_session.prompt("\n> ")
+        return str(result)
 
     def print_content(
         self,
@@ -165,7 +163,7 @@ class UIManager:
         use_markdown: bool = False,
     ) -> None:
         """Print content with optional styling and panel."""
-        renderable = content
+        renderable: Any = content
         if isinstance(content, str):
             if use_markdown:
                 renderable = Markdown(content)
@@ -322,27 +320,29 @@ Use up/down arrow keys to navigate through command history.
         )
 
         # Group the header and tasks table - store this separately
-        panel_group = Group(header_content, self.plan_tasks_table)
-        self.plan_panel_group: Group = panel_group
+        if self.plan_tasks_table:
+            panel_group = Group(header_content, self.plan_tasks_table)
+            self.plan_panel_group = panel_group
 
         # Create the panel - use the group
         from rich.panel import Panel
 
         title_text = Text("📋 Creating Task Plan", style="bold blue")
-        panel = Panel(
-            panel_group,
-            title=title_text,
-            border_style="blue",
-            expand=False,
-        )
-        self.plan_panel: Panel = panel
+        if self.plan_panel_group:
+            self.plan_panel = Panel(
+                self.plan_panel_group,
+                title=title_text,
+                border_style="blue",
+                expand=False,
+            )
 
         # Start the live display with the panel
         from rich.live import Live
 
-        live = Live(panel, console=self.console, refresh_per_second=4)
-        self.active_live_display: Live = live
-        live.start()
+        if self.plan_panel:
+            live = Live(self.plan_panel, console=self.console, refresh_per_second=4)
+            self.active_live_display = live
+            live.start()
 
     def update_plan_panel_title(self, new_title: str) -> None:
         """Update the title of the plan panel if active."""
@@ -390,14 +390,15 @@ Use up/down arrow keys to navigate through command history.
             else:
                 condition_str = "Yes (custom)"
 
-        self.plan_tasks_table.add_row(
-            str(task_index),
-            task_id,
-            tool_name or "???",
-            description,
-            depends_txt,
-            condition_str,
-        )
+        if self.plan_tasks_table:
+            self.plan_tasks_table.add_row(
+                str(task_index),
+                task_id,
+                tool_name or "???",
+                description,
+                depends_txt,
+                condition_str,
+            )
 
         if self.active_live_display:
             self.active_live_display.update(self.plan_panel)

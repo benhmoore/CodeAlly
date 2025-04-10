@@ -23,14 +23,14 @@ setup_mocks()
 
 
 @pytest.fixture
-def token_manager():
+def token_manager() -> TokenManager:
     """Create a token manager instance for testing."""
     manager = TokenManager(context_size=4096)
     manager.ui = MagicMock()
     return manager
 
 
-def test_token_manager_initialization(token_manager):
+def test_token_manager_initialization(token_manager: TokenManager) -> None:
     """Test that the token manager initializes correctly."""
     assert token_manager.context_size == 4096
     assert token_manager.estimated_tokens == 0
@@ -41,7 +41,7 @@ def test_token_manager_initialization(token_manager):
     assert token_manager._file_message_ids == {}
 
 
-def test_estimate_tokens_basic(token_manager):
+def test_estimate_tokens_basic(token_manager: TokenManager) -> None:
     """Test basic token estimation."""
     # Create a simple message
     messages = [
@@ -65,7 +65,7 @@ def test_estimate_tokens_basic(token_manager):
     assert cached_token_count == token_count
 
 
-def test_estimate_tokens_with_function_calls(token_manager):
+def test_estimate_tokens_with_function_calls(token_manager: TokenManager) -> None:
     """Test token estimation with function calls."""
     # Create a message with a function call
     messages = [
@@ -110,7 +110,7 @@ def test_estimate_tokens_with_function_calls(token_manager):
     assert new_token_count > token_count
 
 
-def test_update_token_count(token_manager):
+def test_update_token_count(token_manager: TokenManager) -> None:
     """Test updating token count."""
     # Create messages
     messages = [
@@ -136,7 +136,7 @@ def test_update_token_count(token_manager):
     assert token_manager.estimated_tokens > 0
 
 
-def test_should_compact(token_manager):
+def test_should_compact(token_manager: TokenManager) -> None:
     """Test should_compact method."""
     # Initially should not compact
     assert token_manager.should_compact() is False
@@ -160,7 +160,7 @@ def test_should_compact(token_manager):
     assert token_manager.should_compact() is False
 
 
-def test_get_token_percentage(token_manager):
+def test_get_token_percentage(token_manager: TokenManager) -> None:
     """Test get_token_percentage method."""
     # With zero tokens
     assert token_manager.get_token_percentage() == 0
@@ -178,7 +178,7 @@ def test_get_token_percentage(token_manager):
     assert token_manager.get_token_percentage() == 100
 
 
-def test_clear_cache(token_manager):
+def test_clear_cache(token_manager: TokenManager) -> None:
     """Test clearing the token cache."""
     # Add some entries to the cache
     token_manager._token_cache = {
@@ -193,7 +193,7 @@ def test_clear_cache(token_manager):
     assert token_manager._token_cache == {}
 
 
-def test_file_hash_management(token_manager):
+def test_file_hash_management(token_manager: TokenManager) -> None:
     """Test file hash management and duplicate detection."""
     # Register a file
     file_path = "/test/file.py"

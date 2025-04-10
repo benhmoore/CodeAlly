@@ -220,14 +220,15 @@ class ConfigManager:
         # Handle type checking for expected return types
         if value is None:
             return default
-        elif isinstance(value, str | int | float | bool):
+        elif isinstance(value, (str, int, float, bool)):
             return value
         else:
             # Try to convert to appropriate type
             if key in CONFIG_TYPES:
                 expected_type = CONFIG_TYPES[key]
                 try:
-                    return expected_type(value)
+                    typed_value: str | int | float | bool = expected_type(value)
+                    return typed_value
                 except (ValueError, TypeError):
                     return default
             # If there's no explicit type, return default since we can't guarantee type safety
